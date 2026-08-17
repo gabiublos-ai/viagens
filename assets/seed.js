@@ -154,21 +154,6 @@ window.SEED = {
    "modelo": "Híbrido"
   },
   {
-   "nome": "Emerson Augusto de Oliveira",
-   "status": "Ativo",
-   "area": "Tecnologia & Produto",
-   "cargo": "Head Tech & Produto",
-   "nivel": "HEAD",
-   "gestor": "",
-   "contrato": "PJ",
-   "cidade": "Sorocaba",
-   "uf": "SP",
-   "aeroportoBase": "VCP - Viracopos",
-   "email": "emerson.oliveira@apostou.bet.br",
-   "emailAlt": "",
-   "modelo": "Híbrido"
-  },
-  {
    "nome": "Eric Gabriel de Souza Pereira",
    "status": "Ativo",
    "area": "Performance MKT",
@@ -570,21 +555,6 @@ window.SEED = {
    "uf": "",
    "aeroportoBase": "",
    "email": "mayalla.almeida@acegaming.com.br",
-   "emailAlt": "",
-   "modelo": "Híbrido"
-  },
-  {
-   "nome": "Miguel Borges Porto da Silva",
-   "status": "Ativo",
-   "area": "Lifecycle & CRM",
-   "cargo": "Designer III",
-   "nivel": "SUP/ANALISTA",
-   "gestor": "",
-   "contrato": "PJ",
-   "cidade": "São Paulo",
-   "uf": "SP",
-   "aeroportoBase": "CGH - Congonhas",
-   "email": "miguel.borges@apostou.bet.br",
    "emailAlt": "",
    "modelo": "Híbrido"
   },
@@ -2341,5 +2311,5 @@ window.SEED = {
    }
   ]
  },
- "baseEquipeVersao": 2
+ "baseEquipeVersao": 3
 };

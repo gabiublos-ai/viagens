@@ -11,7 +11,8 @@ de nascimento e escolaridade NÃO são importados.
 
 Uso:
     python3 tools/merge_headcount.py caminho/Ace\\ Gaming_Gestao_Headcount.xlsx
-    python3 tools/merge_headcount.py <arquivo> --simular    # só mostra o que mudaria
+    python3 tools/merge_headcount.py <arquivo> --simular        # só mostra o que mudaria
+    python3 tools/merge_headcount.py <arquivo> --remover-fora   # tira quem não está na planilha
 """
 import io
 import json
@@ -131,6 +132,7 @@ def main():
         return 1
     caminho = sys.argv[1]
     simular = "--simular" in sys.argv
+    remover_fora = "--remover-fora" in sys.argv
 
     wb = openpyxl.load_workbook(caminho, data_only=True)
     ativos = le_colaboradores(wb)
@@ -195,6 +197,15 @@ def main():
         conhecidos.add(norma(alvo["nome"] if alvo else saida["nome"]))
     fora = [c["nome"] for c in seed["colaboradores"] if norma(c["nome"]) not in conhecidos]
 
+    # Quem tem viagem lançada nunca sai do cadastro: o lançamento perderia a
+    # área, o gestor e o vínculo com a pessoa.
+    removidos, protegidos = [], []
+    if remover_fora:
+        for nome in fora:
+            (protegidos if norma(nome) in viajantes else removidos).append(nome)
+        seed["colaboradores"] = [c for c in seed["colaboradores"] if c["nome"] not in removidos]
+        fora = protegidos
+
     seed["colaboradores"].sort(key=lambda c: norma(c["nome"]))
     seed["baseEquipeVersao"] = seed.get("baseEquipeVersao", 0) + 1
 
@@ -216,8 +227,13 @@ def main():
         print("  ~ %s" % nome)
         for m in mudancas:
             print("      %s" % m)
+    if remover_fora and removidos:
+        print("\n%d removidos (fora da planilha, sem viagem lançada):" % len(removidos))
+        for n in removidos:
+            print("  −", n)
     if fora:
-        print("\n%d no app e fora da planilha (mantidos, confira):" % len(fora))
+        print("\n%d no app e fora da planilha (mantidos%s):"
+              % (len(fora), ", têm viagem lançada" if remover_fora else ", confira"))
         for n in fora:
             print("  ?", n)
 

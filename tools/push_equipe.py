@@ -7,6 +7,7 @@ de colaboradores é substituída.
 Uso:
     SENHA='...' python3 tools/push_equipe.py https://acegamingviagens.netlify.app
     SENHA='...' python3 tools/push_equipe.py <url> --simular
+    SENHA='...' python3 tools/push_equipe.py <url> --remover-fora   # espelha a base local
 """
 import io
 import json
@@ -50,6 +51,7 @@ def main():
         return 1
     url = sys.argv[1]
     simular = "--simular" in sys.argv
+    remover_fora = "--remover-fora" in sys.argv
     senha = os.environ.get("SENHA", "")
     if not senha:
         print("Informe a senha do site na variável SENHA.")
@@ -72,8 +74,15 @@ def main():
         elif any(str(antigo.get(k, "")) != str(v) for k, v in c.items()):
             alterados += 1
 
-    # Quem foi cadastrado direto no app e não está na planilha continua na base.
-    extras = [c for c in atuais if not acha(c["nome"], novos)]
+    # Quem foi cadastrado direto no app e não está na base local: por padrão
+    # continua no ar; com --remover-fora sai, a menos que tenha viagem lançada.
+    viajantes = {norma(v["colaborador"]) for v in estado["dados"]["viagens"]}
+    sobrando = [c for c in atuais if not acha(c["nome"], novos)]
+    if remover_fora:
+        extras = [c for c in sobrando if norma(c["nome"]) in viajantes]
+        removidos = [c for c in sobrando if norma(c["nome"]) not in viajantes]
+    else:
+        extras, removidos = sobrando, []
 
     print("a enviar: %d da planilha (%d novos, %d alterados) + %d cadastrados no próprio app"
           % (len(novos), len(incluidos), alterados, len(extras)))
@@ -81,6 +90,8 @@ def main():
         print("   +", n)
     for c in extras:
         print("   ·", c["nome"], "(mantido)")
+    for c in removidos:
+        print("   −", c["nome"], "(removido)")
 
     if simular:
         print("\n(simulação — nada foi enviado)")
