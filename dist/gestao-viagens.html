@@ -4606,9 +4606,9 @@ window.SEED = {
     var m = C.meta;
     var quando = m.atualizadoEm || C.db.atualizadoEm;
     if (!quando) return "Sem alterações registradas.";
-    var texto = "Última alteração: " + new Date(quando).toLocaleString("pt-BR");
-    if (m.atualizadoPor) texto += " · por " + m.atualizadoPor;
-    return texto;
+    var formatada = new Date(quando).toLocaleString("pt-BR");
+    if (m.atualizadoPor === "base original") return "Base original da planilha, carregada em " + formatada;
+    return "Última alteração: " + formatada + (m.atualizadoPor ? " · por " + m.atualizadoPor : "");
   }
 
   function ajustesView() {
