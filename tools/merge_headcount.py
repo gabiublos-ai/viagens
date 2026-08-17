@@ -17,44 +17,64 @@ import io
 import json
 import os
 import sys
-import unicodedata
 import warnings
 
 warnings.filterwarnings("ignore")
 import openpyxl
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from nomes import PARTICULAS, acha, norma  # noqa: E402
+
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED = os.path.join(RAIZ, "assets", "seed.js")
 
-# Coluna da planilha → campo do app. O "ƒ" faz parte do cabeçalho da origem.
+# Coluna da planilha → campo do app. Os cabeçalhos são comparados sem acento,
+# sem caixa e sem o "ƒ" que a planilha usa para marcar coluna calculada.
 MAPA = {
-    "STATUS ƒ": "status",
-    "TIPO CONTRATO ƒ": "contrato",
-    "ÁREA ƒ": "area",
-    "CARGO ƒ": "cargo",
-    "NÍVEL ƒ": "nivel",
-    "GESTOR DIRETO ƒ": "gestor",
-    "MODELO DE TRABALHO": "modelo",
-    "CIDADE": "cidade",
-    "UF": "uf",
-    "AEROPORTO": "aeroportoBase",
-    "E-MAIL ACE GAMING": "email",
-    "E-MAIL ANTERIOR (@apostou)": "emailAlt",
+    "status": "status",
+    "tipo contrato": "contrato",
+    "area": "area",
+    "cargo": "cargo",
+    "nivel": "nivel",
+    "gestor direto": "gestor",
+    "modelo de trabalho": "modelo",
+    "cidade": "cidade",
+    "uf": "uf",
+    "aeroporto": "aeroportoBase",
+    "e-mail ace gaming": "email",
+    "e-mail anterior (@apostou)": "emailAlt",
 }
-
-
-def norma(s):
-    return unicodedata.normalize("NFD", str(s or "").strip().lower()).encode("ascii", "ignore").decode()
+COLUNA_NOME = "nome completo"
 
 
 def texto(v):
     return "" if v is None else str(v).strip()
 
 
-def acha_cabecalho(ws, obrigatoria, limite=10):
-    """A planilha tem título e subtítulo antes do cabeçalho; acha a linha certa."""
+def cabecalho_norm(v):
+    """'NOME COMPLETO ƒ' → 'nome completo'."""
+    return norma(texto(v).replace("ƒ", ""))
+
+
+def nome_legivel(valor):
+    """'GABRIELA UHR BLOS LOLLI' → 'Gabriela Uhr Blos Lolli'.
+
+    A planilha guarda os nomes em caixa alta; o app mostra nome de gente.
+    Nome que já venha escrito normalmente passa intacto.
+    """
+    if not valor or valor != valor.upper():
+        return valor
+    partes = []
+    for i, palavra in enumerate(valor.split()):
+        baixa = palavra.lower()
+        partes.append(baixa if i and baixa in PARTICULAS else baixa.capitalize())
+    return " ".join(partes)
+
+
+def acha_cabecalho(ws, obrigatoria, limite=14):
+    """A planilha tem título, subtítulo e às vezes um resumo antes do cabeçalho."""
     for i in range(1, limite + 1):
-        valores = [texto(c.value) for c in ws[i]]
+        valores = [cabecalho_norm(c.value) for c in ws[i]]
         if obrigatoria in valores:
             return i, valores
     raise SystemExit("Não achei a coluna '%s' nas %d primeiras linhas de '%s'." % (obrigatoria, limite, ws.title))
@@ -62,16 +82,16 @@ def acha_cabecalho(ws, obrigatoria, limite=10):
 
 def le_colaboradores(wb):
     ws = wb["Colaboradores"]
-    linha_cab, cab = acha_cabecalho(ws, "NOME COMPLETO")
+    linha_cab, cab = acha_cabecalho(ws, COLUNA_NOME)
     indices = {MAPA[c]: cab.index(c) for c in MAPA if c in cab}
     faltando = sorted(c for c in MAPA if c not in cab)
     if faltando:
         print("Aviso: colunas ausentes na planilha:", ", ".join(faltando))
 
-    col_nome = cab.index("NOME COMPLETO")
+    col_nome = cab.index(COLUNA_NOME)
     registros = []
     for linha in ws.iter_rows(min_row=linha_cab + 1, values_only=True):
-        nome = texto(linha[col_nome])
+        nome = nome_legivel(texto(linha[col_nome]))
         if not nome:
             continue
         reg = {"nome": nome}
@@ -86,14 +106,14 @@ def le_desligados(wb):
         return {}
     ws = wb["Desligados"]
     try:
-        linha_cab, cab = acha_cabecalho(ws, "NOME COMPLETO")
+        linha_cab, cab = acha_cabecalho(ws, COLUNA_NOME)
     except SystemExit:
         return {}
-    col_nome = cab.index("NOME COMPLETO")
-    col_dia = cab.index("DATA ÚLTIMO DIA") if "DATA ÚLTIMO DIA" in cab else None
+    col_nome = cab.index(COLUNA_NOME)
+    col_dia = cab.index("data ultimo dia") if "data ultimo dia" in cab else None
     saidas = {}
     for linha in ws.iter_rows(min_row=linha_cab + 1, values_only=True):
-        nome = texto(linha[col_nome])
+        nome = nome_legivel(texto(linha[col_nome]))
         if nome:
             saidas[norma(nome)] = {"nome": nome, "ultimoDia": texto(linha[col_dia]) if col_dia is not None else ""}
     return saidas
@@ -121,9 +141,24 @@ def main():
 
     incluidos, alterados, marcados = [], [], []
 
+    viajantes = {norma(v["colaborador"]) for v in seed["viagens"]}
+    renomeados = []
+
     for reg in ativos:
         chave = norma(reg["nome"])
-        alvo = atuais.get(chave)
+        alvo = acha(reg["nome"], atuais)
+        if alvo and norma(alvo["nome"]) != chave:
+            # Mesma pessoa com grafia diferente. Quem já tem viagem lançada
+            # mantém o nome do app, que é a chave desses lançamentos.
+            if norma(alvo["nome"]) in viajantes:
+                renomeados.append("%s (planilha) mantido como %s (tem viagem lançada)"
+                                  % (reg["nome"], alvo["nome"]))
+                reg = dict(reg, nome=alvo["nome"])
+            else:
+                renomeados.append("%s → %s" % (alvo["nome"], reg["nome"]))
+                atuais.pop(norma(alvo["nome"]), None)
+                alvo["nome"] = reg["nome"]
+                atuais[chave] = alvo
         if not alvo:
             alvo = {"nome": reg["nome"], "status": "Ativo", "area": "", "cargo": "", "nivel": "",
                     "gestor": "", "contrato": "", "cidade": "", "uf": "", "aeroportoBase": "",
@@ -134,6 +169,7 @@ def main():
 
         mudancas = []
         for campo, valor in reg.items():
+            # O nome é a chave que liga às viagens: mantém a grafia já cadastrada.
             if campo == "nome" or not valor:
                 continue
             if texto(alvo.get(campo)) != valor:
@@ -145,12 +181,18 @@ def main():
 
     # Quem saiu fica no cadastro, marcado — as viagens passadas continuam válidas.
     for chave, saida in desligados.items():
-        alvo = atuais.get(chave)
+        alvo = acha(saida["nome"], atuais)
         if alvo and alvo.get("status") != "Desligado":
             alvo["status"] = "Desligado"
             marcados.append(saida["nome"] + (" (último dia %s)" % saida["ultimoDia"][:10] if saida["ultimoDia"] else ""))
 
-    conhecidos = {norma(r["nome"]) for r in ativos} | set(desligados)
+    conhecidos = set()
+    for reg in ativos:
+        alvo = acha(reg["nome"], atuais)
+        conhecidos.add(norma(alvo["nome"] if alvo else reg["nome"]))
+    for saida in desligados.values():
+        alvo = acha(saida["nome"], atuais)
+        conhecidos.add(norma(alvo["nome"] if alvo else saida["nome"]))
     fora = [c["nome"] for c in seed["colaboradores"] if norma(c["nome"]) not in conhecidos]
 
     seed["colaboradores"].sort(key=lambda c: norma(c["nome"]))
@@ -162,6 +204,10 @@ def main():
     print("%d incluídos:" % len(incluidos))
     for n in incluidos:
         print("  +", n)
+    if renomeados:
+        print("\n%d com grafia de nome ajustada:" % len(renomeados))
+        for n in renomeados:
+            print("  ↔", n)
     print("\n%d marcados como desligados:" % len(marcados))
     for n in marcados:
         print("  ×", n)

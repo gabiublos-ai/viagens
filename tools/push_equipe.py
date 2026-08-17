@@ -12,15 +12,13 @@ import io
 import json
 import os
 import sys
-import unicodedata
 import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from nomes import acha, norma  # noqa: E402
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED = os.path.join(RAIZ, "assets", "seed.js")
-
-
-def norma(s):
-    return unicodedata.normalize("NFD", str(s or "").strip().lower()).encode("ascii", "ignore").decode()
 
 
 class Sessao:
@@ -66,17 +64,16 @@ def main():
     print("no ar: %d colaboradores · %d viagens · %d linhas de Uber (revisão %d)"
           % (len(atuais), len(estado["dados"]["viagens"]), len(estado["dados"]["uber"]), estado["revisao"]))
 
-    por_nome = {norma(c["nome"]): c for c in atuais}
-    incluidos = [c["nome"] for c in novos if norma(c["nome"]) not in por_nome]
-    conhecidos = {norma(c["nome"]) for c in novos}
-    # Quem foi cadastrado direto no app e não está na planilha continua na base.
-    extras = [c for c in atuais if norma(c["nome"]) not in conhecidos]
-
-    alterados = 0
+    incluidos, alterados = [], 0
     for c in novos:
-        antigo = por_nome.get(norma(c["nome"]))
-        if antigo and any(str(antigo.get(k, "")) != str(v) for k, v in c.items()):
+        antigo = acha(c["nome"], atuais)
+        if not antigo:
+            incluidos.append(c["nome"])
+        elif any(str(antigo.get(k, "")) != str(v) for k, v in c.items()):
             alterados += 1
+
+    # Quem foi cadastrado direto no app e não está na planilha continua na base.
+    extras = [c for c in atuais if not acha(c["nome"], novos)]
 
     print("a enviar: %d da planilha (%d novos, %d alterados) + %d cadastrados no próprio app"
           % (len(novos), len(incluidos), alterados, len(extras)))

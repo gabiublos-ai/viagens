@@ -14,8 +14,8 @@ window.SEED = {
    "cidade": "Belo Horizonte",
    "uf": "MG",
    "aeroportoBase": "CNF - Confins",
-   "email": "criativos@apostou.bet.br",
-   "emailAlt": "criativos@acegaming.com.br",
+   "email": "criativos@acegaming.com.br",
+   "emailAlt": "criativos@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -26,12 +26,12 @@ window.SEED = {
    "nivel": "SUP/ANALISTA",
    "gestor": "Bruna Luiza de Carvalho Moreira",
    "contrato": "PJ",
-   "cidade": "Araucária",
-   "uf": "PR",
-   "aeroportoBase": "CWB - Afonso Pena",
-   "email": "amanda.moreira@apostou.bet.br",
-   "emailAlt": "amanda.moreira@acegaming.com.br",
-   "modelo": "Presencial"
+   "cidade": "São Paulo",
+   "uf": "SP",
+   "aeroportoBase": "CGH - Congonhas",
+   "email": "amanda.moreira@acegaming.com.br",
+   "emailAlt": "amanda.moreira@apostou.bet.br",
+   "modelo": "Híbrido"
   },
   {
    "nome": "Amarildo Oliveira de Araújo Júnior",
@@ -44,8 +44,8 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "amarildo.araujo@apostou.bet.br",
-   "emailAlt": "Amarildo.araujo@acegaming.com.br",
+   "email": "Amarildo.araujo@acegaming.com.br",
+   "emailAlt": "amarildo.araujo@apostou.bet.br",
    "modelo": "Híbrido"
   },
   {
@@ -59,8 +59,8 @@ window.SEED = {
    "cidade": "Guarulhos",
    "uf": "SP",
    "aeroportoBase": "GRU - Guarulhos",
-   "email": "anderson.caresma@apostou.bet.br",
-   "emailAlt": "anderson.ribeiro@acegaming.com.br",
+   "email": "anderson.ribeiro@acegaming.com.br",
+   "emailAlt": "anderson.caresma@apostou.bet.br",
    "modelo": "Híbrido"
   },
   {
@@ -73,15 +73,15 @@ window.SEED = {
    "contrato": "CLT",
    "cidade": "Niterói",
    "uf": "RJ",
-   "aeroportoBase": "GIG - Galeão",
-   "email": "andre.rios@apostou.bet.br",
-   "emailAlt": "andre.rios@acegaming.com.br",
+   "aeroportoBase": "SDU - Santos Dumont",
+   "email": "andre.rios@acegaming.com.br",
+   "emailAlt": "andre.rios@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
-   "nome": "Andrei Garcia",
+   "nome": "Andrei Espelocim Garcia",
    "status": "Ativo",
-   "area": "Inovação",
+   "area": "Tecnologia & Produto",
    "cargo": "Desenvolvedor Full Stack",
    "nivel": "SUP/ANALISTA",
    "gestor": "Thiago Dias Melin",
@@ -89,38 +89,38 @@ window.SEED = {
    "cidade": "Camaquã",
    "uf": "RS",
    "aeroportoBase": "POA - Salgado Filho",
-   "email": "andrei.garcia@apostou.bet.br",
-   "emailAlt": "andrei.garcia@acegaming.com.br",
+   "email": "andrei.garcia@acegaming.com.br",
+   "emailAlt": "andrei.garcia@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
    "nome": "Bruna Luiza de Carvalho Moreira",
    "status": "Ativo",
    "area": "Ops",
-   "cargo": "Analista de Relacionamento",
-   "nivel": "SUP/ANALISTA",
+   "cargo": "Coordenador CX",
+   "nivel": "GER/ESP/COOR",
    "gestor": "Lucas Corrêa Cantão da Silva",
    "contrato": "PJ",
    "cidade": "Belo Horizonte",
    "uf": "MG",
    "aeroportoBase": "CNF - Confins",
-   "email": "bruna.moreira@apostou.bet.br",
-   "emailAlt": "bruna.moreira@acegaming.com.br",
+   "email": "bruna.moreira@acegaming.com.br",
+   "emailAlt": "bruna.moreira@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
    "nome": "Bruno Heidrich dos Santos",
    "status": "Ativo",
-   "area": "Inovação",
-   "cargo": "Product Lead",
+   "area": "Tecnologia & Produto",
+   "cargo": "PM",
    "nivel": "GER/ESP/COOR",
    "gestor": "Pedro Henrique Silva Antunes",
    "contrato": "PJ",
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "bruno.heidrich@apostou.bet.br",
-   "emailAlt": "bruno.heidrich@acegaming.com.br",
+   "email": "bruno.heidrich@acegaming.com.br",
+   "emailAlt": "bruno.heidrich@apostou.bet.br",
    "modelo": "Híbrido"
   },
   {
@@ -134,9 +134,24 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "bruno.longhini@apostou.bet.br",
-   "emailAlt": "bruno.longhini@acegaming.com.br",
+   "email": "bruno.longhini@acegaming.com.br",
+   "emailAlt": "bruno.longhini@apostou.bet.br",
    "modelo": "Presencial"
+  },
+  {
+   "nome": "Dayan Chiodo Dias",
+   "status": "Ativo",
+   "area": "Lifecycle & CRM",
+   "cargo": "Copywriter II",
+   "nivel": "SUP/ANALISTA",
+   "gestor": "Rafaela Cristina Possa Parreira",
+   "contrato": "PJ",
+   "cidade": "",
+   "uf": "",
+   "aeroportoBase": "",
+   "email": "dayan.dias@acegaming.com.br",
+   "emailAlt": "",
+   "modelo": "Híbrido"
   },
   {
    "nome": "Emerson Augusto de Oliveira",
@@ -159,14 +174,14 @@ window.SEED = {
    "area": "Performance MKT",
    "cargo": "Especialista Marketing",
    "nivel": "GER/ESP/COOR",
-   "gestor": "Vinicius Eduardo Costa Cruz",
+   "gestor": "Leandro Brant Vitoriano Vinte",
    "contrato": "PJ",
    "cidade": "Belo Horizonte",
    "uf": "MG",
-   "aeroportoBase": "CGH - Congonhas",
-   "email": "eric.gabriel@apostou.bet.br",
-   "emailAlt": "eric.gabriel@acegaming.com.br",
-   "modelo": "Híbrido"
+   "aeroportoBase": "CNF - Confins",
+   "email": "eric.gabriel@acegaming.com.br",
+   "emailAlt": "eric.gabriel@apostou.bet.br",
+   "modelo": "Remoto"
   },
   {
    "nome": "Evair Santana Maciel",
@@ -179,8 +194,8 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "evair.maciel@apostou.bet.br",
-   "emailAlt": "evair.maciel@acegaming.com.br",
+   "email": "evair.maciel@acegaming.com.br",
+   "emailAlt": "evair.maciel@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -194,8 +209,8 @@ window.SEED = {
    "cidade": "Parnamirim",
    "uf": "RN",
    "aeroportoBase": "NAT - Natal",
-   "email": "eziane.gomes@apostou.bet.br",
-   "emailAlt": "eziane.gomes@acegaming.com.br",
+   "email": "eziane.gomes@acegaming.com.br",
+   "emailAlt": "eziane.gomes@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -204,14 +219,14 @@ window.SEED = {
    "area": "Performance MKT",
    "cargo": "Especialista Performance MKT",
    "nivel": "GER/ESP/COOR",
-   "gestor": "Vinicius Eduardo Costa Cruz",
+   "gestor": "Leandro Brant Vitoriano Vinte",
    "contrato": "PJ",
-   "cidade": "Campinas",
+   "cidade": "São Paulo",
    "uf": "SP",
-   "aeroportoBase": "VCP - Viracopos",
-   "email": "trafego@apostou.bet.br",
-   "emailAlt": "felipe.silva@acegaming.com.br",
-   "modelo": "Remoto"
+   "aeroportoBase": "CGH - Congonhas",
+   "email": "felipe.silva@acegaming.com.br",
+   "emailAlt": "trafego@apostou.bet.br",
+   "modelo": "Híbrido"
   },
   {
    "nome": "Gabriel da Cruz Oliveira",
@@ -224,8 +239,8 @@ window.SEED = {
    "cidade": "Feira de Santana",
    "uf": "BA",
    "aeroportoBase": "SSA - Salvador",
-   "email": "dados@apostou.bet.br",
-   "emailAlt": "gabriel.oliveira@acegaming.com.br",
+   "email": "gabriel.oliveira@acegaming.com.br",
+   "emailAlt": "dados@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -239,8 +254,8 @@ window.SEED = {
    "cidade": "Carapicuíba",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "gabriela.blos@apostou.bet.br",
-   "emailAlt": "gabriela.blos@acegaming.com.br",
+   "email": "gabriela.blos@acegaming.com.br",
+   "emailAlt": "gabriela.blos@apostou.bet.br",
    "modelo": "Híbrido"
   },
   {
@@ -254,8 +269,8 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "GRU - Guarulhos",
-   "email": "gabriella.ribeiro@apostou.bet.br",
-   "emailAlt": "gabriella.ribeiro@acegaming.com.br",
+   "email": "gabriella.ribeiro@acegaming.com.br",
+   "emailAlt": "gabriella.ribeiro@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -269,8 +284,8 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "guilherme.brandao@apostou.bet.br",
-   "emailAlt": "guilherme.brandao@acegaming.com.br",
+   "email": "guilherme.brandao@acegaming.com.br",
+   "emailAlt": "guilherme.brandao@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -284,8 +299,8 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "guilherme.vito@apostou.bet.br",
-   "emailAlt": "guilherme.vito@acegaming.com.br",
+   "email": "guilherme.vito@acegaming.com.br",
+   "emailAlt": "guilherme.vito@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -299,8 +314,8 @@ window.SEED = {
    "cidade": "Caruaru",
    "uf": "PE",
    "aeroportoBase": "REC - Recife",
-   "email": "gustavo.lima@apostou.bet.br",
-   "emailAlt": "gustavo.pereira@acegaming.com.br",
+   "email": "gustavo.pereira@acegaming.com.br",
+   "emailAlt": "gustavo.lima@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -314,9 +329,24 @@ window.SEED = {
    "cidade": "Sertãozinho",
    "uf": "SP",
    "aeroportoBase": "RAO - Ribeirão Preto",
-   "email": "gustavo.arruda@apostou.bet.br",
-   "emailAlt": "gustavo.arruda@acegaming.com.br",
+   "email": "gustavo.arruda@acegaming.com.br",
+   "emailAlt": "gustavo.arruda@apostou.bet.br",
    "modelo": "Remoto"
+  },
+  {
+   "nome": "Ismael Cardoso",
+   "status": "A iniciar",
+   "area": "AI Culture & Dados",
+   "cargo": "Especialista AI & Dados",
+   "nivel": "GER/ESP/COOR",
+   "gestor": "Pedro Caetano Utida Neves",
+   "contrato": "PJ",
+   "cidade": "",
+   "uf": "",
+   "aeroportoBase": "",
+   "email": "",
+   "emailAlt": "",
+   "modelo": ""
   },
   {
    "nome": "Jonieri Gomes da Silva",
@@ -329,24 +359,24 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "jonieri.silva@apostou.bet.br",
-   "emailAlt": "jonieri.silva@acegaming.com.br",
+   "email": "jonieri.silva@acegaming.com.br",
+   "emailAlt": "jonieri.silva@apostou.bet.br",
    "modelo": "Híbrido"
   },
   {
-   "nome": "Laisa Chacon de Oliveira",
-   "status": "Ativo",
-   "area": "(a definir)",
-   "cargo": "(a definir)",
-   "nivel": "(a definir)",
-   "gestor": "",
+   "nome": "Laisa Chacon",
+   "status": "A iniciar",
+   "area": "Performance MKT",
+   "cargo": "Analista Marketing II",
+   "nivel": "SUP/ANALISTA",
+   "gestor": "Vinicius Eduardo Costa Cruz",
    "contrato": "PJ",
    "cidade": "Rio de Janeiro",
    "uf": "RJ",
    "aeroportoBase": "SDU - Santos Dumont",
-   "email": "",
+   "email": "laisa.chacon@acegaming.com.br",
    "emailAlt": "",
-   "modelo": "Remoto"
+   "modelo": "Híbrido"
   },
   {
    "nome": "Leandro Brant Vitoriano Vinte",
@@ -359,23 +389,23 @@ window.SEED = {
    "cidade": "Belo Horizonte",
    "uf": "MG",
    "aeroportoBase": "CNF - Confins",
-   "email": "leandro.vinte@apostou.bet.br",
-   "emailAlt": "leandro.vinte@acegaming.com.br",
+   "email": "leandro.vinte@acegaming.com.br",
+   "emailAlt": "leandro.vinte@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
    "nome": "Leonardo Favorito Martins",
    "status": "Ativo",
    "area": "Financeiro, Jurídico & Compliance",
-   "cargo": "Head Negócios Financeiros",
+   "cargo": "Head Finanças Estratégicas",
    "nivel": "GER/ESP/COOR",
    "gestor": "Anderson Ribeiro Caresma",
    "contrato": "PJ",
    "cidade": "Nova Lima",
    "uf": "MG",
    "aeroportoBase": "CNF - Confins",
-   "email": "leonardo.favorito@apostou.bet.br",
-   "emailAlt": "leonardo.favorito@acegaming.com.br",
+   "email": "leonardo.favorito@acegaming.com.br",
+   "emailAlt": "leonardo.favorito@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -386,12 +416,12 @@ window.SEED = {
    "nivel": "SUP/ANALISTA",
    "gestor": "Thiago Moreira Saraiva",
    "contrato": "PJ",
-   "cidade": "Rio de Janeiro",
-   "uf": "RJ",
-   "aeroportoBase": "GIG - Galeão",
-   "email": "leonardo.novais@apostou.bet.br",
-   "emailAlt": "leonardo.novais@acegaming.com.br",
-   "modelo": "Remoto"
+   "cidade": "São Paulo",
+   "uf": "SP",
+   "aeroportoBase": "CGH - Congonhas",
+   "email": "leonardo.novais@acegaming.com.br",
+   "emailAlt": "leonardo.novais@apostou.bet.br",
+   "modelo": "Híbrido"
   },
   {
    "nome": "Letícia Mara da Costa Ferreira",
@@ -404,8 +434,8 @@ window.SEED = {
    "cidade": "Ouro Preto",
    "uf": "MG",
    "aeroportoBase": "CNF - Confins",
-   "email": "leticia.ferreira@apostou.bet.br",
-   "emailAlt": "leticia.ferreira@acegaming.com.br",
+   "email": "leticia.ferreira@acegaming.com.br",
+   "emailAlt": "leticia.ferreira@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -418,9 +448,9 @@ window.SEED = {
    "contrato": "PJ",
    "cidade": "São Paulo",
    "uf": "SP",
-   "aeroportoBase": "CGH - Congonhas",
-   "email": "livia.koibe@apostou.bet.br",
-   "emailAlt": "Livia.kolbe@acegaming.com.br",
+   "aeroportoBase": "VCP - Viracopos",
+   "email": "Livia.kolbe@acegaming.com.br",
+   "emailAlt": "livia.koibe@apostou.bet.br",
    "modelo": "Híbrido"
   },
   {
@@ -434,8 +464,8 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "luana.soares@apostou.bet.br",
-   "emailAlt": "luana.soares@acegaming.com.br",
+   "email": "luana.soares@acegaming.com.br",
+   "emailAlt": "luana.soares@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -449,8 +479,8 @@ window.SEED = {
    "cidade": "Belo Horizonte",
    "uf": "MG",
    "aeroportoBase": "CNF - Confins",
-   "email": "lucas.silva@apostou.bet.br",
-   "emailAlt": "lucas.silva@acegaming.com.br",
+   "email": "lucas.silva@acegaming.com.br",
+   "emailAlt": "lucas.silva@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -464,8 +494,8 @@ window.SEED = {
    "cidade": "Belo Horizonte",
    "uf": "MG",
    "aeroportoBase": "CNF - Confins",
-   "email": "lucas.monreira@apostou.bet.br",
-   "emailAlt": "lucas.moreira@acegaming.com.br",
+   "email": "lucas.moreira@acegaming.com.br",
+   "emailAlt": "lucas.monreira@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -479,28 +509,43 @@ window.SEED = {
    "cidade": "Barueri",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "luis.henrique@apostou.bet.br",
-   "emailAlt": "luis.henrique@acegaming.com.br",
+   "email": "luis.henrique@acegaming.com.br",
+   "emailAlt": "luis.henrique@apostou.bet.br",
+   "modelo": "Híbrido"
+  },
+  {
+   "nome": "Madson Franklin Duarte Teodoro",
+   "status": "Ativo",
+   "area": "Performance MKT",
+   "cargo": "Especialista Marketing",
+   "nivel": "GER/ESP/COOR",
+   "gestor": "Vinicius Eduardo Costa Cruz",
+   "contrato": "PJ",
+   "cidade": "",
+   "uf": "",
+   "aeroportoBase": "",
+   "email": "madson.duarte@acegaming.com.br",
+   "emailAlt": "",
    "modelo": "Híbrido"
   },
   {
    "nome": "Marcelo Guedes Nogueira",
    "status": "Ativo",
    "area": "Board",
-   "cargo": "COS",
+   "cargo": "Head COS",
    "nivel": "HEAD",
    "gestor": "Pedro Victor Lima de Faria",
    "contrato": "PJ",
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "marcelo.guedes@apostou.bet.br",
-   "emailAlt": "marcelo.guedes@acegaming.com.br",
+   "email": "marcelo.guedes@acegaming.com.br",
+   "emailAlt": "marcelo.guedes@apostou.bet.br",
    "modelo": "Híbrido"
   },
   {
    "nome": "Marcos Augusto Steinmeier",
-   "status": "Ativo",
+   "status": "Desligado",
    "area": "Performance MKT",
    "cargo": "Especialista Parceria",
    "nivel": "GER/ESP/COOR",
@@ -511,6 +556,21 @@ window.SEED = {
    "aeroportoBase": "GRU - Guarulhos",
    "email": "marcos.steinmeier@apostou.bet.br",
    "emailAlt": "marcos.steinmeier@acegaming.com.br",
+   "modelo": "Híbrido"
+  },
+  {
+   "nome": "Mayalla Nathalia de Almeida Cerqueira",
+   "status": "A iniciar",
+   "area": "Financeiro, Jurídico & Compliance",
+   "cargo": "Gerente Jurídica & Compliance",
+   "nivel": "GER/ESP/COOR",
+   "gestor": "Gustavo Henrique Pereira de Lima",
+   "contrato": "PJ",
+   "cidade": "",
+   "uf": "",
+   "aeroportoBase": "",
+   "email": "mayalla.almeida@acegaming.com.br",
+   "emailAlt": "",
    "modelo": "Híbrido"
   },
   {
@@ -539,8 +599,8 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "nathalia.pereira@apostou.bet.br",
-   "emailAlt": "nathalia.pereira@acegaming.com.br",
+   "email": "nathalia.pereira@acegaming.com.br",
+   "emailAlt": "nathalia.pereira@apostou.bet.br",
    "modelo": "Híbrido"
   },
   {
@@ -554,23 +614,23 @@ window.SEED = {
    "cidade": "Recife",
    "uf": "PE",
    "aeroportoBase": "REC - Recife",
-   "email": "patricia.goncalves@apostou.bet.br",
-   "emailAlt": "patricia.goncalves@acegaming.com.br",
+   "email": "patricia.goncalves@acegaming.com.br",
+   "emailAlt": "patricia.goncalves@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
    "nome": "Paulo Roberto Ribeiro Sobrinho",
    "status": "Ativo",
-   "area": "Inovação",
-   "cargo": "Analista de Produto - UX/UI",
+   "area": "Tecnologia & Produto",
+   "cargo": "Analista UX/UI I",
    "nivel": "SUP/ANALISTA",
    "gestor": "Pedro Henrique Silva Antunes",
    "contrato": "PJ",
    "cidade": "Uberlândia",
    "uf": "MG",
    "aeroportoBase": "UDI - Uberlândia",
-   "email": "paulo.ribeiro@apostou.bet.br",
-   "emailAlt": "paulo.ribeiro@acegaming.com.br",
+   "email": "paulo.ribeiro@acegaming.com.br",
+   "emailAlt": "paulo.ribeiro@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -584,14 +644,14 @@ window.SEED = {
    "cidade": "Caraguatatuba",
    "uf": "SP",
    "aeroportoBase": "GRU - Guarulhos",
-   "email": "pedro.neves@apostou.bet.br",
-   "emailAlt": "pedro.neves@acegaming.com.br",
-   "modelo": "Remoto"
+   "email": "pedro.neves@acegaming.com.br",
+   "emailAlt": "pedro.neves@apostou.bet.br",
+   "modelo": "Híbrido"
   },
   {
    "nome": "Pedro Henrique Ferreira Iegler",
    "status": "Ativo",
-   "area": "Inovação",
+   "area": "Tecnologia & Produto",
    "cargo": "Desenvolvedor Full Stack",
    "nivel": "SUP/ANALISTA",
    "gestor": "Thiago Dias Melin",
@@ -599,15 +659,15 @@ window.SEED = {
    "cidade": "Londrina",
    "uf": "PR",
    "aeroportoBase": "LDB - Londrina",
-   "email": "pedro.iegler@apostou.bet.br",
-   "emailAlt": "pedro.iegler@acegaming.com.br",
+   "email": "pedro.iegler@acegaming.com.br",
+   "emailAlt": "pedro.iegler@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
    "nome": "Pedro Henrique Silva Antunes",
    "status": "Ativo",
-   "area": "Inovação",
-   "cargo": "CPTO",
+   "area": "Tecnologia & Produto",
+   "cargo": "Head Tech & Produto",
    "nivel": "HEAD",
    "gestor": "Pedro Victor Lima de Faria",
    "contrato": "PJ",
@@ -624,7 +684,7 @@ window.SEED = {
    "area": "Board",
    "cargo": "CEO",
    "nivel": "HEAD",
-   "gestor": "",
+   "gestor": "0",
    "contrato": "PJ",
    "cidade": "Belo Horizonte",
    "uf": "MG",
@@ -635,7 +695,7 @@ window.SEED = {
   },
   {
    "nome": "Rafael Franzon Benz",
-   "status": "Ativo",
+   "status": "Desligado",
    "area": "Lifecycle & CRM",
    "cargo": "Gerente Lifecycle & CRM",
    "nivel": "GER/ESP/COOR",
@@ -651,32 +711,32 @@ window.SEED = {
   {
    "nome": "Rafael Miranda Carvalho Costa",
    "status": "Ativo",
-   "area": "Ops",
+   "area": "Lifecycle & CRM",
    "cargo": "Product Manager Sportbook",
    "nivel": "SUP/ANALISTA",
    "gestor": "Rafaela Cristina Possa Parreira",
    "contrato": "PJ",
    "cidade": "Belo Horizonte",
    "uf": "MG",
-   "aeroportoBase": "CGH - Congonhas",
-   "email": "rafael.miranda@apostou.bet.br",
-   "emailAlt": "rafael.costa@acegaming.com.br",
-   "modelo": "Remoto"
+   "aeroportoBase": "CNF - Confins",
+   "email": "rafael.costa@acegaming.com.br",
+   "emailAlt": "rafael.miranda@apostou.bet.br",
+   "modelo": "Híbrido"
   },
   {
    "nome": "Rafaela Cristina Possa Parreira",
    "status": "Ativo",
    "area": "Lifecycle & CRM",
-   "cargo": "???",
+   "cargo": "Gerente Lifecycle & CRM",
    "nivel": "GER/ESP/COOR",
    "gestor": "Lucas Guedes Moreira",
    "contrato": "PJ",
    "cidade": "Belo Horizonte",
    "uf": "MG",
    "aeroportoBase": "CNF - Confins",
-   "email": "rafaela.possa@apostou.bet.br",
-   "emailAlt": "rafaela.possa@acegaming.com.br",
-   "modelo": "Híbrido"
+   "email": "rafaela.possa@acegaming.com.br",
+   "emailAlt": "rafaela.possa@apostou.bet.br",
+   "modelo": "Remoto"
   },
   {
    "nome": "Renan Menezes Amaral",
@@ -689,12 +749,42 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "renan.amaral@apostou.bet.br",
-   "emailAlt": "renan.menezes@acegaming.com.br",
+   "email": "renan.menezes@acegaming.com.br",
+   "emailAlt": "renan.amaral@apostou.bet.br",
    "modelo": "Híbrido"
   },
   {
-   "nome": "Silas Fanuel Pereira Alves",
+   "nome": "Rodrigo Bortolucci",
+   "status": "A iniciar",
+   "area": "Financeiro, Jurídico & Compliance",
+   "cargo": "Analista Financeiro III",
+   "nivel": "SUP/ANALISTA",
+   "gestor": "Anderson Ribeiro Caresma",
+   "contrato": "PJ",
+   "cidade": "",
+   "uf": "",
+   "aeroportoBase": "",
+   "email": "rodrigo.bortolucci@acegaming.com.br",
+   "emailAlt": "",
+   "modelo": "Híbrido"
+  },
+  {
+   "nome": "Sandra Pereira de Sena",
+   "status": "A iniciar",
+   "area": "Ops",
+   "cargo": "Analista de Plataformas II - Reputacional",
+   "nivel": "SUP/ANALISTA",
+   "gestor": "Bruna Luiza de Carvalho Moreira",
+   "contrato": "CLT",
+   "cidade": "",
+   "uf": "",
+   "aeroportoBase": "",
+   "email": "sandra.sena@acegaming.com.br",
+   "emailAlt": "",
+   "modelo": "Híbrido"
+  },
+  {
+   "nome": "Silas Alves",
    "status": "Ativo",
    "area": "Ops",
    "cargo": "Assistente de Atendimento Jogador III",
@@ -704,15 +794,15 @@ window.SEED = {
    "cidade": "São Paulo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "silas.alves@apostou.bet.br",
-   "emailAlt": "silas.alves@acegaming.com.br",
+   "email": "silas.alves@acegaming.com.br",
+   "emailAlt": "silas.alves@apostou.bet.br",
    "modelo": "Híbrido"
   },
   {
    "nome": "Tatiane dos Santos Leite",
    "status": "Ativo",
-   "area": "Financeiro & Administrativo",
-   "cargo": "Analista Administrativo",
+   "area": "Financeiro, Jurídico & Compliance",
+   "cargo": "Analista Compras & Facilites I",
    "nivel": "SUP/ANALISTA",
    "gestor": "Leonardo Favorito Martins",
    "contrato": "CLT",
@@ -721,36 +811,36 @@ window.SEED = {
    "aeroportoBase": "SSA - Salvador",
    "email": "tatiane.leite@acegaming.com.br",
    "emailAlt": "",
-   "modelo": "Presencial"
+   "modelo": "Remoto"
   },
   {
    "nome": "Thiago de Pinho Mourão Monteiro",
    "status": "Ativo",
    "area": "AI Culture & Dados",
-   "cargo": "AI Analyst",
+   "cargo": "Especialista AI & Dados I",
    "nivel": "SUP/ANALISTA",
    "gestor": "Pedro Caetano Utida Neves",
    "contrato": "PJ",
    "cidade": "Belo Horizonte",
    "uf": "MG",
    "aeroportoBase": "CNF - Confins",
-   "email": "thiago.monteiro@apostou.bet.br",
-   "emailAlt": "thiago.monteiro@acegaming.com.br",
-   "modelo": ""
+   "email": "thiago.monteiro@acegaming.com.br",
+   "emailAlt": "thiago.monteiro@apostou.bet.br",
+   "modelo": "Remoto"
   },
   {
    "nome": "Thiago Dias Melin",
    "status": "Ativo",
-   "area": "Inovação",
+   "area": "Tecnologia & Produto",
    "cargo": "Engineering Manager",
-   "nivel": "SUP/ANALISTA",
-   "gestor": "Pedro Henrique Silva Antunes",
+   "nivel": "GER/ESP/COOR",
+   "gestor": "Bruno Heidrich dos Santos",
    "contrato": "PJ",
    "cidade": "Rio de Janeiro",
    "uf": "RJ",
    "aeroportoBase": "SDU - Santos Dumont",
-   "email": "thiago.melin@apostou.bet.br",
-   "emailAlt": "thiago.melin@acegaming.com.br",
+   "email": "thiago.melin@acegaming.com.br",
+   "emailAlt": "thiago.melin@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -761,12 +851,12 @@ window.SEED = {
    "nivel": "GER/ESP/COOR",
    "gestor": "Lucas Corrêa Cantão da Silva",
    "contrato": "PJ",
-   "cidade": "Araucária",
-   "uf": "PR",
-   "aeroportoBase": "CWB - Afonso Pena",
-   "email": "thiago.moreira@apostou.bet.br",
-   "emailAlt": "thiago.moreira@acegaming.com.br",
-   "modelo": "Remoto"
+   "cidade": "São Paulo",
+   "uf": "SP",
+   "aeroportoBase": "CGH - Congonhas",
+   "email": "thiago.moreira@acegaming.com.br",
+   "emailAlt": "thiago.moreira@apostou.bet.br",
+   "modelo": "Híbrido"
   },
   {
    "nome": "Victor Hugo Menezes Moreira",
@@ -779,39 +869,39 @@ window.SEED = {
    "cidade": "Serra",
    "uf": "ES",
    "aeroportoBase": "VIX - Vitória",
-   "email": "victor.moreira@apostou.bet.br",
-   "emailAlt": "victor.moreira@acegaming.com.br",
+   "email": "victor.moreira@acegaming.com.br",
+   "emailAlt": "victor.moreira@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
    "nome": "Vinicius Carneiro Trindade",
    "status": "Ativo",
-   "area": "Inovação",
-   "cargo": "Analista de Produto",
+   "area": "Tecnologia & Produto",
+   "cargo": "Analista Produto & QA",
    "nivel": "SUP/ANALISTA",
-   "gestor": "Pedro Henrique Silva Antunes",
+   "gestor": "Bruno Heidrich dos Santos",
    "contrato": "PJ",
    "cidade": "São Bernardo do Campo",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "vinicius.carneiro@apostou.bet.br",
-   "emailAlt": "vinicius.carneiro@acegaming.com.br",
-   "modelo": "Remoto"
+   "email": "vinicius.carneiro@acegaming.com.br",
+   "emailAlt": "vinicius.carneiro@apostou.bet.br",
+   "modelo": "Híbrido"
   },
   {
    "nome": "Vinicius dos Santos Barreiros",
    "status": "Ativo",
-   "area": "Lifecycle & CRM",
-   "cargo": "Especialista Performance CRM",
+   "area": "AI Culture & Dados",
+   "cargo": "Especialista AI & Dados I",
    "nivel": "GER/ESP/COOR",
    "gestor": "Pedro Caetano Utida Neves",
    "contrato": "PJ",
    "cidade": "Itatiba",
    "uf": "SP",
-   "aeroportoBase": "GRU / VCP",
-   "email": "vinicius.barreiros@apostou.bet.br",
-   "emailAlt": "vinicius.barreiros@acegaming.com.br",
-   "modelo": "Remoto"
+   "aeroportoBase": "VCP - Viracopos",
+   "email": "vinicius.barreiros@acegaming.com.br",
+   "emailAlt": "vinicius.barreiros@apostou.bet.br",
+   "modelo": "Híbrido"
   },
   {
    "nome": "Vinicius Eduardo Costa Cruz",
@@ -819,14 +909,14 @@ window.SEED = {
    "area": "Performance MKT",
    "cargo": "Gerente de Mídia Paga II",
    "nivel": "GER/ESP/COOR",
-   "gestor": "Leandro Brant Vitoriano Vinte",
+   "gestor": "Bruno Henrique Theodoro Longhini",
    "contrato": "PJ",
-   "cidade": "Caruaru",
-   "uf": "PE",
-   "aeroportoBase": "REC - Recife",
-   "email": "vinicius.cruz@apostou.bet.br",
-   "emailAlt": "vinicius.cruz@acegaming.com.br",
-   "modelo": "Remoto"
+   "cidade": "São Caetano do Sul",
+   "uf": "SP",
+   "aeroportoBase": "CGH - Congonhas",
+   "email": "vinicius.cruz@acegaming.com.br",
+   "emailAlt": "vinicius.cruz@apostou.bet.br",
+   "modelo": "Híbrido"
   },
   {
    "nome": "VITORIA CRISTINA DA COSTA TEIXEIRA",
@@ -839,8 +929,8 @@ window.SEED = {
    "cidade": "Ouro Preto",
    "uf": "MG",
    "aeroportoBase": "CNF - Confins",
-   "email": "vitoria.teixeira@apostou.bet.br",
-   "emailAlt": "vitoria.teixeira@acegaming.com.br",
+   "email": "vitoria.teixeira@acegaming.com.br",
+   "emailAlt": "vitoria.teixeira@apostou.bet.br",
    "modelo": "Remoto"
   },
   {
@@ -854,8 +944,8 @@ window.SEED = {
    "cidade": "Osasco",
    "uf": "SP",
    "aeroportoBase": "CGH - Congonhas",
-   "email": "vitoria.felipe@apostou.bet.br",
-   "emailAlt": "vitoria.oliveira@acegaming.com.br",
+   "email": "vitoria.oliveira@acegaming.com.br",
+   "emailAlt": "vitoria.felipe@apostou.bet.br",
    "modelo": "Híbrido"
   }
  ],
@@ -2251,5 +2341,5 @@ window.SEED = {
    }
   ]
  },
- "baseEquipeVersao": 1
+ "baseEquipeVersao": 2
 };
