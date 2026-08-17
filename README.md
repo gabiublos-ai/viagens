@@ -17,8 +17,8 @@ R$ 11.158,29 de Uber, 25 colaboradores com despesa, 181 corridas, ticket médio 
 
 **Site com senha (equipe inteira na mesma base).** É o modo de produção: um endereço na
 internet, tela de senha, e todo mundo que entra vê e lança na mesma base, com sincronização
-automática. Passo a passo em [DEPLOY.md](DEPLOY.md) — sobe na Cloudflare em poucos minutos,
-no plano gratuito.
+automática. Passo a passo em [DEPLOY.md](DEPLOY.md) — no Netlify são alguns cliques, sem
+terminal; também há a receita para Cloudflare Workers e para rodar numa máquina sua.
 
 **Arquivo único, offline.** Baixe `dist/gestao-viagens.html` e abra com dois cliques. Sem
 senha e sem servidor: os dados ficam no navegador daquela máquina. Bom para trabalhar sem
@@ -83,11 +83,14 @@ assets/core.js             estado e todas as regras de cálculo
 assets/views.js            telas
 assets/app.js              navegação, entrada com senha, formulários e ações
 
-servidor/api.js            a API — roda igual no Cloudflare Worker e no Node
-servidor/worker.js         adaptador Cloudflare Workers + D1
+servidor/api.js            a API — o mesmo código no Netlify, na Cloudflare e no Node
+servidor/netlify.js        adaptador Netlify (Blobs)
+servidor/worker.js         adaptador Cloudflare Workers (D1)
 servidor/local.js          adaptador Node, guardando o estado num arquivo
-servidor/senha.js          gera SENHA_HASH e SESSAO_SEGREDO
+servidor/senha.js          gera SENHA_HASH e SESSAO_SEGREDO pelo terminal
 servidor/seed.json         base original, para semear o banco (gerado)
+senha.html                 gera SENHA_HASH e SESSAO_SEGREDO pelo navegador
+netlify/functions/api.mjs  a função que atende /api/* no Netlify
 
 tools/extract_seed.py      regenera assets/seed.js a partir da planilha de viagens
 tools/merge_equipe.py      atualiza a base de equipe a partir da planilha de colaboradores
@@ -95,7 +98,8 @@ tools/build_single.py      gera dist/gestao-viagens.html (arquivo único, offlin
 tools/build_site.py        gera site/ (o que o servidor publica) e servidor/seed.json
 ```
 
-Sem dependências, sem framework — só HTML, CSS e JavaScript, no navegador e no servidor.
+Sem framework — só HTML, CSS e JavaScript, no navegador e no servidor. A única dependência
+externa é `@netlify/blobs`, usada apenas pela função do Netlify para guardar o estado.
 
 Para regerar a base a partir de uma planilha nova:
 

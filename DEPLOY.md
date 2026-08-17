@@ -1,15 +1,79 @@
 # Publicar o site
 
-O app pode rodar de três jeitos. O terceiro é o que você pediu: um endereço na
+O app roda de quatro jeitos. O primeiro é o que você pediu: um endereço na
 internet, protegido por senha, com todo mundo lançando na mesma base.
 
 | | Onde os dados ficam | Quem acessa |
 |---|---|---|
-| `dist/gestao-viagens.html` | no navegador de quem abriu | quem tem o arquivo |
+| **Netlify** | **Netlify Blobs** | **quem tem o endereço e a senha** |
+| Cloudflare Workers | banco D1 | quem tem o endereço e a senha |
 | `servidor/local.js` | num arquivo JSON na máquina que roda | quem alcança a máquina |
-| **Cloudflare Workers** | **banco de dados na nuvem** | **quem tem o endereço e a senha** |
+| `dist/gestao-viagens.html` | no navegador de quem abriu | quem tem o arquivo |
 
-## Cloudflare Workers — o caminho recomendado
+## Netlify — o caminho mais curto
+
+Sem terminal e sem instalar nada: o Netlify lê o `netlify.toml` do repositório e
+monta tudo sozinho. O plano gratuito atende com folga.
+
+### 1. Criar o site (uma vez)
+
+1. Entre em <https://app.netlify.com> → **Add new site** → **Import an existing project**.
+2. Escolha **GitHub** e autorize, se ele pedir.
+3. Selecione o repositório **gabiublos-ai/viagens**.
+4. Não mexa em nada nas opções de build — `netlify.toml` já traz tudo:
+   publica a pasta `site`, roda `npm install` e liga a função da API.
+5. Clique em **Deploy**.
+
+Em cerca de um minuto o site sobe num endereço como
+`https://algum-nome-aleatorio.netlify.app`. Em **Site configuration → General →
+Site details → Change site name** dá para trocar por algo como
+`viagens-acegaming`.
+
+Nesse primeiro momento o app ainda não entra: falta a senha.
+
+### 2. Definir a senha de acesso
+
+Abra **`/senha.html`** no seu site — por exemplo
+`https://viagens-acegaming.netlify.app/senha.html`.
+
+Digite a senha que a equipe vai usar e clique em **Gerar**. A senha é
+transformada ali mesmo, no seu navegador, e não é enviada a lugar nenhum. A
+página devolve dois valores: `SENHA_HASH` e `SESSAO_SEGREDO`.
+
+Depois, no Netlify:
+
+1. **Site configuration → Environment variables → Add a variable**.
+2. Crie `SENHA_HASH` com o primeiro valor e `SESSAO_SEGREDO` com o segundo —
+   os nomes precisam ser exatamente esses.
+3. **Deploys → Trigger deploy → Deploy site**.
+
+Pronto. Abra o endereço do site: aparece a tela de senha, e quem entrar vê e
+lança na mesma base.
+
+### Trocar a senha depois
+
+Gere valores novos em `/senha.html`, atualize `SENHA_HASH` nas variáveis e
+publique de novo. Trocar também o `SESSAO_SEGREDO` derruba na hora todas as
+sessões abertas — útil se alguém sair da empresa.
+
+### Publicar uma versão nova do app
+
+Cada `git push` na branch do repositório dispara um deploy novo
+automaticamente. Os dados ficam no Netlify Blobs e não são tocados.
+
+### Onde os dados ficam
+
+No **Netlify Blobs**, o armazenamento do próprio Netlify — não precisa criar
+banco nem contratar nada. A leitura é configurada como forte
+(`consistency: "strong"`), então logo depois de alguém salvar, a próxima
+consulta já enxerga o valor novo.
+
+### Domínio próprio
+
+**Domain management → Add a domain** para usar algo como
+`viagens.apostou.bet.br`. O Netlify emite o certificado https sozinho.
+
+## Cloudflare Workers — alternativa
 
 Plano gratuito atende com folga: o limite é de 100 mil requisições por dia e
 5 GB de banco. Uma equipe de dezenas de pessoas usa uma fração disso.
@@ -120,6 +184,7 @@ permissão de leitura e de edição, dá para evoluir a partir daqui.
 
 ## Segredos e o repositório público
 
-`SENHA_HASH` e `SESSAO_SEGREDO` vivem como secrets na Cloudflare (ou como
-variáveis de ambiente, no modo local) e **nunca entram no repositório**. O
-`wrangler.toml` versionado não contém nenhum dos dois.
+`SENHA_HASH` e `SESSAO_SEGREDO` vivem como variáveis de ambiente no Netlify
+(ou secrets na Cloudflare) e **nunca entram no repositório**. Nem o
+`netlify.toml` nem o `wrangler.toml` versionados contêm qualquer um dos dois —
+só os comentários explicando onde configurá-los.

@@ -1,0 +1,31 @@
+# Deploy no Netlify.
+#
+# O site em site/ é estático e não contém nenhum dado. A API roda como função
+# e guarda o estado no Netlify Blobs — não precisa de banco separado.
+#
+# Variáveis de ambiente a configurar no painel do Netlify
+# (Site configuration → Environment variables):
+#
+#   SENHA_HASH       gere na página /senha.html do próprio site
+#   SESSAO_SEGREDO   o segundo valor gerado na mesma página
+
+[build]
+  publish = "site"
+  command = "npm install"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# A API vai para a função, antes de qualquer outra regra.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+# O resto é a casca do app; a navegação interna é por hash.
+# Arquivos que existem (index.html, senha.html, assets/) são servidos direto.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

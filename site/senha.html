@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gerar a senha de acesso</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="assets/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='19' font-size='19'>🔑</text></svg>">
+<style>
+  main { max-width: 620px; }
+  .saida {
+    font-family: var(--mono); font-size: 12px; word-break: break-all;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--r-sm); padding: 10px 12px; margin: 0;
+  }
+  .passo { display: flex; gap: 12px; align-items: baseline; }
+  .passo-n {
+    flex: none; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-ink);
+    display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-row">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3M17 6l2 2M14 9l2 2"/>
+        </svg>
+      </span>
+      <span>
+        <div class="brand-name">Gerar a senha de acesso</div>
+        <div class="brand-sub">Gestão de Viagens · Ace Gaming</div>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="card-body grid" style="gap:14px">
+      <div class="note">
+        Escolha a senha que a equipe vai usar para entrar. Ela é transformada aqui mesmo, no seu
+        navegador — <strong>não é enviada para lugar nenhum</strong>. O que você copia e cola no
+        Netlify são os dois valores gerados, dos quais não dá para voltar à senha original.
+      </div>
+
+      <form id="form" class="grid" style="gap:12px">
+        <div class="field">
+          <label for="senha">Senha de acesso</label>
+          <input type="text" id="senha" name="senha" autocomplete="off" spellcheck="false"
+                 placeholder="pelo menos 8 caracteres">
+          <span class="hint">Uma frase curta funciona melhor que uma palavra difícil de lembrar.</span>
+        </div>
+        <div class="row">
+          <button class="btn btn-primary" type="submit">Gerar</button>
+          <span class="t-sub" data-estado></span>
+        </div>
+      </form>
+
+      <div id="resultado" hidden class="grid" style="gap:14px">
+        <div class="grid" style="gap:6px">
+          <div class="row" style="gap:8px">
+            <span class="eyebrow">SENHA_HASH</span>
+            <button class="btn btn-sm" data-copiar="hash">Copiar</button>
+          </div>
+          <p class="saida" id="hash"></p>
+        </div>
+
+        <div class="grid" style="gap:6px">
+          <div class="row" style="gap:8px">
+            <span class="eyebrow">SESSAO_SEGREDO</span>
+            <button class="btn btn-sm" data-copiar="segredo">Copiar</button>
+          </div>
+          <p class="saida" id="segredo"></p>
+        </div>
+
+        <div class="grid" style="gap:10px;border-top:1px solid var(--border);padding-top:14px">
+          <div class="passo"><span class="passo-n">1</span>
+            <span>No Netlify, abra o site → <strong>Site configuration</strong> →
+            <strong>Environment variables</strong>.</span></div>
+          <div class="passo"><span class="passo-n">2</span>
+            <span>Crie as duas variáveis acima, com exatamente esses nomes, colando cada valor.</span></div>
+          <div class="passo"><span class="passo-n">3</span>
+            <span>Em <strong>Deploys</strong>, clique em <strong>Trigger deploy → Deploy site</strong>.</span></div>
+          <div class="passo"><span class="passo-n">4</span>
+            <span>Pronto: <a href="/">abra o app</a> e entre com a senha que você escolheu.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var ITERACOES = 310000;   // igual ao servidor/api.js
+
+  function paraBase64(bytes) {
+    var s = "", b = new Uint8Array(bytes);
+    for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return btoa(s);
+  }
+
+  async function gerarHash(senha) {
+    var salt = crypto.getRandomValues(new Uint8Array(16));
+    var chave = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(senha), "PBKDF2", false, ["deriveBits"]
+    );
+    var bits = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", hash: "SHA-256", salt: salt, iterations: ITERACOES }, chave, 256
+    );
+    return "pbkdf2$" + ITERACOES + "$" + paraBase64(salt) + "$" + paraBase64(bits);
+  }
+
+  function gerarSegredo() {
+    return Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+  }
+
+  function toast(texto) {
+    var t = document.createElement("div");
+    t.className = "toast";
+    t.textContent = texto;
+    document.getElementById("toasts").appendChild(t);
+    setTimeout(function () { t.remove(); }, 2600);
+  }
+
+  var form = document.getElementById("form");
+  var estado = form.querySelector("[data-estado]");
+
+  form.addEventListener("submit", async function (ev) {
+    ev.preventDefault();
+    var senha = form.senha.value.trim();
+    if (senha.length < 8) { estado.textContent = "Escolha uma senha com pelo menos 8 caracteres."; return; }
+
+    estado.textContent = "Gerando…";
+    document.getElementById("hash").textContent = await gerarHash(senha);
+    document.getElementById("segredo").textContent = gerarSegredo();
+    document.getElementById("resultado").hidden = false;
+    estado.textContent = "";
+  });
+
+  document.addEventListener("click", function (ev) {
+    var botao = ev.target.closest("[data-copiar]");
+    if (!botao) return;
+    var texto = document.getElementById(botao.dataset.copiar).textContent;
+    navigator.clipboard.writeText(texto).then(
+      function () { toast("Copiado"); },
+      function () { toast("Não consegui copiar — selecione e copie à mão"); }
+    );
+  });
+})();
+</script>
+</body>
+</html>

@@ -35,6 +35,9 @@ def main():
 
     with io.open(os.path.join(SITE, "index.html"), "w", encoding="utf-8") as f:
         f.write(html)
+
+    # Gerador da senha de acesso — usado uma vez, na configuração do site.
+    shutil.copy(os.path.join(RAIZ, "senha.html"), os.path.join(SITE, "senha.html"))
     for nome in COPIAR:
         shutil.copy(os.path.join(RAIZ, "assets", nome), os.path.join(SITE, "assets", nome))
 
@@ -47,7 +50,7 @@ def main():
 
     tamanho = sum(os.path.getsize(os.path.join(dir, n))
                   for dir, _, nomes in os.walk(SITE) for n in nomes)
-    print("site/            %d arquivos · %.0f KB" % (len(COPIAR) + 1, tamanho / 1024))
+    print("site/            %d arquivos · %.0f KB" % (len(COPIAR) + 2, tamanho / 1024))
     print("servidor/seed.json %.0f KB · %d viagens · %d colaboradores · %d linhas Uber"
           % (os.path.getsize(destino) / 1024, len(seed["viagens"]),
              len(seed["colaboradores"]), len(seed["uberRaw"])))
