@@ -55,6 +55,11 @@
     if (ABAS.some(function (a) { return a.id === hash; })) estado.aba = hash;
 
     render();
+
+    if (C.equipeAtualizada) {
+      toast("Base de equipe atualizada: " + C.equipeAtualizada + " cadastros · " +
+            C.db.colaboradores.length + " pessoas");
+    }
   }
 
   function atualizaAnos() {

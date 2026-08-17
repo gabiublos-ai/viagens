@@ -130,6 +130,7 @@
     var s = clone(window.SEED);
     return {
       versao: 1,
+      baseEquipeVersao: s.baseEquipeVersao || 0,
       colaboradores: s.colaboradores,
       viagens: s.viagens,
       uber: s.uberRaw.map(function (linha) { return { linha: linha }; }),
@@ -143,11 +144,46 @@
       var bruto = localStorage.getItem(STORAGE_KEY);
       if (bruto) {
         var d = JSON.parse(bruto);
-        if (d && d.viagens && d.colaboradores) { db = d; normalizaEstado(); return; }
+        if (d && d.viagens && d.colaboradores) {
+          db = d;
+          normalizaEstado();
+          var mexidos = atualizaBaseEquipe();
+          if (mexidos) { equipeAtualizada = mexidos; salvar(); }
+          return;
+        }
       }
     } catch (e) { /* armazenamento indisponível — segue com a base original */ }
     db = estadoInicial();
     salvar();
+  }
+
+  /**
+   * Traz a base de equipe nova para dentro de dados já salvos no navegador.
+   * Atualiza quem já existe, inclui quem entrou, e nunca apaga o que a origem
+   * deixou em branco (o gestor direto, por exemplo) nem quem foi cadastrado aqui.
+   */
+  function atualizaBaseEquipe() {
+    var versaoSeed = window.SEED.baseEquipeVersao || 0;
+    if (!versaoSeed || (db.baseEquipeVersao || 0) >= versaoSeed) return 0;
+
+    var porNome = {};
+    db.colaboradores.forEach(function (c) { porNome[normal(c.nome)] = c; });
+
+    var mexidos = 0;
+    clone(window.SEED.colaboradores).forEach(function (novo) {
+      var alvo = porNome[normal(novo.nome)];
+      if (!alvo) { db.colaboradores.push(novo); mexidos++; return; }
+      var mudou = false;
+      Object.keys(novo).forEach(function (campo) {
+        if (campo === "nome" || !novo[campo]) return;
+        if (alvo[campo] !== novo[campo]) { alvo[campo] = novo[campo]; mudou = true; }
+      });
+      if (mudou) mexidos++;
+    });
+
+    db.colaboradores.sort(function (a, b) { return ordenaPt(a.nome, b.nome); });
+    db.baseEquipeVersao = versaoSeed;
+    return mexidos;
   }
 
   function normalizaEstado() {
@@ -162,6 +198,7 @@
   }
 
   var ouvintes = [];
+  var equipeAtualizada = 0;   // nº de cadastros mexidos na última migração, para avisar na tela
   function aoMudar(fn) { ouvintes.push(fn); }
 
   function salvar() {
@@ -742,6 +779,7 @@
     // estado
     carregar: carregar, salvar: salvar, aoMudar: aoMudar, restaurarBase: restaurarBase,
     substituirEstado: substituirEstado,
+    get equipeAtualizada() { return equipeAtualizada; },
     get db() { return db; },
 
     // formatação

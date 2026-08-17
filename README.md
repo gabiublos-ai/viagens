@@ -2,7 +2,12 @@
 
 Substitui a planilha `Gestao_Viagens_Corporativas_AceGaming_2026.xlsx` por um app que roda no
 navegador, sem instalação e sem servidor. A base de maio a agosto/2026 já vem carregada:
-**53 viagens · 1 alteração · 233 pernoites · 186 linhas do Uber · 53 colaboradores**.
+**53 viagens · 1 alteração · 233 pernoites · 186 linhas do Uber · 57 colaboradores**.
+
+O cadastro da equipe vem de `Ace Gaming_Gestao_Colaboradores.xlsx` (Drive), com apenas os campos
+que a gestão de viagens usa — área, cargo, nível, contrato, modelo de trabalho, cidade/UF,
+aeroporto base e e-mail corporativo. Dados pessoais e bancários da planilha de origem (CPF, RG,
+endereço, telefone, conta, PIX) não são importados.
 
 Todos os totais conferem com a planilha original: R$ 139.228,71 no ano, R$ 128.070,42 em viagens,
 R$ 11.158,29 de Uber, 25 colaboradores com despesa, 181 corridas, ticket médio de R$ 62,07.
@@ -71,7 +76,8 @@ assets/seed.js           base extraída da planilha (gerado)
 assets/core.js           estado, persistência e todas as regras de cálculo
 assets/views.js          telas
 assets/app.js            navegação, formulários e ações
-tools/extract_seed.py    regenera assets/seed.js a partir do .xlsx
+tools/extract_seed.py    regenera assets/seed.js a partir da planilha de viagens
+tools/merge_equipe.py    atualiza a base de equipe a partir da planilha de colaboradores
 tools/build_single.py    gera dist/gestao-viagens.html (arquivo único)
 ```
 
@@ -81,6 +87,12 @@ Para regerar a base a partir de uma planilha nova:
 
 ```sh
 pip install openpyxl
-python3 tools/extract_seed.py caminho/para/planilha.xlsx assets/seed.js
+python3 tools/extract_seed.py "Gestao_Viagens_Corporativas_AceGaming_2026.xlsx" assets/seed.js
+python3 tools/merge_equipe.py "Ace Gaming_Gestao_Colaboradores.xlsx"
 python3 tools/build_single.py
 ```
+
+`merge_equipe.py` atualiza quem já existe, inclui quem entrou e não apaga o que a planilha de
+origem deixa em branco — hoje, o gestor direto, que continua vindo da base de viagens. Cada
+execução incrementa `baseEquipeVersao`; quem já usa o app recebe a base nova na próxima vez que
+abrir, sem perder os lançamentos.
