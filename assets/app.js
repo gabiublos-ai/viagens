@@ -691,15 +691,39 @@
     });
   }
 
-  /** Em página incorporada (iframe), o navegador bloqueia downloads — cai para copiar. */
+  /** Em página incorporada (iframe), o navegador bloqueia downloads. */
   function emIframe() {
     try { return window.self !== window.top; } catch (e) { return true; }
   }
 
+  /**
+   * Salva um arquivo. Na página publicada usa o canal de download do próprio
+   * visualizador; localmente, um link comum; se nada disso servir, mostra o
+   * conteúdo para copiar.
+   */
   function baixar(nome, conteudo, tipo) {
-    if (emIframe()) { modalTexto(nome, conteudo); return; }
-    var bom = tipo === "text/csv" ? "﻿" : "";
-    var blob = new Blob([bom + conteudo], { type: tipo + ";charset=utf-8" });
+    var bom = tipo === "text/csv" ? "\ufeff" : "";
+
+    if (window.claude && typeof window.claude.use === "function") {
+      window.claude.use("downloads").then(function (downloads) {
+        if (!downloads) { baixarLocal(nome, bom + conteudo, tipo); return; }
+        downloads.save({ filename: nome, data: bom + conteudo }).then(
+          function () { toast(nome + " salvo"); },
+          function (e) {
+            if (e && e.code === "declined") return;
+            modalTexto(nome, conteudo);
+          }
+        );
+      }, function () { baixarLocal(nome, bom + conteudo, tipo); });
+      return;
+    }
+
+    baixarLocal(nome, bom + conteudo, tipo);
+  }
+
+  function baixarLocal(nome, conteudo, tipo) {
+    if (emIframe()) { modalTexto(nome, conteudo.replace(/^\ufeff/, "")); return; }
+    var blob = new Blob([conteudo], { type: tipo + ";charset=utf-8" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
