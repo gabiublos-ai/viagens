@@ -36,6 +36,15 @@
 
   function chipsConferencia(v) {
     if (v.ok) return '<span class="chip ok">OK</span>';
+
+    if (v.conferido) {
+      var quem = v.conferencia && v.conferencia.por ? " por " + v.conferencia.por : "";
+      var quando = v.conferencia && v.conferencia.em
+        ? " em " + new Date(v.conferencia.em).toLocaleDateString("pt-BR") : "";
+      return '<span class="chip ok" title="' + esc("Conferido" + quem + quando + ": " +
+        v.avisos.map(function (a) { return a.texto; }).join(" · ")) + '">✓ Conferido</span>';
+    }
+
     return v.avisos.map(function (a) {
       return '<span class="chip ' + a.nivel + '" title="' + esc(a.texto) + '">⚠ ' + esc(a.curto || a.texto) + "</span>";
     }).join(" ");
@@ -171,7 +180,7 @@
 
     var mediaPessoa = r.pessoas ? r.totalAno / r.pessoas : 0;
     var mediaViagem = r.nViagens ? r.totalViagens / r.nViagens : 0;
-    var avisos = C.viagens().filter(function (v) { return C.anoDe(v.mesRef) === String(ano) && !v.ok; });
+    var avisos = C.viagens().filter(function (v) { return C.anoDe(v.mesRef) === String(ano) && v.precisaConferir; });
 
     var html = "";
 
@@ -273,7 +282,7 @@
     if (f.area) lista = lista.filter(function (v) { return v.area === f.area; });
     if (f.status) lista = lista.filter(function (v) { return v.status === f.status; });
     if (f.tipo) lista = lista.filter(function (v) { return v.tipo === f.tipo; });
-    if (f.avisos) lista = lista.filter(function (v) { return !v.ok; });
+    if (f.avisos) lista = lista.filter(function (v) { return v.precisaConferir; });
     if (f.busca) {
       var q = C.normal(f.busca);
       lista = lista.filter(function (v) {
@@ -321,7 +330,7 @@
         { v: "id-desc", r: "Último lançado" }
       ], ordem) +
       '<label class="chip" style="cursor:pointer;gap:6px"><input type="checkbox" name="avisos" style="width:auto"' +
-      (f.avisos ? " checked" : "") + "> Só com aviso</label>" +
+      (f.avisos ? " checked" : "") + "> Só pendentes de conferência</label>" +
       (temFiltro(f) ? '<button class="btn btn-ghost btn-sm" data-acao="limpar-filtros">Limpar filtros</button>' : "") +
       "</div></div>";
 
@@ -367,6 +376,10 @@
         "<td>" + chipStatus(v.status) + "</td>" +
         "<td>" + chipsConferencia(v) + "</td>" +
         '<td class="col-acoes"><div class="actions-cell">' +
+        (v.ok ? "" : botaoIcone(v.conferido ? "desvalidar" : "validar", v.id,
+           v.conferido ? "Desfazer a conferência" : "Validar a conferência — para de aparecer como alerta",
+           v.conferido ? '<path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/>'
+                       : '<path d="M20 6 9 17l-5-5"/>')) +
         botaoIcone("editar", v.id, "Editar", '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>') +
         botaoIcone("alteracao", v.id, "Registrar alteração", '<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>') +
         botaoIcone("duplicar", v.id, "Duplicar", '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>') +
@@ -639,12 +652,29 @@
     // Quebra por categoria
     var pc = C.porColaborador(ano);
     if (pc.length) {
+      var ordem = estado.custoOrdem || { campo: "total", desc: true };
+      pc.sort(function (a, b) {
+        var x = a[ordem.campo], y = b[ordem.campo];
+        var r = typeof x === "string" ? C.ordenaPt(x, y) : (x - y);
+        return ordem.desc ? -r : r;
+      });
+
+      function colunaOrdenavel(rotulo, campo, numerica) {
+        var ativa = ordem.campo === campo;
+        return '<th class="' + (numerica ? "n " : "") + 'ord' + (ativa ? " ord-ativa" : "") +
+          '" data-ordenar="' + campo + '" title="Ordenar por ' + esc(rotulo) + '">' +
+          esc(rotulo) + '<span class="ord-seta">' + (ativa ? (ordem.desc ? "▼" : "▲") : "") + "</span></th>";
+      }
+
       html += '<div class="card"><div class="card-head"><h2>Custo por colaborador em ' + esc(ano) + "</h2>" +
+        '<span class="t-sub">clique no título da coluna para ordenar</span>' +
         '<span class="grow"></span><button class="btn btn-sm" data-acao="exportar-colaborador">Exportar CSV</button></div>' +
         '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-        '<th>Colaborador</th><th>Área</th><th class="n">Aéreo</th><th class="n">Hospedagem</th>' +
-        '<th class="n">Alimentação</th><th class="n">Transporte</th><th class="n">Alterações</th>' +
-        '<th class="n">Uber</th><th class="n">Total</th></tr></thead><tbody>' +
+        colunaOrdenavel("Colaborador", "nome") + colunaOrdenavel("Área", "area") +
+        colunaOrdenavel("Aéreo", "aereo", true) + colunaOrdenavel("Hospedagem", "hospedagem", true) +
+        colunaOrdenavel("Alimentação", "alimentacao", true) + colunaOrdenavel("Transporte", "transporte", true) +
+        colunaOrdenavel("Alterações", "alteracoes", true) + colunaOrdenavel("Uber", "uber", true) +
+        colunaOrdenavel("Total", "total", true) + "</tr></thead><tbody>" +
         pc.map(function (l) {
           return "<tr><td>" + esc(l.nome) + "</td><td>" + esc(l.area) + "</td>" +
             ["aereo", "hospedagem", "alimentacao", "transporte", "alteracoes", "uber"].map(function (k) {

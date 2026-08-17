@@ -386,6 +386,10 @@
                            brlSigla(Math.abs(difAlim)) + " ante a regra de " + brlSigla(alimDevida) });
     }
 
+    // Assinatura do que foi conferido: se algum valor mudar, o aviso volta.
+    var assinatura = avisos.map(function (a) { return a.texto; }).join(" | ");
+    var conferido = !!(v.conferencia && v.conferencia.assinatura === assinatura && avisos.length);
+
     return {
       mesRef: mesRefDe(v.dataIda),
       area: areaDe(v.colaborador),
@@ -396,7 +400,11 @@
       alimDevida: alimDevida,
       difAlim: difAlim,
       avisos: avisos,
-      ok: avisos.length === 0
+      assinatura: assinatura,
+      conferido: conferido,
+      ok: avisos.length === 0,
+      // O que ainda pede atenção: tem aviso e ninguém validou.
+      precisaConferir: avisos.length > 0 && !conferido
     };
   }
 
@@ -419,14 +427,14 @@
 
   var CAMPOS_VIAGEM = ["tipo", "colaborador", "destino", "aeroportoOrigem", "dataIda", "dataVolta",
                        "aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao",
-                       "status", "refId", "motivo", "pendencias", "obs"];
+                       "status", "refId", "motivo", "pendencias", "obs", "conferencia"];
 
   function viagemVazia() {
     return {
       id: 0, tipo: "Viagem", colaborador: "", destino: "São Paulo/SP", aeroportoOrigem: "",
       dataIda: "", dataVolta: "", aereo: 0, diarias: 0, valorDiaria: 0, alimentacao: 0,
       transporte: 0, custoAlteracao: 0, status: "Fechado", refId: null,
-      motivo: "", pendencias: "", obs: ""
+      motivo: "", pendencias: "", obs: "", conferencia: null
     };
   }
 
@@ -480,6 +488,22 @@
     copia.refId = null;
     copia.tipo = "Viagem";
     return salvarViagem(copia);
+  }
+
+  /**
+   * Marca (ou desmarca) a conferência de uma viagem. Guarda quem validou e o
+   * que estava sendo validado — se um valor mudar depois, o aviso reaparece.
+   */
+  function validarConferencia(id, quem) {
+    var v = viagemPorId(id);
+    if (!v) return Promise.resolve(null);
+    var c = calc(v);
+    var nova = c.conferido ? null : {
+      por: quem || meta.nome || "",
+      em: new Date().toISOString(),
+      assinatura: c.assinatura
+    };
+    return salvarViagem(Object.assign({}, v, { conferencia: nova }));
   }
 
   /** Alterações ligadas a uma viagem. */
@@ -875,7 +899,8 @@
       return [v.id, v.tipo, v.mesRef, v.colaborador, v.area, v.gestor, v.destino, v.aeroportoOrigem,
               fmtData(v.dataIda), fmtData(v.dataVolta), v.noites, v.aereo, v.diarias, v.valorDiaria,
               v.hospedagem, v.alimentacao, v.transporte, v.custoAlteracao, v.total, v.alimDevida,
-              v.difAlim, v.ok ? "OK" : v.avisos.map(function (a) { return a.texto; }).join(" · "),
+              v.difAlim,
+              v.ok ? "OK" : (v.conferido ? "Conferido: " : "") + v.avisos.map(function (a) { return a.texto; }).join(" · "),
               v.status, v.refId || "", v.motivo, v.pendencias, v.obs];
     });
     return montaCSV(cab, linhas);
@@ -943,6 +968,7 @@
     calc: calc, viagens: viagens, viagemPorId: viagemPorId, viagemCompleta: viagemCompleta,
     viagemVazia: viagemVazia, salvarViagem: salvarViagem, excluirViagem: excluirViagem,
     duplicarViagem: duplicarViagem, alteracoesDe: alteracoesDe, porPernoite: porPernoite,
+    validarConferencia: validarConferencia,
     proximoId: proximoId,
 
     // uber

@@ -317,6 +317,11 @@ tbody td { padding: 8px 10px; border-bottom: 1px solid var(--grid); vertical-ali
 tbody tr:hover td { background: var(--surface-2); }
 tfoot td { padding: 9px 10px; font-weight: 650; border-top: 1px solid var(--border-strong); background: var(--surface-2); }
 td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+th.ord { cursor: pointer; user-select: none; }
+th.ord:hover { color: var(--text); background: var(--surface-3); }
+th.ord-ativa { color: var(--accent); }
+.ord-seta { display: inline-block; width: 10px; font-size: 9px; margin-left: 3px; }
 th.n { text-align: right; }
 td.zero { color: var(--text-3); }
 .t-sub { font-size: 11.5px; color: var(--text-3); }
@@ -3917,6 +3922,10 @@ window.SEED = {
                            brlSigla(Math.abs(difAlim)) + " ante a regra de " + brlSigla(alimDevida) });
     }
 
+    // Assinatura do que foi conferido: se algum valor mudar, o aviso volta.
+    var assinatura = avisos.map(function (a) { return a.texto; }).join(" | ");
+    var conferido = !!(v.conferencia && v.conferencia.assinatura === assinatura && avisos.length);
+
     return {
       mesRef: mesRefDe(v.dataIda),
       area: areaDe(v.colaborador),
@@ -3927,7 +3936,11 @@ window.SEED = {
       alimDevida: alimDevida,
       difAlim: difAlim,
       avisos: avisos,
-      ok: avisos.length === 0
+      assinatura: assinatura,
+      conferido: conferido,
+      ok: avisos.length === 0,
+      // O que ainda pede atenção: tem aviso e ninguém validou.
+      precisaConferir: avisos.length > 0 && !conferido
     };
   }
 
@@ -3950,14 +3963,14 @@ window.SEED = {
 
   var CAMPOS_VIAGEM = ["tipo", "colaborador", "destino", "aeroportoOrigem", "dataIda", "dataVolta",
                        "aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao",
-                       "status", "refId", "motivo", "pendencias", "obs"];
+                       "status", "refId", "motivo", "pendencias", "obs", "conferencia"];
 
   function viagemVazia() {
     return {
       id: 0, tipo: "Viagem", colaborador: "", destino: "São Paulo/SP", aeroportoOrigem: "",
       dataIda: "", dataVolta: "", aereo: 0, diarias: 0, valorDiaria: 0, alimentacao: 0,
       transporte: 0, custoAlteracao: 0, status: "Fechado", refId: null,
-      motivo: "", pendencias: "", obs: ""
+      motivo: "", pendencias: "", obs: "", conferencia: null
     };
   }
 
@@ -4011,6 +4024,22 @@ window.SEED = {
     copia.refId = null;
     copia.tipo = "Viagem";
     return salvarViagem(copia);
+  }
+
+  /**
+   * Marca (ou desmarca) a conferência de uma viagem. Guarda quem validou e o
+   * que estava sendo validado — se um valor mudar depois, o aviso reaparece.
+   */
+  function validarConferencia(id, quem) {
+    var v = viagemPorId(id);
+    if (!v) return Promise.resolve(null);
+    var c = calc(v);
+    var nova = c.conferido ? null : {
+      por: quem || meta.nome || "",
+      em: new Date().toISOString(),
+      assinatura: c.assinatura
+    };
+    return salvarViagem(Object.assign({}, v, { conferencia: nova }));
   }
 
   /** Alterações ligadas a uma viagem. */
@@ -4406,7 +4435,8 @@ window.SEED = {
       return [v.id, v.tipo, v.mesRef, v.colaborador, v.area, v.gestor, v.destino, v.aeroportoOrigem,
               fmtData(v.dataIda), fmtData(v.dataVolta), v.noites, v.aereo, v.diarias, v.valorDiaria,
               v.hospedagem, v.alimentacao, v.transporte, v.custoAlteracao, v.total, v.alimDevida,
-              v.difAlim, v.ok ? "OK" : v.avisos.map(function (a) { return a.texto; }).join(" · "),
+              v.difAlim,
+              v.ok ? "OK" : (v.conferido ? "Conferido: " : "") + v.avisos.map(function (a) { return a.texto; }).join(" · "),
               v.status, v.refId || "", v.motivo, v.pendencias, v.obs];
     });
     return montaCSV(cab, linhas);
@@ -4474,6 +4504,7 @@ window.SEED = {
     calc: calc, viagens: viagens, viagemPorId: viagemPorId, viagemCompleta: viagemCompleta,
     viagemVazia: viagemVazia, salvarViagem: salvarViagem, excluirViagem: excluirViagem,
     duplicarViagem: duplicarViagem, alteracoesDe: alteracoesDe, porPernoite: porPernoite,
+    validarConferencia: validarConferencia,
     proximoId: proximoId,
 
     // uber
@@ -4529,6 +4560,15 @@ window.SEED = {
 
   function chipsConferencia(v) {
     if (v.ok) return '<span class="chip ok">OK</span>';
+
+    if (v.conferido) {
+      var quem = v.conferencia && v.conferencia.por ? " por " + v.conferencia.por : "";
+      var quando = v.conferencia && v.conferencia.em
+        ? " em " + new Date(v.conferencia.em).toLocaleDateString("pt-BR") : "";
+      return '<span class="chip ok" title="' + esc("Conferido" + quem + quando + ": " +
+        v.avisos.map(function (a) { return a.texto; }).join(" · ")) + '">✓ Conferido</span>';
+    }
+
     return v.avisos.map(function (a) {
       return '<span class="chip ' + a.nivel + '" title="' + esc(a.texto) + '">⚠ ' + esc(a.curto || a.texto) + "</span>";
     }).join(" ");
@@ -4664,7 +4704,7 @@ window.SEED = {
 
     var mediaPessoa = r.pessoas ? r.totalAno / r.pessoas : 0;
     var mediaViagem = r.nViagens ? r.totalViagens / r.nViagens : 0;
-    var avisos = C.viagens().filter(function (v) { return C.anoDe(v.mesRef) === String(ano) && !v.ok; });
+    var avisos = C.viagens().filter(function (v) { return C.anoDe(v.mesRef) === String(ano) && v.precisaConferir; });
 
     var html = "";
 
@@ -4766,7 +4806,7 @@ window.SEED = {
     if (f.area) lista = lista.filter(function (v) { return v.area === f.area; });
     if (f.status) lista = lista.filter(function (v) { return v.status === f.status; });
     if (f.tipo) lista = lista.filter(function (v) { return v.tipo === f.tipo; });
-    if (f.avisos) lista = lista.filter(function (v) { return !v.ok; });
+    if (f.avisos) lista = lista.filter(function (v) { return v.precisaConferir; });
     if (f.busca) {
       var q = C.normal(f.busca);
       lista = lista.filter(function (v) {
@@ -4814,7 +4854,7 @@ window.SEED = {
         { v: "id-desc", r: "Último lançado" }
       ], ordem) +
       '<label class="chip" style="cursor:pointer;gap:6px"><input type="checkbox" name="avisos" style="width:auto"' +
-      (f.avisos ? " checked" : "") + "> Só com aviso</label>" +
+      (f.avisos ? " checked" : "") + "> Só pendentes de conferência</label>" +
       (temFiltro(f) ? '<button class="btn btn-ghost btn-sm" data-acao="limpar-filtros">Limpar filtros</button>' : "") +
       "</div></div>";
 
@@ -4860,6 +4900,10 @@ window.SEED = {
         "<td>" + chipStatus(v.status) + "</td>" +
         "<td>" + chipsConferencia(v) + "</td>" +
         '<td class="col-acoes"><div class="actions-cell">' +
+        (v.ok ? "" : botaoIcone(v.conferido ? "desvalidar" : "validar", v.id,
+           v.conferido ? "Desfazer a conferência" : "Validar a conferência — para de aparecer como alerta",
+           v.conferido ? '<path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/>'
+                       : '<path d="M20 6 9 17l-5-5"/>')) +
         botaoIcone("editar", v.id, "Editar", '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>') +
         botaoIcone("alteracao", v.id, "Registrar alteração", '<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>') +
         botaoIcone("duplicar", v.id, "Duplicar", '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>') +
@@ -5132,12 +5176,29 @@ window.SEED = {
     // Quebra por categoria
     var pc = C.porColaborador(ano);
     if (pc.length) {
+      var ordem = estado.custoOrdem || { campo: "total", desc: true };
+      pc.sort(function (a, b) {
+        var x = a[ordem.campo], y = b[ordem.campo];
+        var r = typeof x === "string" ? C.ordenaPt(x, y) : (x - y);
+        return ordem.desc ? -r : r;
+      });
+
+      function colunaOrdenavel(rotulo, campo, numerica) {
+        var ativa = ordem.campo === campo;
+        return '<th class="' + (numerica ? "n " : "") + 'ord' + (ativa ? " ord-ativa" : "") +
+          '" data-ordenar="' + campo + '" title="Ordenar por ' + esc(rotulo) + '">' +
+          esc(rotulo) + '<span class="ord-seta">' + (ativa ? (ordem.desc ? "▼" : "▲") : "") + "</span></th>";
+      }
+
       html += '<div class="card"><div class="card-head"><h2>Custo por colaborador em ' + esc(ano) + "</h2>" +
+        '<span class="t-sub">clique no título da coluna para ordenar</span>' +
         '<span class="grow"></span><button class="btn btn-sm" data-acao="exportar-colaborador">Exportar CSV</button></div>' +
         '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-        '<th>Colaborador</th><th>Área</th><th class="n">Aéreo</th><th class="n">Hospedagem</th>' +
-        '<th class="n">Alimentação</th><th class="n">Transporte</th><th class="n">Alterações</th>' +
-        '<th class="n">Uber</th><th class="n">Total</th></tr></thead><tbody>' +
+        colunaOrdenavel("Colaborador", "nome") + colunaOrdenavel("Área", "area") +
+        colunaOrdenavel("Aéreo", "aereo", true) + colunaOrdenavel("Hospedagem", "hospedagem", true) +
+        colunaOrdenavel("Alimentação", "alimentacao", true) + colunaOrdenavel("Transporte", "transporte", true) +
+        colunaOrdenavel("Alterações", "alteracoes", true) + colunaOrdenavel("Uber", "uber", true) +
+        colunaOrdenavel("Total", "total", true) + "</tr></thead><tbody>" +
         pc.map(function (l) {
           return "<tr><td>" + esc(l.nome) + "</td><td>" + esc(l.area) + "</td>" +
             ["aereo", "hospedagem", "alimentacao", "transporte", "alteracoes", "uber"].map(function (k) {
@@ -5266,7 +5327,8 @@ window.SEED = {
     mesCal: null,
     filtros: { busca: "", mes: "", area: "", status: "", tipo: "", avisos: false, ordem: "data-desc" },
     uberFiltros: { busca: "", mes: "", situacao: "" },
-    equipeFiltros: { busca: "", area: "" }
+    equipeFiltros: { busca: "", area: "" },
+    custoOrdem: { campo: "total", desc: true }
   };
 
   var ABAS = [
@@ -5448,6 +5510,16 @@ window.SEED = {
       return;
     }
 
+    var coluna = ev.target.closest("[data-ordenar]");
+    if (coluna) {
+      var campo = coluna.dataset.ordenar;
+      var atual = estado.custoOrdem || { campo: "total", desc: true };
+      // Mesmo título: inverte. Título novo: começa do maior para o menor.
+      estado.custoOrdem = { campo: campo, desc: atual.campo === campo ? !atual.desc : true };
+      render();
+      return;
+    }
+
     var botao = ev.target.closest("[data-acao]");
     if (!botao) return;
     var acao = botao.dataset.acao;
@@ -5463,6 +5535,12 @@ window.SEED = {
         }, falhou);
         break;
       case "alteracao": abrirAlteracao(C.viagemPorId(id)); break;
+      case "validar":
+      case "desvalidar":
+        C.validarConferencia(id).then(function () {
+          toast(acao === "validar" ? "Conferência validada — sai dos alertas" : "Conferência desfeita");
+        }, falhou);
+        break;
       case "excluir": excluirViagem(id); break;
       case "excluir-corrida":
         if (confirm("Excluir esta corrida da base do Uber?")) {
@@ -5593,7 +5671,9 @@ window.SEED = {
 
       '<div class="section-label"><span class="eyebrow">Custos</span></div>' +
       V.campo("Aéreo (R$)", '<input type="text" class="money" name="aereo" value="' + C.brl(v.aereo) + '">', "c3") +
-      V.campo("Diárias de hotel", '<input type="text" class="money" name="diarias" value="' + (v.diarias || 0) + '">', "c3") +
+      '<div class="field c3"><label>Diárias de hotel</label>' +
+      '<input type="text" class="money" name="diarias" value="' + (v.diarias || 0) + '">' +
+      '<span class="hint" data-info="diarias"></span></div>' +
       V.campo("Valor da diária (R$)", '<input type="text" class="money" name="valorDiaria" value="' + C.brl(v.valorDiaria) + '">', "c3") +
       '<div class="field c3"><label>Hospedagem (R$)</label><input type="text" class="money" name="hospedagem" readonly value="0"><span class="hint">Diárias × valor</span></div>' +
 
@@ -5688,6 +5768,8 @@ window.SEED = {
     if (alvo) {
       if (alvo.name === "alimentacao") form.dataset.alimTocada = "1";
       if (alvo.name === "diarias") form.dataset.diariasTocada = "1";
+      // Mexeu nas datas: as diárias voltam a seguir as noites do período.
+      if (alvo.name === "dataIda" || alvo.name === "dataVolta") form.dataset.diariasTocada = "";
       if (alvo.name === "colaborador") {
         var c = C.colaborador(alvo.value);
         var campoAero = form.querySelector('[name="aeroportoOrigem"]');
@@ -5713,6 +5795,14 @@ window.SEED = {
 
     form.querySelector('[name="noites"]').value = noites + (noites === 1 ? " noite" : " noites");
     form.querySelector('[name="hospedagem"]').value = C.brl(calc.hospedagem);
+
+    var infoDiarias = form.querySelector("[data-info='diarias']");
+    if (infoDiarias) {
+      var diarias = C.parseNum(form.querySelector('[name="diarias"]').value);
+      infoDiarias.textContent = diarias === noites
+        ? "segue as " + noites + " noite(s) do período"
+        : "período tem " + noites + " noite(s)";
+    }
 
     var infoRegra = form.querySelector("[data-info='regra']");
     if (infoRegra) {

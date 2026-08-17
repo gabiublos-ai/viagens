@@ -12,7 +12,8 @@
     mesCal: null,
     filtros: { busca: "", mes: "", area: "", status: "", tipo: "", avisos: false, ordem: "data-desc" },
     uberFiltros: { busca: "", mes: "", situacao: "" },
-    equipeFiltros: { busca: "", area: "" }
+    equipeFiltros: { busca: "", area: "" },
+    custoOrdem: { campo: "total", desc: true }
   };
 
   var ABAS = [
@@ -194,6 +195,16 @@
       return;
     }
 
+    var coluna = ev.target.closest("[data-ordenar]");
+    if (coluna) {
+      var campo = coluna.dataset.ordenar;
+      var atual = estado.custoOrdem || { campo: "total", desc: true };
+      // Mesmo título: inverte. Título novo: começa do maior para o menor.
+      estado.custoOrdem = { campo: campo, desc: atual.campo === campo ? !atual.desc : true };
+      render();
+      return;
+    }
+
     var botao = ev.target.closest("[data-acao]");
     if (!botao) return;
     var acao = botao.dataset.acao;
@@ -209,6 +220,12 @@
         }, falhou);
         break;
       case "alteracao": abrirAlteracao(C.viagemPorId(id)); break;
+      case "validar":
+      case "desvalidar":
+        C.validarConferencia(id).then(function () {
+          toast(acao === "validar" ? "Conferência validada — sai dos alertas" : "Conferência desfeita");
+        }, falhou);
+        break;
       case "excluir": excluirViagem(id); break;
       case "excluir-corrida":
         if (confirm("Excluir esta corrida da base do Uber?")) {
@@ -339,7 +356,9 @@
 
       '<div class="section-label"><span class="eyebrow">Custos</span></div>' +
       V.campo("Aéreo (R$)", '<input type="text" class="money" name="aereo" value="' + C.brl(v.aereo) + '">', "c3") +
-      V.campo("Diárias de hotel", '<input type="text" class="money" name="diarias" value="' + (v.diarias || 0) + '">', "c3") +
+      '<div class="field c3"><label>Diárias de hotel</label>' +
+      '<input type="text" class="money" name="diarias" value="' + (v.diarias || 0) + '">' +
+      '<span class="hint" data-info="diarias"></span></div>' +
       V.campo("Valor da diária (R$)", '<input type="text" class="money" name="valorDiaria" value="' + C.brl(v.valorDiaria) + '">', "c3") +
       '<div class="field c3"><label>Hospedagem (R$)</label><input type="text" class="money" name="hospedagem" readonly value="0"><span class="hint">Diárias × valor</span></div>' +
 
@@ -434,6 +453,8 @@
     if (alvo) {
       if (alvo.name === "alimentacao") form.dataset.alimTocada = "1";
       if (alvo.name === "diarias") form.dataset.diariasTocada = "1";
+      // Mexeu nas datas: as diárias voltam a seguir as noites do período.
+      if (alvo.name === "dataIda" || alvo.name === "dataVolta") form.dataset.diariasTocada = "";
       if (alvo.name === "colaborador") {
         var c = C.colaborador(alvo.value);
         var campoAero = form.querySelector('[name="aeroportoOrigem"]');
@@ -459,6 +480,14 @@
 
     form.querySelector('[name="noites"]').value = noites + (noites === 1 ? " noite" : " noites");
     form.querySelector('[name="hospedagem"]').value = C.brl(calc.hospedagem);
+
+    var infoDiarias = form.querySelector("[data-info='diarias']");
+    if (infoDiarias) {
+      var diarias = C.parseNum(form.querySelector('[name="diarias"]').value);
+      infoDiarias.textContent = diarias === noites
+        ? "segue as " + noites + " noite(s) do período"
+        : "período tem " + noites + " noite(s)";
+    }
 
     var infoRegra = form.querySelector("[data-info='regra']");
     if (infoRegra) {
