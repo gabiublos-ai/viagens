@@ -1,0 +1,22 @@
+# Deploy na Cloudflare:
+#
+#   npx wrangler login
+#   npx wrangler d1 create viagens          # copie o database_id para baixo
+#   node servidor/senha.js "sua senha"      # gere os dois segredos
+#   npx wrangler secret put SENHA_HASH
+#   npx wrangler secret put SESSAO_SEGREDO
+#   python3 tools/build_site.py
+#   npx wrangler deploy
+
+name = "gestao-viagens"
+main = "servidor/worker.js"
+compatibility_date = "2026-08-01"
+
+[assets]
+directory = "./site"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "viagens"
+database_id = "PREENCHA_COM_O_ID_DO_SEU_BANCO"

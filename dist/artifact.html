@@ -455,6 +455,33 @@ dialog.narrow { width: min(560px, calc(100vw - 28px)); }
 .picker input { width: auto; }
 .picker .p-area { margin-left: auto; font-size: 11px; color: var(--text-3); }
 
+/* ---------- Tela de entrada ---------- */
+
+body.trancado .topbar-row > *:not(.brand),
+body.trancado .tabs { display: none; }
+
+.entrada {
+  max-width: 380px;
+  margin: 8vh auto 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 30px 28px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.entrada h1 { font-size: 21px; font-weight: 650; letter-spacing: -.02em; margin: 0; }
+.entrada-sub { font-size: 12.5px; color: var(--text-3); margin: -12px 0 6px; }
+.entrada-marca {
+  width: 40px; height: 40px; border-radius: var(--r);
+  background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; margin-bottom: 4px;
+}
+.entrada-marca svg { width: 22px; height: 22px; }
+.entrada .btn { justify-content: center; padding: 9px; margin-top: 4px; }
+.entrada-erro { font-size: 12.5px; color: var(--critical); min-height: 1.2em; margin: 0; }
+
 /* ---------- Diversos ---------- */
 
 .toolbar { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
@@ -530,6 +557,8 @@ tbody tr:hover td.col-acoes { background: var(--surface-2); }
       <span class="eyebrow">Ano</span>
       <select id="ano" aria-label="Ano de referência"></select>
     </label>
+
+    <span id="sessao" class="row" style="gap:6px" hidden></span>
 
     <button class="icon-btn" id="btn-tema" data-acao="tema" title="Alternar tema" aria-label="Alternar tema">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
@@ -2812,6 +2841,139 @@ window.SEED = {
 
 </script>
 <script>
+/* Onde os dados ficam.
+ *
+ * Dois modos, mesma interface:
+ *   servidor — site com senha; todo mundo lança na mesma base (window.MODO_SERVIDOR)
+ *   local    — arquivo aberto direto no navegador; os dados ficam só naquela máquina
+ *
+ * Em modo servidor, cada operação devolve o estado inteiro já atualizado, então
+ * nenhum cliente fica com uma versão pela metade.
+ */
+
+(function () {
+  "use strict";
+
+  var CHAVE_LOCAL = "gvc.v1";
+  var servidor = !!window.MODO_SERVIDOR;
+
+  // ---------- modo servidor ----------
+
+  function chamar(metodo, rota, corpo) {
+    return fetch("/api" + rota, {
+      method: metodo,
+      headers: corpo ? { "content-type": "application/json" } : undefined,
+      body: corpo ? JSON.stringify(corpo) : undefined,
+      credentials: "same-origin"
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (dados) {
+        if (r.ok) return dados;
+        var e = new Error(dados.erro || "Falha na comunicação com o servidor.");
+        e.status = r.status;
+        e.dados = dados;
+        throw e;
+      });
+    });
+  }
+
+  var Servidor = {
+    modo: "servidor",
+
+    /** Devolve {autenticado, estado} — sem lançar erro quando é só falta de sessão. */
+    iniciar: function () {
+      return chamar("GET", "/estado").then(
+        function (estado) { return { autenticado: true, estado: estado }; },
+        function (e) {
+          if (e.status === 401) return { autenticado: false };
+          throw e;
+        }
+      );
+    },
+
+    entrar: function (senha, nome) {
+      return chamar("POST", "/sessao", { senha: senha, nome: nome });
+    },
+
+    sair: function () { return chamar("DELETE", "/sessao"); },
+
+    revisao: function () { return chamar("GET", "/revisao"); },
+    estado: function () { return chamar("GET", "/estado"); },
+
+    salvarViagem: function (viagem) { return chamar("PUT", "/viagem", { viagem: viagem }); },
+    excluirViagem: function (id) { return chamar("DELETE", "/viagem/" + encodeURIComponent(id)); },
+
+    salvarColaborador: function (colaborador, nomeOriginal) {
+      return chamar("PUT", "/colaborador", { colaborador: colaborador, nomeOriginal: nomeOriginal || "" });
+    },
+    excluirColaborador: function (nome) {
+      return chamar("DELETE", "/colaborador/" + encodeURIComponent(nome));
+    },
+
+    importarUber: function (linhas) { return chamar("POST", "/uber", { linhas: linhas }); },
+    excluirCorrida: function (linha) { return chamar("DELETE", "/uber", { linha: linha }); },
+    limparUber: function () { return chamar("DELETE", "/uber/tudo"); },
+
+    salvarParams: function (params) { return chamar("PUT", "/params", { params: params }); },
+
+    restaurarEstado: function (dados) { return chamar("PUT", "/estado", { dados: dados }); },
+    restaurarBase: function () { return chamar("POST", "/base-original"); }
+  };
+
+  // ---------- modo local ----------
+
+  /**
+   * No modo local o app é dono do estado: cada operação mexe no objeto em memória
+   * (quem chama já fez isso) e aqui só persistimos e devolvemos o mesmo estado.
+   */
+  function Local(obterDados) {
+    function persistir() {
+      var estado = {
+        revisao: 0,
+        atualizadoEm: new Date().toISOString(),
+        atualizadoPor: "",
+        dados: obterDados()
+      };
+      try {
+        localStorage.setItem(CHAVE_LOCAL, JSON.stringify(estado.dados));
+      } catch (e) {
+        console.warn("Não foi possível gravar no navegador:", e);
+      }
+      return Promise.resolve(estado);
+    }
+
+    var api = {
+      modo: "local",
+      iniciar: function () {
+        var dados = null;
+        try {
+          var bruto = localStorage.getItem(CHAVE_LOCAL);
+          if (bruto) dados = JSON.parse(bruto);
+        } catch (e) { /* armazenamento indisponível — começa da base original */ }
+        return Promise.resolve({ autenticado: true, estado: dados ? { revisao: 0, dados: dados } : null });
+      },
+      entrar: function () { return Promise.resolve({}); },
+      sair: function () { return Promise.resolve({}); },
+      revisao: function () { return Promise.resolve({ revisao: 0 }); },
+      estado: function () { return persistir(); }
+    };
+
+    ["salvarViagem", "excluirViagem", "salvarColaborador", "excluirColaborador",
+     "importarUber", "excluirCorrida", "limparUber", "salvarParams",
+     "restaurarEstado", "restaurarBase"].forEach(function (nome) {
+      api[nome] = persistir;
+    });
+
+    return api;
+  }
+
+  window.Armazenamento = {
+    ehServidor: servidor,
+    criar: function (obterDados) { return servidor ? Servidor : Local(obterDados); }
+  };
+})();
+
+</script>
+<script>
 /* Núcleo: estado, persistência e todas as regras de cálculo.
    As regras reproduzem exatamente as fórmulas da planilha original. */
 
@@ -2937,9 +3099,27 @@ window.SEED = {
   // ---------- estado ----------
 
   var db = null;
+  var armazem = null;
+  var meta = { revisao: 0, atualizadoEm: "", atualizadoPor: "", nome: "" };
+  var equipeAtualizada = 0;   // nº de cadastros mexidos na última migração, para avisar na tela
+
+  /** Usado só quando o estado guardado vem sem alguma lista (defesa). */
+  var PARAMS_PADRAO = {
+    meses: [], categorias: ["Aéreo", "Hospedagem", "Alimentação", "Transporte/Aux.", "Alterações", "Uber Corporativo"],
+    statuses: ["Fechado", "Cotado", "Pendente", "Cancelado", "Alterada"],
+    servicos: [], tiposTransacao: [],
+    palavrasAeroporto: ["aeroport", "airport", "terminal", "linneu gomes", "confins", "rocha pombo"],
+    regras: { jantar: 70, cafe: 30, toleranciaUber: 1 },
+    dePara: []
+  };
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
+  function paramsBase() {
+    return window.SEED && window.SEED.parametros ? window.SEED.parametros : PARAMS_PADRAO;
+  }
+
+  /** Base original da planilha — só existe quando o app roda sem servidor. */
   function estadoInicial() {
     var s = clone(window.SEED);
     return {
@@ -2953,22 +3133,48 @@ window.SEED = {
     };
   }
 
-  function carregar() {
-    try {
-      var bruto = localStorage.getItem(STORAGE_KEY);
-      if (bruto) {
-        var d = JSON.parse(bruto);
-        if (d && d.viagens && d.colaboradores) {
-          db = d;
-          normalizaEstado();
-          var mexidos = atualizaBaseEquipe();
-          if (mexidos) { equipeAtualizada = mexidos; salvar(); }
-          return;
-        }
-      }
-    } catch (e) { /* armazenamento indisponível — segue com a base original */ }
-    db = estadoInicial();
-    salvar();
+  /**
+   * Abre a base. Devolve {autenticado} — no site com senha, `false` significa
+   * que ainda falta entrar.
+   */
+  function iniciar() {
+    armazem = window.Armazenamento.criar(function () { return db; });
+    return armazem.iniciar().then(function (r) {
+      if (!r.autenticado) return { autenticado: false };
+      assume(r.estado);
+      return { autenticado: true };
+    });
+  }
+
+  function entrar(senha, nome) {
+    return armazem.entrar(senha, nome).then(function (estado) {
+      meta.nome = estado.nome || "";
+      assume(estado);
+      return estado;
+    });
+  }
+
+  function sair() { return armazem.sair(); }
+
+  /** Adota o estado que veio do servidor (ou do navegador, no modo local). */
+  function assume(estado) {
+    if (estado && estado.dados) {
+      db = estado.dados;
+      meta.revisao = estado.revisao || 0;
+      meta.atualizadoEm = estado.atualizadoEm || "";
+      meta.atualizadoPor = estado.atualizadoPor || "";
+    } else if (window.SEED) {
+      db = estadoInicial();
+    } else {
+      return;   // sem servidor e sem base local: nada a fazer
+    }
+    normalizaEstado();
+    if (armazem.modo === "local") {
+      var mexidos = atualizaBaseEquipe();
+      if (mexidos) { equipeAtualizada = mexidos; armazem.salvarParams(); }
+    }
+    cacheUber = null;
+    avisa();
   }
 
   /**
@@ -2977,6 +3183,7 @@ window.SEED = {
    * deixou em branco (o gestor direto, por exemplo) nem quem foi cadastrado aqui.
    */
   function atualizaBaseEquipe() {
+    if (!window.SEED) return 0;
     var versaoSeed = window.SEED.baseEquipeVersao || 0;
     if (!versaoSeed || (db.baseEquipeVersao || 0) >= versaoSeed) return 0;
 
@@ -3001,38 +3208,63 @@ window.SEED = {
   }
 
   function normalizaEstado() {
-    var base = window.SEED.parametros;
+    var base = paramsBase();
     db.params = db.params || {};
     ["meses", "categorias", "statuses", "servicos", "tiposTransacao", "palavrasAeroporto", "dePara"].forEach(function (k) {
-      if (!db.params[k]) db.params[k] = clone(base[k]);
+      if (!db.params[k]) db.params[k] = clone(base[k] || PARAMS_PADRAO[k] || []);
     });
-    db.params.regras = Object.assign({}, base.regras, db.params.regras || {});
+    db.params.regras = Object.assign({}, PARAMS_PADRAO.regras, base.regras || {}, db.params.regras || {});
     db.uber = db.uber || [];
     db.viagens = db.viagens || [];
+    db.colaboradores = db.colaboradores || [];
   }
 
   var ouvintes = [];
-  var equipeAtualizada = 0;   // nº de cadastros mexidos na última migração, para avisar na tela
   function aoMudar(fn) { ouvintes.push(fn); }
+  function avisa() { ouvintes.forEach(function (fn) { fn(); }); }
 
-  function salvar() {
-    db.atualizadoEm = new Date().toISOString();
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    } catch (e) {
-      console.warn("Não foi possível gravar no navegador:", e);
+  /** Recebe a resposta de uma escrita e passa a valer o que o servidor devolveu. */
+  function aplica(estado) {
+    if (estado && estado.dados && armazem.modo === "servidor") {
+      db = estado.dados;
+      meta.revisao = estado.revisao || 0;
+      meta.atualizadoEm = estado.atualizadoEm || "";
+      meta.atualizadoPor = estado.atualizadoPor || "";
+      normalizaEstado();
+    } else if (estado) {
+      meta.atualizadoEm = estado.atualizadoEm || meta.atualizadoEm;
     }
     cacheUber = null;
-    ouvintes.forEach(function (fn) { fn(); });
+    avisa();
+    return estado;
   }
 
-  function substituirEstado(novo) {
-    db = novo;
+  /** Busca o estado no servidor — usado quando outra pessoa alterou a base. */
+  function recarregar() {
+    return armazem.estado().then(aplica);
+  }
+
+  /** Só a revisão, para saber se alguém mexeu. */
+  function revisaoRemota() { return armazem.revisao(); }
+
+  function substituirEstado(dados) {
+    if (armazem.modo === "servidor") return armazem.restaurarEstado(dados).then(aplica);
+    db = dados;
     normalizaEstado();
-    salvar();
+    return armazem.restaurarEstado(dados).then(aplica);
   }
 
-  function restaurarBase() { substituirEstado(estadoInicial()); }
+  function restaurarBase() {
+    if (armazem.modo === "servidor") return armazem.restaurarBase().then(aplica);
+    db = estadoInicial();
+    normalizaEstado();
+    return armazem.restaurarBase().then(aplica);
+  }
+
+  /** Persiste uma mudança feita direto no objeto (parâmetros, De-Para). */
+  function salvarParams() {
+    return armazem.salvarParams(db.params).then(aplica);
+  }
 
   // ---------- colaboradores ----------
 
@@ -3056,6 +3288,43 @@ window.SEED = {
 
   function colaboradoresOrdenados() {
     return db.colaboradores.slice().sort(function (a, b) { return ordenaPt(a.nome, b.nome); });
+  }
+
+  /** Cria ou atualiza um cadastro. Renomear leva junto as viagens e o De-Para. */
+  function salvarColaborador(dados, nomeOriginal) {
+    var limpo = Object.assign({}, dados);
+    limpo.nome = String(limpo.nome || "").trim();
+    if (!limpo.nome) return Promise.reject(new Error("Informe o nome do colaborador."));
+
+    if (armazem.modo === "servidor") {
+      return armazem.salvarColaborador(limpo, nomeOriginal || "").then(aplica);
+    }
+
+    var chave = normal(nomeOriginal || limpo.nome);
+    var alvo = null;
+    db.colaboradores.forEach(function (c) { if (normal(c.nome) === chave) alvo = c; });
+    if (alvo) {
+      if (nomeOriginal && normal(nomeOriginal) !== normal(limpo.nome)) {
+        db.viagens.forEach(function (v) { if (normal(v.colaborador) === chave) v.colaborador = limpo.nome; });
+        db.params.dePara.forEach(function (m) { if (normal(m.colaborador) === chave) m.colaborador = limpo.nome; });
+      }
+      Object.assign(alvo, limpo);
+    } else {
+      db.colaboradores.push(limpo);
+    }
+    db.colaboradores.sort(function (a, b) { return ordenaPt(a.nome, b.nome); });
+    return armazem.salvarColaborador(limpo, nomeOriginal || "").then(aplica);
+  }
+
+  function excluirColaborador(nome) {
+    var chave = normal(nome);
+    var usos = db.viagens.filter(function (v) { return normal(v.colaborador) === chave; }).length;
+    if (usos) {
+      return Promise.reject(new Error("Este colaborador tem " + usos + " viagem(ns) lançada(s)."));
+    }
+    if (armazem.modo === "servidor") return armazem.excluirColaborador(nome).then(aplica);
+    db.colaboradores = db.colaboradores.filter(function (c) { return normal(c.nome) !== chave; });
+    return armazem.excluirColaborador(nome).then(aplica);
   }
 
   // ---------- regras de viagem ----------
@@ -3134,39 +3403,56 @@ window.SEED = {
     };
   }
 
+  /** Cria ou atualiza. Devolve uma promessa com a viagem já gravada. */
   function salvarViagem(dados) {
-    var alvo = dados.id ? viagemPorId(dados.id) : null;
+    var base = dados.id ? clone(viagemPorId(dados.id) || viagemVazia()) : viagemVazia();
+    CAMPOS_VIAGEM.forEach(function (k) {
+      if (dados[k] !== undefined) base[k] = dados[k];
+    });
+    base.id = Number(dados.id) || 0;
+
+    if (armazem.modo === "servidor") {
+      return armazem.salvarViagem(base).then(aplica).then(function (estado) {
+        return viagemPorId(base.id || (estado && estado.viagemSalva) || maiorId());
+      });
+    }
+
+    var alvo = base.id ? viagemPorId(base.id) : null;
     if (!alvo) {
       alvo = viagemVazia();
       alvo.id = proximoId();
       db.viagens.push(alvo);
     }
-    CAMPOS_VIAGEM.forEach(function (k) {
-      if (dados[k] !== undefined) alvo[k] = dados[k];
-    });
-    salvar();
-    return alvo;
+    CAMPOS_VIAGEM.forEach(function (k) { alvo[k] = base[k]; });
+    return armazem.salvarViagem(alvo).then(aplica).then(function () { return alvo; });
+  }
+
+  function maiorId() {
+    var max = 0;
+    db.viagens.forEach(function (v) { if (v.id > max) max = v.id; });
+    return max;
   }
 
   function excluirViagem(id) {
     id = Number(id);
+    if (armazem.modo === "servidor") return armazem.excluirViagem(id).then(aplica);
+
     db.viagens = db.viagens.filter(function (v) { return v.id !== id; });
     // Alterações órfãs voltam a ser viagens comuns, para nada sumir do total.
     db.viagens.forEach(function (v) {
       if (v.refId === id) { v.refId = null; v.tipo = "Viagem"; }
     });
-    salvar();
+    return armazem.excluirViagem(id).then(aplica);
   }
 
   function duplicarViagem(id) {
     var v = viagemPorId(id);
-    if (!v) return null;
+    if (!v) return Promise.resolve(null);
     var copia = clone(v);
-    copia.id = proximoId();
+    copia.id = 0;
     copia.refId = null;
-    db.viagens.push(copia);
-    salvar();
-    return copia;
+    copia.tipo = "Viagem";
+    return salvarViagem(copia);
   }
 
   /** Alterações ligadas a uma viagem. */
@@ -3271,7 +3557,15 @@ window.SEED = {
     return cacheUber;
   }
 
+  /** Importa linhas cruas do relatório, ignorando as que já estão na base. */
   function adicionarCorridas(linhas) {
+    if (armazem.modo === "servidor") {
+      return armazem.importarUber(linhas).then(function (estado) {
+        aplica(estado);
+        return estado.importacao || { novas: 0, repetidas: 0 };
+      });
+    }
+
     var existentes = {};
     db.uber.forEach(function (r) { existentes[r.linha] = 1; });
     var novas = 0, repetidas = 0;
@@ -3283,16 +3577,24 @@ window.SEED = {
       db.uber.push({ linha: l });
       novas++;
     });
-    if (novas) salvar();
-    return { novas: novas, repetidas: repetidas };
+    var resultado = { novas: novas, repetidas: repetidas };
+    if (!novas) return Promise.resolve(resultado);
+    return armazem.importarUber(linhas).then(aplica).then(function () { return resultado; });
   }
 
   function excluirCorrida(indice) {
+    var registro = db.uber[indice];
+    if (!registro) return Promise.resolve();
+    if (armazem.modo === "servidor") return armazem.excluirCorrida(registro.linha).then(aplica);
     db.uber.splice(indice, 1);
-    salvar();
+    return armazem.excluirCorrida(registro.linha).then(aplica);
   }
 
-  function limparUber() { db.uber = []; salvar(); }
+  function limparUber() {
+    if (armazem.modo === "servidor") return armazem.limparUber().then(aplica);
+    db.uber = [];
+    return armazem.limparUber().then(aplica);
+  }
 
   // ---------- agregações ----------
 
@@ -3591,9 +3893,12 @@ window.SEED = {
 
   window.Core = {
     // estado
-    carregar: carregar, salvar: salvar, aoMudar: aoMudar, restaurarBase: restaurarBase,
-    substituirEstado: substituirEstado,
+    iniciar: iniciar, entrar: entrar, sair: sair, aoMudar: aoMudar,
+    recarregar: recarregar, revisaoRemota: revisaoRemota,
+    restaurarBase: restaurarBase, substituirEstado: substituirEstado, salvarParams: salvarParams,
     get equipeAtualizada() { return equipeAtualizada; },
+    get meta() { return meta; },
+    get modo() { return armazem ? armazem.modo : "local"; },
     get db() { return db; },
 
     // formatação
@@ -3605,6 +3910,7 @@ window.SEED = {
     // colaboradores
     colaborador: colaborador, areaDe: areaDe, gestorDe: gestorDe, areas: areas,
     colaboradoresOrdenados: colaboradoresOrdenados,
+    salvarColaborador: salvarColaborador, excluirColaborador: excluirColaborador,
 
     // viagens
     calc: calc, viagens: viagens, viagemPorId: viagemPorId, viagemCompleta: viagemCompleta,
@@ -4286,6 +4592,15 @@ window.SEED = {
 
   // ---------- aba: ajustes ----------
 
+  function ultimaAlteracao() {
+    var m = C.meta;
+    var quando = m.atualizadoEm || C.db.atualizadoEm;
+    if (!quando) return "Sem alterações registradas.";
+    var texto = "Última alteração: " + new Date(quando).toLocaleString("pt-BR");
+    if (m.atualizadoPor) texto += " · por " + m.atualizadoPor;
+    return texto;
+  }
+
   function ajustesView() {
     var r = C.db.params.regras;
     var html = '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(330px,1fr))">';
@@ -4319,7 +4634,10 @@ window.SEED = {
 
     html += '<div class="card"><div class="card-head"><h2>Backup e exportação</h2></div>' +
       '<div class="card-body grid" style="gap:12px">' +
-      '<div class="note">Os dados ficam salvos neste navegador. Faça um backup antes de trocar de máquina ou limpar o histórico.</div>' +
+      (C.modo === "servidor"
+        ? '<div class="note">Os dados ficam no servidor: todo mundo que entra com a senha vê e lança na mesma base. ' +
+          "Um backup guarda uma foto do momento — útil antes de uma mudança grande.</div>"
+        : '<div class="note">Os dados ficam salvos neste navegador. Faça um backup antes de trocar de máquina ou limpar o histórico.</div>') +
       '<div class="row">' +
       '<button class="btn btn-primary" data-acao="backup-baixar">Baixar backup (.json)</button>' +
       '<button class="btn" data-acao="backup-copiar">Copiar backup</button>' +
@@ -4330,11 +4648,11 @@ window.SEED = {
       '<button class="btn" data-acao="exportar-uber">Uber (.csv)</button>' +
       '<button class="btn" data-acao="exportar-colaborador">Por colaborador (.csv)</button>' +
       "</div>" +
-      '<div class="row"><span class="t-sub">Última alteração: ' +
-      esc(new Date(C.db.atualizadoEm || Date.now()).toLocaleString("pt-BR")) + "</span></div>" +
+      '<div class="row"><span class="t-sub">' + esc(ultimaAlteracao()) + "</span></div>" +
       '<div class="row" style="border-top:1px solid var(--border);padding-top:12px">' +
       '<button class="btn btn-danger" data-acao="restaurar-base">Voltar à base original da planilha</button>' +
-      '<span class="t-sub">Descarta tudo que foi lançado aqui.</span></div>' +
+      '<span class="t-sub">Descarta tudo que foi lançado' +
+      (C.modo === "servidor" ? ", para todo mundo." : " aqui.") + "</span></div>" +
       "</div></div>";
 
     html += '<div class="card"><div class="card-head"><h2>Como usar</h2></div>' +
@@ -4400,18 +4718,10 @@ window.SEED = {
   // ---------- inicialização ----------
 
   function iniciar() {
-    C.carregar();
-    estado.ano = C.anosComDados().slice(-1)[0];
-
     $view = document.getElementById("view");
     $tabs = document.getElementById("tabs");
     $anoSel = document.getElementById("ano");
 
-    $tabs.innerHTML = ABAS.map(function (a) {
-      return '<button class="tab" role="tab" data-aba="' + a.id + '" aria-selected="false">' + a.rotulo + "</button>";
-    }).join("");
-
-    atualizaAnos();
     aplicaTema(localStorage.getItem("gvc.tema") || "auto");
 
     document.addEventListener("click", aoClicar);
@@ -4420,17 +4730,114 @@ window.SEED = {
     document.addEventListener("mouseover", aoPassarMouse);
     document.addEventListener("mouseout", escondeTip);
 
+    C.iniciar().then(function (r) {
+      if (!r.autenticado) { telaDeEntrada(); return; }
+      montar();
+    }, function (e) {
+      telaDeEntrada(e.message || "Não consegui falar com o servidor.");
+    });
+  }
+
+  /** Liga a aplicação depois que a base está na mão. */
+  function montar() {
+    document.body.classList.remove("trancado");
+    estado.ano = C.anosComDados().slice(-1)[0];
+
+    $tabs.innerHTML = ABAS.map(function (a) {
+      return '<button class="tab" role="tab" data-aba="' + a.id + '" aria-selected="false">' + a.rotulo + "</button>";
+    }).join("");
+
+    atualizaAnos();
     C.aoMudar(function () { atualizaAnos(); render(); });
 
     var hash = (location.hash || "").replace("#", "");
     if (ABAS.some(function (a) { return a.id === hash; })) estado.aba = hash;
 
     render();
+    mostraQuemEstaDentro();
 
     if (C.equipeAtualizada) {
       toast("Base de equipe atualizada: " + C.equipeAtualizada + " cadastros · " +
             C.db.colaboradores.length + " pessoas");
     }
+    if (C.modo === "servidor") vigiarMudancas();
+  }
+
+  // ---------- entrada com senha ----------
+
+  function telaDeEntrada(mensagem) {
+    document.body.classList.add("trancado");
+    document.getElementById("view").innerHTML =
+      '<form class="entrada" id="form-entrada">' +
+      '<div class="entrada-marca" aria-hidden="true">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M17.8 19.2 16 11l3.5-3.5a2.1 2.1 0 0 0-3-3L13 8 4.8 6.2a.5.5 0 0 0-.5.8l3.4 3.9-2 2-2.2-.6a.5.5 0 0 0-.5.8L5 15.5 6.4 18l1.4-1.5.6 2.2a.5.5 0 0 0 .8.2l2-2 3.9 3.4a.5.5 0 0 0 .8-.5Z"/></svg></div>' +
+      "<h1>Gestão de Viagens</h1>" +
+      '<p class="entrada-sub">Ace Gaming · apostou.bet.br</p>' +
+      '<div class="field"><label for="e-nome">Seu nome</label>' +
+      '<input type="text" id="e-nome" name="nome" autocomplete="name" placeholder="Como aparecer nas alterações" ' +
+      'value="' + esc(localStorage.getItem("gvc.nome") || "") + '"></div>' +
+      '<div class="field"><label for="e-senha">Senha de acesso</label>' +
+      '<input type="password" id="e-senha" name="senha" autocomplete="current-password" required></div>' +
+      '<button class="btn btn-primary" type="submit">Entrar</button>' +
+      '<p class="entrada-erro" data-erro>' + esc(mensagem || "") + "</p>" +
+      "</form>";
+
+    var form = document.getElementById("form-entrada");
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var fd = new FormData(form);
+      var botao = form.querySelector("button");
+      var aviso = form.querySelector("[data-erro]");
+      botao.disabled = true;
+      botao.textContent = "Entrando…";
+      aviso.textContent = "";
+
+      C.entrar(fd.get("senha"), (fd.get("nome") || "").trim()).then(function () {
+        localStorage.setItem("gvc.nome", (fd.get("nome") || "").trim());
+        montar();
+      }, function (e) {
+        botao.disabled = false;
+        botao.textContent = "Entrar";
+        aviso.textContent = e.message || "Não consegui entrar.";
+        form.querySelector('[name="senha"]').select();
+      });
+    });
+    form.querySelector((localStorage.getItem("gvc.nome") ? '[name="senha"]' : '[name="nome"]')).focus();
+  }
+
+  function mostraQuemEstaDentro() {
+    var alvo = document.getElementById("sessao");
+    if (!alvo) return;
+    if (C.modo !== "servidor") { alvo.hidden = true; return; }
+    alvo.hidden = false;
+    var nome = C.meta.nome || localStorage.getItem("gvc.nome") || "";
+    alvo.innerHTML =
+      (nome ? '<span class="chip accent" title="Sessão aberta">' + esc(nome) + "</span>" : "") +
+      '<button class="btn btn-ghost btn-sm" data-acao="sair">Sair</button>';
+  }
+
+  // ---------- sincronização entre pessoas ----------
+
+  var vigiando = false;
+
+  function vigiarMudancas() {
+    if (vigiando) return;
+    vigiando = true;
+
+    function conferir() {
+      if (document.hidden || document.querySelector("dialog[open]")) return;
+      C.revisaoRemota().then(function (r) {
+        if (!r || r.revisao === C.meta.revisao) return;
+        var quem = r.atualizadoPor;
+        C.recarregar().then(function () {
+          toast(quem ? "Base atualizada por " + quem : "Base atualizada");
+        });
+      }, function () { /* sem rede agora; tenta de novo no próximo ciclo */ });
+    }
+
+    setInterval(conferir, 20000);
+    window.addEventListener("focus", conferir);
   }
 
   function atualizaAnos() {
@@ -4486,21 +4893,27 @@ window.SEED = {
       case "nova-viagem-para": abrirViagem(null, { colaborador: botao.dataset.nome }); break;
       case "editar": abrirViagem(C.viagemPorId(id)); break;
       case "duplicar":
-        var novo = C.duplicarViagem(id);
-        if (novo) { toast("Viagem duplicada como #" + novo.id); abrirViagem(novo); }
+        C.duplicarViagem(id).then(function (novo) {
+          if (novo) { toast("Viagem duplicada como #" + novo.id); abrirViagem(novo); }
+        }, falhou);
         break;
       case "alteracao": abrirAlteracao(C.viagemPorId(id)); break;
       case "excluir": excluirViagem(id); break;
       case "excluir-corrida":
-        if (confirm("Excluir esta corrida da base do Uber?")) { C.excluirCorrida(Number(id)); toast("Corrida excluída"); }
+        if (confirm("Excluir esta corrida da base do Uber?")) {
+          C.excluirCorrida(Number(id)).then(function () { toast("Corrida excluída"); }, falhou);
+        }
         break;
       case "importar-uber": importarUber(); break;
       case "limpar-uber":
-        if (confirm("Remover todas as " + C.corridas().length + " corridas da base do Uber?")) { C.limparUber(); toast("Base do Uber limpa"); }
+        if (confirm("Remover todas as " + C.corridas().length + " corridas da base do Uber?")) {
+          C.limparUber().then(function () { toast("Base do Uber limpa"); }, falhou);
+        }
         break;
       case "mapear": abrirDePara(botao.dataset.nome || ""); break;
       case "excluir-depara":
-        C.db.params.dePara.splice(Number(id), 1); C.salvar(); toast("Vínculo removido");
+        C.db.params.dePara.splice(Number(id), 1);
+        C.salvarParams().then(function () { toast("Vínculo removido"); }, falhou);
         break;
       case "novo-colaborador": abrirColaborador(null); break;
       case "editar-colaborador": abrirColaborador(C.colaborador(botao.dataset.nome)); break;
@@ -4516,8 +4929,11 @@ window.SEED = {
       case "backup-restaurar": abrirRestaurar(); break;
       case "restaurar-base":
         if (confirm("Isso descarta tudo que foi lançado aqui e volta à base original da planilha. Continuar?")) {
-          C.restaurarBase(); toast("Base original restaurada");
+          C.restaurarBase().then(function () { toast("Base original restaurada"); }, falhou);
         }
+        break;
+      case "sair":
+        C.sair().then(function () { location.reload(); });
         break;
       case "tema": alternarTema(); break;
       case "usar-regra": aplicarRegraAlimentacao(botao.closest("form")); break;
@@ -4652,10 +5068,7 @@ window.SEED = {
 
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
-      var manterAberto = (ev.submitter && ev.submitter.value) === "novo";
-      if (salvarFormulario(form, manterAberto)) {
-        if (!manterAberto) dialogo.close();
-      }
+      salvarFormulario(form, (ev.submitter && ev.submitter.value) === "novo", dialogo);
     });
 
     form.querySelectorAll('[name="lote-nome"]').forEach(function (chk) {
@@ -4804,7 +5217,7 @@ window.SEED = {
     return d;
   }
 
-  function salvarFormulario(form, manterAberto) {
+  function salvarFormulario(form, manterAberto, dialogo) {
     var d = dadosDoFormulario(form);
     var fd = new FormData(form);
     var emLote = !!fd.get("lote");
@@ -4814,28 +5227,50 @@ window.SEED = {
     if (!d.dataIda || !d.dataVolta) { avisaForm(form, "Informe as datas de ida e volta."); return false; }
     if (C.diasEntre(d.dataIda, d.dataVolta) < 0) { avisaForm(form, "A data de volta é anterior à de ida."); return false; }
 
-    var salvos = nomes.map(function (nome) {
-      var aeroporto = d.aeroportoOrigem;
-      if (!aeroporto && emLote) {
-        var col = C.colaborador(nome);
-        aeroporto = col ? col.aeroportoBase : "";   // cada um sai da sua própria base
+    var botoes = form.closest("dialog").querySelectorAll("button[type=submit]");
+    botoes.forEach(function (b) { b.disabled = true; });
+
+    // Um de cada vez: no servidor, dois lançamentos simultâneos disputariam o mesmo ID.
+    var salvos = [];
+    var fila = nomes.reduce(function (anterior, nome) {
+      return anterior.then(function () {
+        var aeroporto = d.aeroportoOrigem;
+        if (!aeroporto && emLote) {
+          var col = C.colaborador(nome);
+          aeroporto = col ? col.aeroportoBase : "";   // cada um sai da sua própria base
+        }
+        return C.salvarViagem(Object.assign({}, d, {
+          colaborador: nome, aeroportoOrigem: aeroporto, id: nomes.length > 1 ? 0 : d.id
+        })).then(function (v) { salvos.push(v); });
+      });
+    }, Promise.resolve());
+
+    fila.then(function () {
+      // Ao registrar uma alteração, a viagem original passa a 'Alterada'
+      if (!form.dataset.originalId) return;
+      var orig = C.viagemPorId(form.dataset.originalId);
+      if (orig && orig.status !== "Alterada") {
+        return C.salvarViagem(Object.assign({}, orig, { status: "Alterada" }));
       }
-      return C.salvarViagem(Object.assign({}, d, {
-        colaborador: nome, aeroportoOrigem: aeroporto, id: nomes.length > 1 ? 0 : d.id
-      }));
+    }).then(function () {
+      botoes.forEach(function (b) { b.disabled = false; });
+      toast(salvos.length > 1
+        ? salvos.length + " viagens lançadas"
+        : (d.id ? "Viagem #" + d.id + " atualizada"
+                : "Viagem #" + ((salvos[0] && salvos[0].id) || "") + " lançada"));
+      if (!manterAberto) dialogo.close();
+      else limpaParaProxima(form);
+    }, function (e) {
+      botoes.forEach(function (b) { b.disabled = false; });
+      avisaForm(form, (e && e.message) || "Não consegui salvar.");
     });
 
-    // Ao registrar uma alteração, a viagem original passa a 'Alterada'
-    if (form.dataset.originalId) {
-      var orig = C.viagemPorId(form.dataset.originalId);
-      if (orig && orig.status !== "Alterada") { orig.status = "Alterada"; C.salvar(); }
-    }
+    return true;
+  }
 
-    toast(salvos.length > 1
-      ? salvos.length + " viagens lançadas"
-      : (d.id ? "Viagem #" + d.id + " atualizada" : "Viagem #" + salvos[0].id + " lançada"));
-
-    if (manterAberto) {
+  /** Depois de 'Salvar e lançar outra': mantém destino e datas, zera o resto. */
+  function limpaParaProxima(form) {
+    {
       // Mantém destino e datas, limpa pessoa e valores — o padrão de quem lança em série.
       form.dataset.id = "";
       form.dataset.originalId = "";
@@ -4850,7 +5285,6 @@ window.SEED = {
       form.dataset.diariasTocada = "";
       recalcular(form);
     }
-    return true;
   }
 
   function avisaForm(form, texto) {
@@ -4868,7 +5302,9 @@ window.SEED = {
     var filhas = C.alteracoesDe(id);
     var texto = "Excluir a viagem #" + id + " de " + v.colaborador + "?" +
       (filhas.length ? "\n\n" + filhas.length + " alteração(ões) ligada(s) a ela viram lançamentos independentes." : "");
-    if (confirm(texto)) { C.excluirViagem(id); toast("Viagem #" + id + " excluída"); }
+    if (confirm(texto)) {
+      C.excluirViagem(id).then(function () { toast("Viagem #" + id + " excluída"); }, falhou);
+    }
   }
 
   function destinosConhecidos() {
@@ -4918,30 +5354,26 @@ window.SEED = {
       var fd = new FormData(form);
       var nome = (fd.get("nome") || "").trim();
       if (!nome) return;
-      var alvo = novo ? { status: "Ativo" } : c;
+      var alvo = Object.assign({}, novo ? { status: "Ativo" } : c);
       ["nome", "area", "cargo", "gestor", "cidade", "uf", "aeroportoBase", "contrato", "modelo", "email"].forEach(function (k) {
         alvo[k] = (fd.get(k) || "").trim();
       });
-      if (novo) C.db.colaboradores.push(alvo);
-      else if (nomeAntigo && nomeAntigo !== nome) {
-        C.db.viagens.forEach(function (v) { if (v.colaborador === nomeAntigo) v.colaborador = nome; });
-        C.db.params.dePara.forEach(function (m) { if (m.colaborador === nomeAntigo) m.colaborador = nome; });
-      }
-      C.salvar();
-      toast(novo ? "Colaborador cadastrado" : "Cadastro atualizado");
-      dialogo.close();
+      C.salvarColaborador(alvo, novo ? "" : nomeAntigo).then(function () {
+        toast(novo ? "Colaborador cadastrado" : "Cadastro atualizado");
+        dialogo.close();
+      }, falhou);
     });
 
     var btnExcluir = dialogo.querySelector('[data-acao="excluir-colab"]');
     if (btnExcluir) {
       btnExcluir.addEventListener("click", function () {
-        var usos = C.db.viagens.filter(function (v) { return v.colaborador === d.nome; }).length;
-        if (usos) { alert("Este colaborador tem " + usos + " viagem(ns) lançada(s). Exclua ou reatribua antes."); return; }
         if (!confirm("Remover " + d.nome + " do cadastro?")) return;
-        C.db.colaboradores = C.db.colaboradores.filter(function (x) { return x !== d; });
-        C.salvar();
-        toast("Colaborador removido");
-        dialogo.close();
+        C.excluirColaborador(d.nome).then(function () {
+          toast("Colaborador removido");
+          dialogo.close();
+        }, function (e) {
+          alert((e && e.message) || "Não consegui remover.");
+        });
       });
     }
   }
@@ -4973,9 +5405,10 @@ window.SEED = {
       var existente = C.db.params.dePara.filter(function (m) { return C.normal(m.uber) === C.normal(uber); })[0];
       if (existente) existente.colaborador = colab;
       else C.db.params.dePara.push({ uber: uber, colaborador: colab });
-      C.salvar();
-      toast("Vínculo salvo — corridas reauditadas");
-      dialogo.close();
+      C.salvarParams().then(function () {
+        toast("Vínculo salvo — corridas reauditadas");
+        dialogo.close();
+      }, falhou);
     });
   }
 
@@ -5004,12 +5437,13 @@ window.SEED = {
       return;
     }
 
-    var r = C.adicionarCorridas(validas);
-    caixa.value = "";
     var ignoradas = linhas.length - validas.length;
-    toast(r.novas + " corrida(s) importada(s)" +
-          (r.repetidas ? " · " + r.repetidas + " repetida(s) ignorada(s)" : "") +
-          (ignoradas ? " · " + ignoradas + " linha(s) fora do formato" : ""));
+    caixa.value = "";
+    C.adicionarCorridas(validas).then(function (r) {
+      toast(r.novas + " corrida(s) importada(s)" +
+            (r.repetidas ? " · " + r.repetidas + " repetida(s) ignorada(s)" : "") +
+            (ignoradas ? " · " + ignoradas + " linha(s) fora do formato" : ""));
+    }, falhou);
   }
 
   // ---------- regras ----------
@@ -5019,8 +5453,12 @@ window.SEED = {
     r.jantar = C.parseNum(document.querySelector('[name="regra-jantar"]').value);
     r.cafe = C.parseNum(document.querySelector('[name="regra-cafe"]').value);
     r.toleranciaUber = Math.max(0, Math.round(C.parseNum(document.querySelector('[name="regra-tol"]').value)));
-    C.salvar();
-    toast("Regras salvas — base recalculada");
+    C.salvarParams().then(function () { toast("Regras salvas — base recalculada"); }, falhou);
+  }
+
+  /** Mensagem única para qualquer falha vinda do servidor. */
+  function falhou(e) {
+    toast((e && e.message) || "Não consegui salvar. Confira a conexão.");
   }
 
   // ---------- backup ----------
@@ -5046,15 +5484,18 @@ window.SEED = {
       var colado = (fd.get("colado") || "").trim();
 
       function aplica(texto) {
+        var novo;
         try {
-          var novo = JSON.parse(texto);
+          novo = JSON.parse(texto);
           if (!novo.viagens || !novo.colaboradores) throw new Error("formato");
-          C.substituirEstado(novo);
-          toast("Backup restaurado");
-          dialogo.close();
         } catch (e) {
           alert("Não consegui ler esse backup. Confira se é o arquivo .json gerado por este app.");
+          return;
         }
+        C.substituirEstado(novo).then(function () {
+          toast("Backup restaurado");
+          dialogo.close();
+        }, falhou);
       }
 
       if (arquivo && arquivo.size) {

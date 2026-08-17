@@ -1,7 +1,8 @@
 # Gestão de Viagens Corporativas
 
-Substitui a planilha `Gestao_Viagens_Corporativas_AceGaming_2026.xlsx` por um app que roda no
-navegador, sem instalação e sem servidor. A base de maio a agosto/2026 já vem carregada:
+Substitui a planilha `Gestao_Viagens_Corporativas_AceGaming_2026.xlsx` por um app de navegador,
+que roda como site com senha para a equipe inteira ou como arquivo único offline. A base de maio
+a agosto/2026 já vem carregada:
 **53 viagens · 1 alteração · 233 pernoites · 186 linhas do Uber · 57 colaboradores**.
 
 O cadastro da equipe vem de `Ace Gaming_Gestao_Colaboradores.xlsx` (Drive), com apenas os campos
@@ -12,16 +13,20 @@ endereço, telefone, conta, PIX) não são importados.
 Todos os totais conferem com a planilha original: R$ 139.228,71 no ano, R$ 128.070,42 em viagens,
 R$ 11.158,29 de Uber, 25 colaboradores com despesa, 181 corridas, ticket médio de R$ 62,07.
 
-## Como abrir
+## Como usar
 
-**Opção 1 — arquivo único.** Baixe `dist/gestao-viagens.html` e abra com dois cliques.
-Funciona offline, em qualquer navegador, sem instalar nada.
+**Site com senha (equipe inteira na mesma base).** É o modo de produção: um endereço na
+internet, tela de senha, e todo mundo que entra vê e lança na mesma base, com sincronização
+automática. Passo a passo em [DEPLOY.md](DEPLOY.md) — sobe na Cloudflare em poucos minutos,
+no plano gratuito.
 
-**Opção 2 — pasta do projeto.** Abra `index.html`. Mesma coisa, com os arquivos separados
+**Arquivo único, offline.** Baixe `dist/gestao-viagens.html` e abra com dois cliques. Sem
+senha e sem servidor: os dados ficam no navegador daquela máquina. Bom para trabalhar sem
+internet ou para uma cópia de estudo. Leve de uma máquina a outra por **Ajustes → Baixar
+backup** e **Restaurar backup**.
+
+**Pasta do projeto.** Abra `index.html` — igual ao arquivo único, com os arquivos separados
 para editar.
-
-Os dados ficam salvos no navegador (localStorage) da máquina onde o app foi aberto. Para levar
-para outro computador, use **Ajustes → Baixar backup** e depois **Restaurar backup** no destino.
 
 ## O que mudou em relação à planilha
 
@@ -70,18 +75,27 @@ para vincular na hora.
 ## Estrutura
 
 ```
-index.html               casca do app
-assets/styles.css        tokens de cor, tema claro/escuro, componentes
-assets/seed.js           base extraída da planilha (gerado)
-assets/core.js           estado, persistência e todas as regras de cálculo
-assets/views.js          telas
-assets/app.js            navegação, formulários e ações
-tools/extract_seed.py    regenera assets/seed.js a partir da planilha de viagens
-tools/merge_equipe.py    atualiza a base de equipe a partir da planilha de colaboradores
-tools/build_single.py    gera dist/gestao-viagens.html (arquivo único)
+index.html                 casca do app
+assets/styles.css          tokens de cor, tema claro/escuro, componentes
+assets/seed.js             base extraída da planilha (gerado; só no modo offline)
+assets/armazenamento.js    de onde vêm os dados: servidor ou navegador
+assets/core.js             estado e todas as regras de cálculo
+assets/views.js            telas
+assets/app.js              navegação, entrada com senha, formulários e ações
+
+servidor/api.js            a API — roda igual no Cloudflare Worker e no Node
+servidor/worker.js         adaptador Cloudflare Workers + D1
+servidor/local.js          adaptador Node, guardando o estado num arquivo
+servidor/senha.js          gera SENHA_HASH e SESSAO_SEGREDO
+servidor/seed.json         base original, para semear o banco (gerado)
+
+tools/extract_seed.py      regenera assets/seed.js a partir da planilha de viagens
+tools/merge_equipe.py      atualiza a base de equipe a partir da planilha de colaboradores
+tools/build_single.py      gera dist/gestao-viagens.html (arquivo único, offline)
+tools/build_site.py        gera site/ (o que o servidor publica) e servidor/seed.json
 ```
 
-Sem dependências, sem build obrigatório, sem framework — só HTML, CSS e JavaScript.
+Sem dependências, sem framework — só HTML, CSS e JavaScript, no navegador e no servidor.
 
 Para regerar a base a partir de uma planilha nova:
 

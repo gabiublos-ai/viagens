@@ -1,2 +1,8 @@
 .DS_Store
 __pycache__/
+
+# estado do servidor local e credenciais — nunca versionar
+dados/
+.dev.vars
+.wrangler/
+node_modules/
