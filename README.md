@@ -40,7 +40,7 @@ para outro computador, use **Ajustes → Baixar backup** e depois **Restaurar ba
 - **Viagens** — a lista de lançamentos, agrupada por mês, com filtros, busca e edição.
 - **Calendário** — quem estava fora em cada dia do mês. ▶ ida · ■ em viagem · ◀ retorno.
 - **Uber** — colagem do relatório, auditoria contra as datas de viagem e análise de gastos.
-- **Equipe** — cadastro das 53 pessoas, com viagens e custo de cada uma no ano.
+- **Equipe** — cadastro das 57 pessoas, com viagens e custo de cada uma no ano.
 - **Ajustes** — regra de alimentação, De-Para do Uber, backup e exportação em CSV.
 
 ## Regras de cálculo
