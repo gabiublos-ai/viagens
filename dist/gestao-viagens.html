@@ -2911,6 +2911,501 @@ window.SEED = {
 
 </script>
 <script>
+/* Listas de apoio para os campos de seleção: aeroportos comerciais do Brasil e UFs.
+ *
+ * O rótulo segue o padrão que a base já usava — "CNF - Confins" —, com a cidade
+ * e a UF só na descrição, para não quebrar o que foi lançado antes.
+ */
+
+(function () {
+  "use strict";
+
+  var UFS = [
+    { sigla: "AC", nome: "Acre" }, { sigla: "AL", nome: "Alagoas" },
+    { sigla: "AM", nome: "Amazonas" }, { sigla: "AP", nome: "Amapá" },
+    { sigla: "BA", nome: "Bahia" }, { sigla: "CE", nome: "Ceará" },
+    { sigla: "DF", nome: "Distrito Federal" }, { sigla: "ES", nome: "Espírito Santo" },
+    { sigla: "GO", nome: "Goiás" }, { sigla: "MA", nome: "Maranhão" },
+    { sigla: "MG", nome: "Minas Gerais" }, { sigla: "MS", nome: "Mato Grosso do Sul" },
+    { sigla: "MT", nome: "Mato Grosso" }, { sigla: "PA", nome: "Pará" },
+    { sigla: "PB", nome: "Paraíba" }, { sigla: "PE", nome: "Pernambuco" },
+    { sigla: "PI", nome: "Piauí" }, { sigla: "PR", nome: "Paraná" },
+    { sigla: "RJ", nome: "Rio de Janeiro" }, { sigla: "RN", nome: "Rio Grande do Norte" },
+    { sigla: "RO", nome: "Rondônia" }, { sigla: "RR", nome: "Roraima" },
+    { sigla: "RS", nome: "Rio Grande do Sul" }, { sigla: "SC", nome: "Santa Catarina" },
+    { sigla: "SE", nome: "Sergipe" }, { sigla: "SP", nome: "São Paulo" },
+    { sigla: "TO", nome: "Tocantins" }
+  ];
+
+  // codigo IATA · nome usual do aeroporto · cidade · UF
+  var AEROPORTOS = [
+    ["GRU", "Guarulhos", "São Paulo", "SP"],
+    ["CGH", "Congonhas", "São Paulo", "SP"],
+    ["VCP", "Viracopos", "Campinas", "SP"],
+    ["SDU", "Santos Dumont", "Rio de Janeiro", "RJ"],
+    ["GIG", "Galeão", "Rio de Janeiro", "RJ"],
+    ["CNF", "Confins", "Belo Horizonte", "MG"],
+    ["PLU", "Pampulha", "Belo Horizonte", "MG"],
+    ["BSB", "Brasília", "Brasília", "DF"],
+    ["CWB", "Afonso Pena", "Curitiba", "PR"],
+    ["POA", "Salgado Filho", "Porto Alegre", "RS"],
+    ["SSA", "Salvador", "Salvador", "BA"],
+    ["REC", "Recife", "Recife", "PE"],
+    ["FOR", "Fortaleza", "Fortaleza", "CE"],
+    ["BEL", "Belém", "Belém", "PA"],
+    ["MAO", "Manaus", "Manaus", "AM"],
+    ["NAT", "Natal", "Natal", "RN"],
+    ["MCZ", "Maceió", "Maceió", "AL"],
+    ["AJU", "Aracaju", "Aracaju", "SE"],
+    ["JPA", "João Pessoa", "João Pessoa", "PB"],
+    ["THE", "Teresina", "Teresina", "PI"],
+    ["SLZ", "São Luís", "São Luís", "MA"],
+    ["VIX", "Vitória", "Vitória", "ES"],
+    ["CGB", "Cuiabá", "Cuiabá", "MT"],
+    ["CGR", "Campo Grande", "Campo Grande", "MS"],
+    ["GYN", "Goiânia", "Goiânia", "GO"],
+    ["PMW", "Palmas", "Palmas", "TO"],
+    ["RBR", "Rio Branco", "Rio Branco", "AC"],
+    ["PVH", "Porto Velho", "Porto Velho", "RO"],
+    ["BVB", "Boa Vista", "Boa Vista", "RR"],
+    ["MCP", "Macapá", "Macapá", "AP"],
+    ["FLN", "Florianópolis", "Florianópolis", "SC"],
+    ["JOI", "Joinville", "Joinville", "SC"],
+    ["NVT", "Navegantes", "Navegantes", "SC"],
+    ["XAP", "Chapecó", "Chapecó", "SC"],
+    ["CXJ", "Caxias do Sul", "Caxias do Sul", "RS"],
+    ["PET", "Pelotas", "Pelotas", "RS"],
+    ["URG", "Uruguaiana", "Uruguaiana", "RS"],
+    ["LDB", "Londrina", "Londrina", "PR"],
+    ["MGF", "Maringá", "Maringá", "PR"],
+    ["CAC", "Cascavel", "Cascavel", "PR"],
+    ["FOZ", "Foz do Iguaçu", "Foz do Iguaçu", "PR"],
+    ["RAO", "Ribeirão Preto", "Ribeirão Preto", "SP"],
+    ["SJP", "São José do Rio Preto", "São José do Rio Preto", "SP"],
+    ["SJK", "São José dos Campos", "São José dos Campos", "SP"],
+    ["BAU", "Bauru", "Bauru", "SP"],
+    ["PPB", "Presidente Prudente", "Presidente Prudente", "SP"],
+    ["MII", "Marília", "Marília", "SP"],
+    ["UDI", "Uberlândia", "Uberlândia", "MG"],
+    ["UBA", "Uberaba", "Uberaba", "MG"],
+    ["IPN", "Ipatinga", "Ipatinga", "MG"],
+    ["MOC", "Montes Claros", "Montes Claros", "MG"],
+    ["JDF", "Juiz de Fora", "Juiz de Fora", "MG"],
+    ["GVR", "Governador Valadares", "Governador Valadares", "MG"],
+    ["DIQ", "Divinópolis", "Divinópolis", "MG"],
+    ["IOS", "Ilhéus", "Ilhéus", "BA"],
+    ["BPS", "Porto Seguro", "Porto Seguro", "BA"],
+    ["VDC", "Vitória da Conquista", "Vitória da Conquista", "BA"],
+    ["LEC", "Lençóis", "Lençóis", "BA"],
+    ["PAV", "Paulo Afonso", "Paulo Afonso", "BA"],
+    ["JUA", "Juazeiro do Norte", "Juazeiro do Norte", "CE"],
+    ["PHB", "Parnaíba", "Parnaíba", "PI"],
+    ["IMP", "Imperatriz", "Imperatriz", "MA"],
+    ["STM", "Santarém", "Santarém", "PA"],
+    ["MAB", "Marabá", "Marabá", "PA"],
+    ["ATM", "Altamira", "Altamira", "PA"],
+    ["CZS", "Cruzeiro do Sul", "Cruzeiro do Sul", "AC"],
+    ["TBT", "Tabatinga", "Tabatinga", "AM"],
+    ["TFF", "Tefé", "Tefé", "AM"],
+    ["JPR", "Ji-Paraná", "Ji-Paraná", "RO"],
+    ["ROO", "Rondonópolis", "Rondonópolis", "MT"],
+    ["SIN", "Sinop", "Sinop", "MT"],
+    ["BYO", "Bonito", "Bonito", "MS"],
+    ["DOU", "Dourados", "Dourados", "MS"],
+    ["CAW", "Campos dos Goytacazes", "Campos dos Goytacazes", "RJ"],
+    ["MEA", "Macaé", "Macaé", "RJ"],
+    ["CPV", "Campina Grande", "Campina Grande", "PB"],
+    ["PNZ", "Petrolina", "Petrolina", "PE"],
+    ["FEN", "Fernando de Noronha", "Fernando de Noronha", "PE"],
+    ["MVF", "Mossoró", "Mossoró", "RN"],
+    ["ARU", "Araçatuba", "Araçatuba", "SP"],
+    ["QSC", "Sorocaba", "Sorocaba", "SP"]
+  ].map(function (a) {
+    return { codigo: a[0], nome: a[1], cidade: a[2], uf: a[3], valor: a[0] + " - " + a[1] };
+  });
+
+  window.BR = {
+    UFS: UFS,
+    AEROPORTOS: AEROPORTOS,
+
+    /** <option> do datalist: valor no padrão da base, descrição com cidade e UF. */
+    opcoesAeroporto: function () {
+      return AEROPORTOS.map(function (a) {
+        return '<option value="' + a.valor + '">' + a.cidade + "/" + a.uf + "</option>";
+      }).join("");
+    },
+
+    opcoesUF: function (valor) {
+      return '<option value="">—</option>' + UFS.map(function (u) {
+        return '<option value="' + u.sigla + '"' + (u.sigla === valor ? " selected" : "") +
+          ">" + u.sigla + " · " + u.nome + "</option>";
+      }).join("");
+    },
+
+    /** Acha o aeroporto de uma cidade, para sugerir sozinho no cadastro. */
+    aeroportoDaCidade: function (cidade, uf) {
+      if (!cidade) return null;
+      var alvo = String(cidade).trim().toLowerCase();
+      for (var i = 0; i < AEROPORTOS.length; i++) {
+        if (AEROPORTOS[i].cidade.toLowerCase() === alvo && (!uf || AEROPORTOS[i].uf === uf)) {
+          return AEROPORTOS[i];
+        }
+      }
+      return null;
+    }
+  };
+})();
+
+</script>
+<script>
+/* Escreve e lê arquivos .xlsx sem depender de biblioteca.
+ *
+ * Um .xlsx é um zip de XMLs. Aqui gravamos as entradas sem compressão (método
+ * "stored"), que o Excel aceita, e na leitura descompactamos com a API de
+ * streams do próprio navegador.
+ *
+ * Suporta o que o modelo de importação precisa: texto, número e data. Nada de
+ * fórmula, formatação condicional ou gráfico.
+ */
+
+(function () {
+  "use strict";
+
+  var enc = new TextEncoder();
+
+  // ---------- zip ----------
+
+  var TABELA_CRC = (function () {
+    var t = new Uint32Array(256);
+    for (var i = 0; i < 256; i++) {
+      var c = i;
+      for (var j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[i] = c >>> 0;
+    }
+    return t;
+  })();
+
+  function crc32(bytes) {
+    var c = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) c = TABELA_CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function escreve(vetor, pos, valor, bytes) {
+    for (var i = 0; i < bytes; i++) vetor[pos + i] = (valor >>> (i * 8)) & 0xFF;
+  }
+
+  /** Monta o zip com as entradas dadas: [{nome, dados:Uint8Array}]. */
+  function zipar(entradas) {
+    var partes = [], central = [], deslocamento = 0;
+
+    entradas.forEach(function (e) {
+      var nome = enc.encode(e.nome);
+      var crc = crc32(e.dados);
+
+      var local = new Uint8Array(30 + nome.length);
+      escreve(local, 0, 0x04034b50, 4);
+      escreve(local, 4, 20, 2);          // versão necessária
+      escreve(local, 8, 0, 2);           // método: sem compressão
+      escreve(local, 14, crc, 4);
+      escreve(local, 18, e.dados.length, 4);
+      escreve(local, 22, e.dados.length, 4);
+      escreve(local, 26, nome.length, 2);
+      local.set(nome, 30);
+
+      partes.push(local, e.dados);
+
+      var reg = new Uint8Array(46 + nome.length);
+      escreve(reg, 0, 0x02014b50, 4);
+      escreve(reg, 4, 20, 2);
+      escreve(reg, 6, 20, 2);
+      escreve(reg, 10, 0, 2);
+      escreve(reg, 16, crc, 4);
+      escreve(reg, 20, e.dados.length, 4);
+      escreve(reg, 24, e.dados.length, 4);
+      escreve(reg, 28, nome.length, 2);
+      escreve(reg, 42, deslocamento, 4);
+      reg.set(nome, 46);
+      central.push(reg);
+
+      deslocamento += local.length + e.dados.length;
+    });
+
+    var tamanhoCentral = central.reduce(function (s, c) { return s + c.length; }, 0);
+    var fim = new Uint8Array(22);
+    escreve(fim, 0, 0x06054b50, 4);
+    escreve(fim, 8, entradas.length, 2);
+    escreve(fim, 10, entradas.length, 2);
+    escreve(fim, 12, tamanhoCentral, 4);
+    escreve(fim, 16, deslocamento, 4);
+
+    return new Blob(partes.concat(central, [fim]),
+                    { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+
+  // ---------- escrita ----------
+
+  function esc(s) {
+    return String(s === null || s === undefined ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");   // caracteres que o Excel recusa
+  }
+
+  function letraColuna(n) {
+    var s = "";
+    while (n >= 0) {
+      s = String.fromCharCode(65 + (n % 26)) + s;
+      n = Math.floor(n / 26) - 1;
+    }
+    return s;
+  }
+
+  function celula(ref, valor, estilo) {
+    var st = estilo ? ' s="' + estilo + '"' : "";
+    if (typeof valor === "number" && isFinite(valor)) {
+      return '<c r="' + ref + '"' + st + "><v>" + valor + "</v></c>";
+    }
+    var texto = valor === null || valor === undefined ? "" : String(valor);
+    if (!texto) return st ? '<c r="' + ref + '"' + st + "/>" : "";
+    return '<c r="' + ref + '"' + st + ' t="inlineStr"><is><t xml:space="preserve">' +
+      esc(texto) + "</t></is></c>";
+  }
+
+  function folha(aba) {
+    var larguras = (aba.larguras || []).map(function (l, i) {
+      return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + l + '" customWidth="1"/>';
+    }).join("");
+
+    var linhas = aba.linhas.map(function (linha, i) {
+      var celulas = linha.map(function (v, j) {
+        var estilo = (i === 0 && aba.cabecalho !== false) ? 1 : 0;
+        return celula(letraColuna(j) + (i + 1), v, estilo);
+      }).join("");
+      return '<row r="' + (i + 1) + '">' + celulas + "</row>";
+    }).join("");
+
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      (larguras ? "<cols>" + larguras + "</cols>" : "") +
+      "<sheetData>" + linhas + "</sheetData></worksheet>";
+  }
+
+  var ESTILOS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font>' +
+    '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts>' +
+    '<fills count="3"><fill><patternFill patternType="none"/></fill>' +
+    '<fill><patternFill patternType="gray125"/></fill>' +
+    '<fill><patternFill patternType="solid"><fgColor rgb="FF0D5C63"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+    '<borders count="1"><border/></borders>' +
+    '<cellStyleXfs count="1"><xf/></cellStyleXfs>' +
+    '<cellXfs count="2"><xf xfId="0"/>' +
+    '<xf xfId="0" fontId="1" fillId="2" applyFont="1" applyFill="1"><alignment vertical="center"/></xf></cellXfs>' +
+    "</styleSheet>";
+
+  /**
+   * Gera o arquivo. abas = [{nome, linhas:[[...]], larguras:[]}]
+   * @returns {Blob}
+   */
+  function criarXLSX(abas) {
+    var entradas = [];
+
+    function add(nome, texto) {
+      entradas.push({ nome: nome, dados: enc.encode(texto) });
+    }
+
+    add("[Content_Types].xml",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      abas.map(function (_, i) {
+        return '<Override PartName="/xl/worksheets/sheet' + (i + 1) +
+          '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+      }).join("") + "</Types>");
+
+    add("_rels/.rels",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+      "</Relationships>");
+
+    add("xl/workbook.xml",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+      'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
+      abas.map(function (a, i) {
+        return '<sheet name="' + esc(a.nome) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>';
+      }).join("") + "</sheets></workbook>");
+
+    add("xl/_rels/workbook.xml.rels",
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      abas.map(function (_, i) {
+        return '<Relationship Id="rId' + (i + 1) +
+          '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' +
+          (i + 1) + '.xml"/>';
+      }).join("") +
+      '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      "</Relationships>");
+
+    add("xl/styles.xml", ESTILOS);
+    abas.forEach(function (a, i) { add("xl/worksheets/sheet" + (i + 1) + ".xml", folha(a)); });
+
+    return zipar(entradas);
+  }
+
+  // ---------- leitura ----------
+
+  function inflar(bytes, metodo) {
+    if (metodo === 0) return Promise.resolve(bytes);
+    if (typeof DecompressionStream === "undefined") {
+      return Promise.reject(new Error("Este navegador não consegue abrir .xlsx. Salve a planilha como CSV e importe o CSV."));
+    }
+    var fluxo = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Response(fluxo).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+  }
+
+  function le(vetor, pos, bytes) {
+    var v = 0;
+    for (var i = bytes - 1; i >= 0; i--) v = v * 256 + vetor[pos + i];
+    return v;
+  }
+
+  /** Abre o zip e devolve {caminho: Uint8Array} das entradas pedidas. */
+  function desziparr(buffer, querido) {
+    var b = new Uint8Array(buffer);
+    // Acha o fim do diretório central, varrendo de trás para frente.
+    var fim = -1;
+    for (var i = b.length - 22; i >= 0 && i > b.length - 66000; i--) {
+      if (le(b, i, 4) === 0x06054b50) { fim = i; break; }
+    }
+    if (fim < 0) return Promise.reject(new Error("Arquivo não parece ser um .xlsx válido."));
+
+    var total = le(b, fim + 10, 2);
+    var pos = le(b, fim + 16, 4);
+    var tarefas = [];
+
+    for (var n = 0; n < total; n++) {
+      if (le(b, pos, 4) !== 0x02014b50) break;
+      var metodo = le(b, pos + 10, 2);
+      var comprimido = le(b, pos + 20, 4);
+      var tamNome = le(b, pos + 28, 2);
+      var tamExtra = le(b, pos + 30, 2);
+      var tamCom = le(b, pos + 32, 2);
+      var local = le(b, pos + 42, 4);
+      var nome = new TextDecoder().decode(b.subarray(pos + 46, pos + 46 + tamNome));
+
+      if (querido(nome)) {
+        var inicio = local + 30 + le(b, local + 26, 2) + le(b, local + 28, 2);
+        tarefas.push(inflar(b.subarray(inicio, inicio + comprimido), metodo)
+          .then((function (nome) {
+            return function (dados) { return { nome: nome, dados: dados }; };
+          })(nome)));
+      }
+      pos += 46 + tamNome + tamExtra + tamCom;
+    }
+
+    return Promise.all(tarefas).then(function (lista) {
+      var mapa = {};
+      lista.forEach(function (e) { mapa[e.nome] = e.dados; });
+      return mapa;
+    });
+  }
+
+  function texto(bytes) { return new TextDecoder().decode(bytes); }
+
+  function desescapa(s) {
+    return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'").replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(+n); })
+      .replace(/&amp;/g, "&");
+  }
+
+  /** Data do Excel (número de série) → "AAAA-MM-DD". */
+  function dataDeSerie(n) {
+    var ms = Math.round((n - 25569) * 86400000);   // 25569 = 01/01/1970 no calendário do Excel
+    var d = new Date(ms);
+    if (isNaN(d.getTime())) return "";
+    return d.toISOString().slice(0, 10);
+  }
+
+  /**
+   * Lê a primeira aba do arquivo.
+   * @returns {Promise<Array<Array<string|number>>>} linhas × colunas
+   */
+  function lerXLSX(buffer) {
+    return desziparr(buffer, function (nome) {
+      return nome === "xl/sharedStrings.xml" || /^xl\/worksheets\/sheet1\.xml$/.test(nome);
+    }).then(function (partes) {
+      var folhaXml = partes["xl/worksheets/sheet1.xml"];
+      if (!folhaXml) throw new Error("Não achei a primeira planilha do arquivo.");
+
+      var compartilhadas = [];
+      if (partes["xl/sharedStrings.xml"]) {
+        var xmlS = texto(partes["xl/sharedStrings.xml"]);
+        var itens = xmlS.match(/<si[\s>][\s\S]*?<\/si>|<si\/>/g) || [];
+        compartilhadas = itens.map(function (si) {
+          var pedacos = si.match(/<t[^>]*>([\s\S]*?)<\/t>/g) || [];
+          return pedacos.map(function (t) {
+            return desescapa(t.replace(/<t[^>]*>/, "").replace(/<\/t>/, ""));
+          }).join("");
+        });
+      }
+
+      var xml = texto(folhaXml);
+      var linhas = [];
+      var regexLinha = /<row[^>]*r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g;
+      var m;
+      while ((m = regexLinha.exec(xml))) {
+        var numero = +m[1] - 1;
+        var celulas = [];
+        var regexCel = /<c([^>]*)>([\s\S]*?)<\/c>|<c([^>]*)\/>/g;
+        var c;
+        while ((c = regexCel.exec(m[2]))) {
+          var atributos = c[1] || c[3] || "";
+          var conteudo = c[2] || "";
+          var refm = /r="([A-Z]+)\d+"/.exec(atributos);
+          var coluna = 0;
+          if (refm) {
+            var letras = refm[1];
+            for (var i = 0; i < letras.length; i++) coluna = coluna * 26 + (letras.charCodeAt(i) - 64);
+            coluna -= 1;
+          } else {
+            coluna = celulas.length;
+          }
+
+          var tipo = (/t="([^"]+)"/.exec(atributos) || [])[1] || "n";
+          var valor = "";
+          if (tipo === "inlineStr") {
+            valor = (conteudo.match(/<t[^>]*>([\s\S]*?)<\/t>/g) || []).map(function (t) {
+              return desescapa(t.replace(/<t[^>]*>/, "").replace(/<\/t>/, ""));
+            }).join("");
+          } else {
+            var vm = /<v>([\s\S]*?)<\/v>/.exec(conteudo);
+            var bruto = vm ? desescapa(vm[1]) : "";
+            if (tipo === "s") valor = compartilhadas[+bruto] || "";
+            else if (tipo === "str" || tipo === "e") valor = bruto;
+            else if (bruto === "") valor = "";
+            else valor = Number(bruto);
+          }
+          celulas[coluna] = valor;
+        }
+        for (var k = 0; k < celulas.length; k++) if (celulas[k] === undefined) celulas[k] = "";
+        linhas[numero] = celulas;
+      }
+      for (var j = 0; j < linhas.length; j++) if (!linhas[j]) linhas[j] = [];
+      return linhas;
+    });
+  }
+
+  window.XLSX = { criar: criarXLSX, ler: lerXLSX, dataDeSerie: dataDeSerie };
+})();
+
+</script>
+<script>
 /* Onde os dados ficam.
  *
  * Dois modos, mesma interface:
@@ -3066,12 +3561,15 @@ window.SEED = {
     });
   }
 
-  function brlSigla(v) { return "R$ " + brl(v); }
+  /** Dinheiro como aparece na tela: "R$ 1.235", sem centavos. */
+  function moeda(v) { return "R$ " + brl(v, 0); }
 
-  /** Compacta valores altos para eixos de gráfico: 12.400 → "12,4 mil". */
+  var brlSigla = moeda;   // nome antigo, mantido para não quebrar chamadas
+
+  /** Compacta valores altos para eixos de gráfico: 12.000 → "12 mil". */
   function brlCurto(v) {
     var n = Number(v) || 0;
-    if (Math.abs(n) >= 1000) return brl(n / 1000, 1) + " mil";
+    if (Math.abs(n) >= 1000) return brl(n / 1000, 0) + " mil";
     return brl(n, 0);
   }
 
@@ -3972,7 +4470,7 @@ window.SEED = {
     get db() { return db; },
 
     // formatação
-    brl: brl, brlSigla: brlSigla, brlCurto: brlCurto, parseNum: parseNum, round2: round2,
+    brl: brl, moeda: moeda, brlSigla: brlSigla, brlCurto: brlCurto, parseNum: parseNum, round2: round2,
     fmtData: fmtData, fmtDataCurta: fmtDataCurta, mesRefDe: mesRefDe, mesRotulo: mesRotulo,
     mesNome: mesNome, anoDe: anoDe, iniciais: iniciais, normal: normal, ordenaPt: ordenaPt,
     diasEntre: diasEntre, addDias: addDias, toISO: toISO, toDate: toDate, pad: pad,
@@ -4028,7 +4526,7 @@ window.SEED = {
 
   function dinheiro(v, zeroFraco) {
     if (!v && zeroFraco !== false) return '<span class="zero">—</span>';
-    return C.brl(v);
+    return C.moeda(v);
   }
 
   function chipStatus(status) {
@@ -4148,7 +4646,7 @@ window.SEED = {
       return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center">' +
         '<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(i.nome) +
         (i.sub ? ' <span class="t-sub">' + esc(i.sub) + "</span>" : "") + "</span>" +
-        '<span class="num" style="font-size:12.5px">' + C.brl(i.valor) + "</span>" +
+        '<span class="num" style="font-size:12.5px">' + C.moeda(i.valor) + "</span>" +
         '<span style="grid-column:1/-1;height:7px;background:var(--surface-2);border-radius:3px;overflow:hidden">' +
         '<span style="display:block;height:100%;width:' + pct + '%;background:var(--s1);border-radius:3px"></span></span>' +
         "</div>";
@@ -4181,12 +4679,12 @@ window.SEED = {
     var html = "";
 
     html += '<div class="kpis">' +
-      kpi("Custo total " + ano, "R$ " + C.brl(r.totalAno, 0),
+      kpi("Custo total " + ano, C.moeda(r.totalAno),
           r.nViagens + " viagens · " + r.noites + " pernoites") +
-      kpi("Viagens (sem Uber)", "R$ " + C.brl(r.totalViagens, 0),
+      kpi("Viagens (sem Uber)", C.moeda(r.totalViagens),
           "Média de " + C.brlSigla(mediaViagem) + " por viagem") +
-      kpi("Uber corporativo", "R$ " + C.brl(r.totalUber, 0),
-          (r.totalAno ? C.brl(r.totalUber / r.totalAno * 100, 1) : "0") + "% do custo total · " + uber.n + " corridas") +
+      kpi("Uber corporativo", C.moeda(r.totalUber),
+          (r.totalAno ? C.brl(r.totalUber / r.totalAno * 100, 0) : "0") + "% do custo total · " + uber.n + " corridas") +
       kpi("Colaboradores com despesa", String(r.pessoas),
           "Média de " + C.brlSigla(mediaPessoa) + " por pessoa") +
       "</div>";
@@ -4210,20 +4708,25 @@ window.SEED = {
       "<th>Categoria</th>" + mesesAtivos.map(function (m) { return '<th class="n">' + esc(C.mesRotulo(m)) + "</th>"; }).join("") +
       '<th class="n">Total ano</th><th class="n">%</th></tr></thead><tbody>' +
       r.categorias.map(function (cat, i) {
-        var totalCat = mesesAtivos.reduce(function (s, m) { return s + r.porCategoria[cat][m]; }, 0);
-        if (!totalCat) return "";
-        return "<tr><td><span class='legend-swatch' style='display:inline-block;background:" + CORES[i % CORES.length] +
+        // Guarda a cor pela posição original, para bater com a do gráfico.
+        return { cat: cat, cor: CORES[i % CORES.length],
+                 total: mesesAtivos.reduce(function (s, m) { return s + r.porCategoria[cat][m]; }, 0) };
+      }).filter(function (l) { return l.total > 0; })
+        .sort(function (a, b) { return b.total - a.total; })
+        .map(function (linha) {
+        var cat = linha.cat, totalCat = linha.total;
+        return "<tr><td><span class='legend-swatch' style='display:inline-block;background:" + linha.cor +
           ";margin-right:7px'></span>" + esc(cat) + "</td>" +
           mesesAtivos.map(function (m) {
             var v = r.porCategoria[cat][m];
-            return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.brl(v) : "—") + "</td>";
+            return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.moeda(v) : "—") + "</td>";
           }).join("") +
-          '<td class="n">' + C.brl(totalCat) + "</td>" +
-          '<td class="n">' + (r.totalAno ? C.brl(totalCat / r.totalAno * 100, 1) : "0,0") + "%</td></tr>";
+          '<td class="n">' + C.moeda(totalCat) + "</td>" +
+          '<td class="n">' + (r.totalAno ? C.brl(totalCat / r.totalAno * 100, 0) : "0") + "%</td></tr>";
       }).join("") +
       "</tbody><tfoot><tr><td>TOTAL</td>" +
-      mesesAtivos.map(function (m) { return '<td class="n">' + C.brl(r.totalMes[m]) + "</td>"; }).join("") +
-      '<td class="n">' + C.brl(r.totalAno) + '</td><td class="n">100%</td></tr>' +
+      mesesAtivos.map(function (m) { return '<td class="n">' + C.moeda(r.totalMes[m]) + "</td>"; }).join("") +
+      '<td class="n">' + C.moeda(r.totalAno) + '</td><td class="n">100%</td></tr>' +
       '<tr><td class="t-sub">Colaboradores no mês</td>' +
       mesesAtivos.map(function (m) { return '<td class="n t-sub">' + Object.keys(r.pessoasMes[m]).length + "</td>"; }).join("") +
       '<td class="n t-sub">' + r.pessoas + '</td><td></td></tr></tfoot></table></div></div></div>';
@@ -4248,8 +4751,8 @@ window.SEED = {
         return "<tr><td>" + esc(a) + "</td>" +
           mesesAtivos.map(function (m) {
             var v = r.porArea[a][m];
-            return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.brl(v, 0) : "—") + "</td>";
-          }).join("") + '<td class="n">' + C.brl(t, 0) + "</td></tr>";
+            return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.moeda(v) : "—") + "</td>";
+          }).join("") + '<td class="n">' + C.moeda(t) + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
     html += '<div class="card"><div class="card-head"><h2>Top 10 colaboradores</h2>' +
@@ -4302,6 +4805,7 @@ window.SEED = {
       '<h2>Viagens</h2>' +
       '<span class="chip">' + lista.length + " lançamento" + (lista.length === 1 ? "" : "s") + "</span>" +
       '<span class="grow"></span>' +
+      '<button class="btn btn-sm" data-acao="importar-viagens">Importar planilha</button>' +
       '<button class="btn btn-sm" data-acao="exportar-viagens">Exportar CSV</button>' +
       '<button class="btn btn-primary btn-sm" data-acao="nova-viagem">+ Nova viagem</button>' +
       "</div>" +
@@ -4357,12 +4861,12 @@ window.SEED = {
         (v.diarias ? " · " + C.brl(v.diarias, 0) + " diárias" : "") + "</span></td>" +
         '<td class="n">' + dinheiro(v.aereo) + "</td>" +
         '<td class="n">' + dinheiro(v.hospedagem) +
-        (v.valorDiaria ? '<br><span class="t-sub">' + C.brl(v.valorDiaria) + "/noite</span>" : "") + "</td>" +
+        (v.valorDiaria ? '<br><span class="t-sub">' + C.moeda(v.valorDiaria) + "/noite</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(v.alimentacao) +
         (v.difAlim ? '<br><span class="t-sub" style="color:var(--' + (v.difAlim < 0 ? "critical" : "warning") + ')">' +
-          (v.difAlim > 0 ? "+" : "") + C.brl(v.difAlim) + "</span>" : "") + "</td>" +
+          (v.difAlim > 0 ? "+" : "") + C.moeda(v.difAlim) + "</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(outros) + "</td>" +
-        '<td class="n"><strong>' + C.brl(v.total) + "</strong></td>" +
+        '<td class="n"><strong>' + C.moeda(v.total) + "</strong></td>" +
         "<td>" + chipStatus(v.status) + "</td>" +
         "<td>" + chipsConferencia(v) + "</td>" +
         '<td class="col-acoes"><div class="actions-cell">' +
@@ -4374,11 +4878,11 @@ window.SEED = {
     });
 
     html += "</tbody><tfoot><tr><td colspan='4'>" + lista.length + " lançamentos · " + noites + " pernoites</td>" +
-      '<td class="n">' + C.brl(lista.reduce(function (s, v) { return s + (Number(v.aereo) || 0); }, 0)) + "</td>" +
-      '<td class="n">' + C.brl(lista.reduce(function (s, v) { return s + v.hospedagem; }, 0)) + "</td>" +
-      '<td class="n">' + C.brl(lista.reduce(function (s, v) { return s + (Number(v.alimentacao) || 0); }, 0)) + "</td>" +
-      '<td class="n">' + C.brl(lista.reduce(function (s, v) { return s + (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0); }, 0)) + "</td>" +
-      '<td class="n">' + C.brl(soma) + '</td><td colspan="2"></td><td class="col-acoes"></td></tr></tfoot></table></div></div></div>';
+      '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.aereo) || 0); }, 0)) + "</td>" +
+      '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + v.hospedagem; }, 0)) + "</td>" +
+      '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.alimentacao) || 0); }, 0)) + "</td>" +
+      '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0); }, 0)) + "</td>" +
+      '<td class="n">' + C.moeda(soma) + '</td><td colspan="2"></td><td class="col-acoes"></td></tr></tfoot></table></div></div></div>';
 
     return html;
   }
@@ -4463,8 +4967,8 @@ window.SEED = {
     var html = "";
 
     html += '<div class="kpis">' +
-      kpi("Gasto no período", "R$ " + C.brl(u.total, 0), u.n + " corridas") +
-      kpi("Ticket médio", "R$ " + C.brl(u.ticket), "Corrida mais cara: " + C.brlSigla(u.maiorValor)) +
+      kpi("Gasto no período", C.moeda(u.total), u.n + " corridas") +
+      kpi("Ticket médio", C.moeda(u.ticket), "Corrida mais cara: " + C.brlSigla(u.maiorValor)) +
       kpi("De/para aeroporto", C.brl(u.pctAeroporto * 100, 0) + "%", u.aeroporto + " de " + u.n + " corridas") +
       kpi("Corridas acima de R$ 150", String(u.acima150), C.brlSigla(u.valorAcima150) + " concentrados") +
       "</div>";
@@ -4502,7 +5006,7 @@ window.SEED = {
       mesesU.map(function (m) {
         var d = u.porMes[m];
         return "<tr><td>" + esc(C.mesRotulo(m)) + '</td><td class="n">' + d.n + "</td>" +
-          '<td class="n">' + C.brl(d.valor) + '</td><td class="n">' + (d.n ? C.brl(d.valor / d.n) : "—") + "</td>" +
+          '<td class="n">' + C.moeda(d.valor) + '</td><td class="n">' + (d.n ? C.moeda(d.valor / d.n) : "—") + "</td>" +
           '<td class="n">' + (d.n ? C.brl(d.aeroporto / d.n * 100, 0) + "%" : "—") + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
@@ -4511,7 +5015,7 @@ window.SEED = {
       '<th class="n">Corridas</th><th class="n">Valor</th><th class="n">Ticket</th></tr></thead><tbody>' +
       u.porServico.map(function (s) {
         return "<tr><td>" + esc(s.nome) + '</td><td class="n">' + s.n + "</td>" +
-          '<td class="n">' + C.brl(s.valor) + '</td><td class="n">' + (s.n ? C.brl(s.valor / s.n) : "—") + "</td></tr>";
+          '<td class="n">' + C.moeda(s.valor) + '</td><td class="n">' + (s.n ? C.moeda(s.valor / s.n) : "—") + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
     html += '</div><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(400px,1fr))">';
@@ -4563,7 +5067,7 @@ window.SEED = {
           "<td>" + esc(c.servico || "—") + '<br><span class="t-sub">' + esc(c.cidade || "") + "</span></td>" +
           '<td style="max-width:280px"><span class="t-sub">' + esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>" +
           (c.aeroporto ? ' <span class="chip accent">aeroporto</span>' : "") + "</td>" +
-          '<td class="n">' + C.brl(c.valor) + (c.tipo !== "Fare" ? '<br><span class="t-sub">' + esc(c.tipo) + "</span>" : "") + "</td>" +
+          '<td class="n">' + C.moeda(c.valor) + (c.tipo !== "Fare" ? '<br><span class="t-sub">' + esc(c.tipo) + "</span>" : "") + "</td>" +
           '<td><span class="chip ' + classe + '">' + (classe === "warn" ? "⚠ " : "") + esc(aud.texto) + "</span></td>" +
           '<td class="t-sub">' + esc(c.alerta) + "</td>" +
           '<td class="col-acoes"><div class="actions-cell">' +
@@ -4624,7 +5128,7 @@ window.SEED = {
         (c.aeroportoBase ? '<br><span class="route">' + esc(c.aeroportoBase) + "</span>" : "") + "</td>" +
         '<td class="n">' + (g ? g.viagens : '<span class="zero">—</span>') + "</td>" +
         '<td class="n">' + (g && g.noites ? g.noites : '<span class="zero">—</span>') + "</td>" +
-        '<td class="n">' + (g ? "<strong>" + C.brl(g.total) + "</strong>" : '<span class="zero">—</span>') + "</td>" +
+        '<td class="n">' + (g ? "<strong>" + C.moeda(g.total) + "</strong>" : '<span class="zero">—</span>') + "</td>" +
         '<td class="col-acoes"><div class="actions-cell">' +
         '<button class="icon-btn" data-acao="nova-viagem-para" data-nome="' + esc(c.nome) + '" title="Lançar viagem para ' + esc(c.nome) + '" aria-label="Lançar viagem">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>' +
@@ -4647,13 +5151,13 @@ window.SEED = {
         pc.map(function (l) {
           return "<tr><td>" + esc(l.nome) + "</td><td>" + esc(l.area) + "</td>" +
             ["aereo", "hospedagem", "alimentacao", "transporte", "alteracoes", "uber"].map(function (k) {
-              return '<td class="n' + (l[k] ? "" : " zero") + '">' + (l[k] ? C.brl(l[k]) : "—") + "</td>";
+              return '<td class="n' + (l[k] ? "" : " zero") + '">' + (l[k] ? C.moeda(l[k]) : "—") + "</td>";
             }).join("") +
-            '<td class="n"><strong>' + C.brl(l.total) + "</strong></td></tr>";
+            '<td class="n"><strong>' + C.moeda(l.total) + "</strong></td></tr>";
         }).join("") +
         "</tbody><tfoot><tr><td colspan='2'>TOTAL</td>" +
         ["aereo", "hospedagem", "alimentacao", "transporte", "alteracoes", "uber", "total"].map(function (k) {
-          return '<td class="n">' + C.brl(pc.reduce(function (s, l) { return s + l[k]; }, 0)) + "</td>";
+          return '<td class="n">' + C.moeda(pc.reduce(function (s, l) { return s + l[k]; }, 0)) + "</td>";
         }).join("") + "</tr></tfoot></table></div></div></div>";
     }
 
@@ -4714,6 +5218,7 @@ window.SEED = {
       '<button class="btn" data-acao="backup-restaurar">Restaurar backup…</button>' +
       "</div>" +
       '<div class="row">' +
+      '<button class="btn" data-acao="importar-viagens">Importar viagens…</button>' +
       '<button class="btn" data-acao="exportar-viagens">Viagens (.csv)</button>' +
       '<button class="btn" data-acao="exportar-uber">Uber (.csv)</button>' +
       '<button class="btn" data-acao="exportar-colaborador">Por colaborador (.csv)</button>' +
@@ -4992,6 +5497,8 @@ window.SEED = {
         estado.filtros = { busca: "", mes: "", area: "", status: "", tipo: "", avisos: false, ordem: estado.filtros.ordem };
         render(); break;
       case "exportar-viagens": baixar("viagens.csv", C.csvViagens(), "text/csv"); break;
+      case "importar-viagens": abrirImportacao(); break;
+      case "baixar-modelo": baixarModelo(); break;
       case "exportar-uber": baixar("uber.csv", C.csvUber(), "text/csv"); break;
       case "exportar-colaborador": baixar("por-colaborador-" + estado.ano + ".csv", C.csvColaborador(estado.ano), "text/csv"); break;
       case "backup-baixar": baixar("backup-viagens-" + hoje() + ".json", JSON.stringify(C.db, null, 1), "application/json"); break;
@@ -5084,7 +5591,9 @@ window.SEED = {
       '<span class="hint">Mesmo destino e mesmas datas para todos. Uma linha por pessoa.</span></div>' +
 
       V.campo("Destino", '<input type="text" name="destino" list="destinos" value="' + esc(v.destino) + '" required>', "c3") +
-      V.campo("Aeroporto de origem", '<input type="text" name="aeroportoOrigem" value="' + esc(v.aeroportoOrigem) + '" placeholder="CNF - Confins">', "c3") +
+      V.campo("Aeroporto de origem",
+              '<input type="text" name="aeroportoOrigem" list="aeroportos" autocomplete="off" value="' +
+              esc(v.aeroportoOrigem) + '" placeholder="Selecione ou digite">', "c3") +
 
       '<div class="section-label"><span class="eyebrow">Período</span></div>' +
       V.campo("Data de ida", '<input type="date" name="dataIda" value="' + esc(v.dataIda) + '" required>', "c3") +
@@ -5117,7 +5626,8 @@ window.SEED = {
       "</div>" +
 
       '<div class="summary" style="margin-top:16px" data-resumo></div>' +
-      '<datalist id="destinos">' + destinos.map(function (d) { return '<option value="' + esc(d) + '">'; }).join("") + "</datalist>";
+      '<datalist id="destinos">' + destinos.map(function (d) { return '<option value="' + esc(d) + '">'; }).join("") + "</datalist>" +
+      '<datalist id="aeroportos">' + window.BR.opcoesAeroporto() + "</datalist>";
 
     var dialogo = abrirModal({
       titulo: novo ? "Nova viagem" : (ehAlteracao ? "Alteração da viagem #" + v.refId : "Viagem #" + v.id),
@@ -5383,6 +5893,281 @@ window.SEED = {
     return Object.keys(set).sort(C.ordenaPt);
   }
 
+
+  // ---------- importar viagens de planilha ----------
+
+  /** Coluna do modelo → campo da viagem. A comparação ignora acento e caixa. */
+  var COLUNAS_MODELO = [
+    { titulo: "Colaborador", campo: "colaborador", largura: 34, obrigatorio: true,
+      exemplo: "", aliases: ["colaborador", "nome", "nome completo"] },
+    { titulo: "Destino", campo: "destino", largura: 20, obrigatorio: true,
+      exemplo: "São Paulo/SP", aliases: ["destino", "cidade destino"] },
+    { titulo: "Aeroporto de origem", campo: "aeroportoOrigem", largura: 24,
+      exemplo: "CNF - Confins", aliases: ["aeroporto de origem", "aeroporto", "origem"] },
+    { titulo: "Data de ida", campo: "dataIda", largura: 13, obrigatorio: true, tipo: "data",
+      exemplo: "05/10/2026", aliases: ["data de ida", "data ida", "ida", "inicio"] },
+    { titulo: "Data de volta", campo: "dataVolta", largura: 13, obrigatorio: true, tipo: "data",
+      exemplo: "09/10/2026", aliases: ["data de volta", "data volta", "volta", "retorno", "fim"] },
+    { titulo: "Aéreo (R$)", campo: "aereo", largura: 12, tipo: "numero",
+      exemplo: 1234.56, aliases: ["aereo (r$)", "aereo", "passagem", "aereo r$"] },
+    { titulo: "Diárias de hotel", campo: "diarias", largura: 15, tipo: "numero",
+      exemplo: 4, aliases: ["diarias de hotel", "diarias", "n diarias"] },
+    { titulo: "Valor da diária (R$)", campo: "valorDiaria", largura: 18, tipo: "numero",
+      exemplo: 280, aliases: ["valor da diaria (r$)", "valor da diaria", "valor diaria", "diaria"] },
+    { titulo: "Alimentação (R$)", campo: "alimentacao", largura: 17, tipo: "numero",
+      exemplo: 400, aliases: ["alimentacao (r$)", "alimentacao"] },
+    { titulo: "Transporte/Auxílio (R$)", campo: "transporte", largura: 21, tipo: "numero",
+      exemplo: 0, aliases: ["transporte/auxilio (r$)", "transporte/auxilio", "transporte", "auxilio"] },
+    { titulo: "Status", campo: "status", largura: 12,
+      exemplo: "Fechado", aliases: ["status", "situacao"] },
+    { titulo: "Observação", campo: "obs", largura: 34,
+      exemplo: "aereo + hosp", aliases: ["observacao", "obs", "comentario"] }
+  ];
+
+  function baixarModelo() {
+    var exemplo = C.colaboradoresOrdenados().filter(function (c) { return c.status === "Ativo"; })[0];
+    var linhaExemplo = COLUNAS_MODELO.map(function (c) {
+      return c.campo === "colaborador" ? (exemplo ? exemplo.nome : "") : c.exemplo;
+    });
+
+    var abas = [
+      { nome: "Viagens",
+        larguras: COLUNAS_MODELO.map(function (c) { return c.largura; }),
+        linhas: [COLUNAS_MODELO.map(function (c) { return c.titulo; }), linhaExemplo] },
+
+      { nome: "Como preencher", larguras: [30, 70],
+        linhas: [
+          ["Coluna", "O que preencher"]
+        ].concat(COLUNAS_MODELO.map(function (c) {
+          return [c.titulo + (c.obrigatorio ? " (obrigatório)" : ""), textoAjuda(c)];
+        })).concat([
+          ["", ""],
+          ["Datas", "No formato dia/mês/ano. Célula formatada como data também funciona."],
+          ["Valores", "Só números. 1234,56 ou 1234.56 — sem o R$."],
+          ["Alimentação", "Se deixar vazio, entra a regra: " + C.brlSigla(C.porPernoite()) + " por pernoite."],
+          ["Diárias", "Se deixar vazio, entra o número de noites do período."],
+          ["Linha de exemplo", "Apague a linha 2 da aba Viagens antes de importar, ou deixe — ela é conferida como qualquer outra."]
+        ]) },
+
+      { nome: "Colaboradores", larguras: [34, 30, 26],
+        linhas: [["Nome (use exatamente assim)", "Área", "Aeroporto base"]].concat(
+          C.colaboradoresOrdenados().filter(function (c) { return c.status !== "Desligado"; })
+            .map(function (c) { return [c.nome, c.area, c.aeroportoBase]; })) },
+
+      { nome: "Aeroportos", larguras: [26, 26, 6],
+        linhas: [["Aeroporto", "Cidade", "UF"]].concat(
+          window.BR.AEROPORTOS.map(function (a) { return [a.valor, a.cidade, a.uf]; })) }
+    ];
+
+    baixar("modelo-importacao-viagens.xlsx", window.XLSX.criar(abas),
+           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  }
+
+  function textoAjuda(c) {
+    if (c.campo === "colaborador") return "Nome como está no cadastro — veja a aba Colaboradores.";
+    if (c.campo === "status") return "Um destes: " + C.db.params.statuses.join(", ") + ".";
+    if (c.tipo === "data") return "Dia/mês/ano, por exemplo 05/10/2026.";
+    if (c.tipo === "numero") return "Número, sem o R$.";
+    if (c.campo === "aeroportoOrigem") return "Opcional. Veja a aba Aeroportos; vazio usa o aeroporto base da pessoa.";
+    return "Texto livre.";
+  }
+
+  function normalizaCabecalho(v) {
+    return C.normal(String(v || "").replace(/\s+/g, " ").trim());
+  }
+
+  /** Data vinda do Excel: texto dd/mm/aaaa, ISO ou número de série. */
+  function dataDaCelula(valor) {
+    if (typeof valor === "number" && valor > 20000 && valor < 80000) return window.XLSX.dataDeSerie(valor);
+    var texto = String(valor || "").trim();
+    if (!texto) return "";
+    var br = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(texto);
+    if (br) {
+      var ano = br[3].length === 2 ? "20" + br[3] : br[3];
+      return ano + "-" + C.pad(+br[2]) + "-" + C.pad(+br[1]);
+    }
+    var iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(texto);
+    return iso ? iso[0] : "";
+  }
+
+  /** Lê o arquivo escolhido e devolve as linhas como matriz. */
+  function lerPlanilha(arquivo) {
+    if (/\.csv$/i.test(arquivo.name)) {
+      return arquivo.text().then(function (texto) {
+        var sep = (texto.split("\n")[0].match(/;/g) || []).length >= (texto.split("\n")[0].match(/,/g) || []).length ? ";" : ",";
+        return texto.replace(/^﻿/, "").split(/\r?\n/).filter(function (l) { return l.trim(); })
+          .map(function (linha) {
+            return linha.split(sep).map(function (c) { return c.replace(/^"|"$/g, "").trim(); });
+          });
+      });
+    }
+    return arquivo.arrayBuffer().then(window.XLSX.ler);
+  }
+
+  /** Converte a matriz em viagens, com o motivo de cada linha recusada. */
+  function interpretaPlanilha(linhas) {
+    var cabecalho = -1, mapa = {};
+    for (var i = 0; i < Math.min(linhas.length, 15); i++) {
+      var atual = {};
+      (linhas[i] || []).forEach(function (celula, j) {
+        var chave = normalizaCabecalho(celula);
+        COLUNAS_MODELO.forEach(function (c) {
+          if (atual[c.campo] === undefined && c.aliases.indexOf(chave) > -1) atual[c.campo] = j;
+        });
+      });
+      if (atual.colaborador !== undefined && atual.dataIda !== undefined) { cabecalho = i; mapa = atual; break; }
+    }
+    if (cabecalho < 0) {
+      throw new Error("Não achei o cabeçalho. A planilha precisa ter as colunas Colaborador, Data de ida e Data de volta — baixe o modelo.");
+    }
+
+    var pessoas = C.colaboradoresOrdenados();
+    var resultado = [];
+
+    for (var l = cabecalho + 1; l < linhas.length; l++) {
+      var linha = linhas[l] || [];
+      var bruto = function (campo) { return mapa[campo] === undefined ? "" : linha[mapa[campo]]; };
+      if (!COLUNAS_MODELO.some(function (c) { return String(bruto(c.campo) || "").trim(); })) continue;   // linha vazia
+
+      var erros = [];
+      var nome = String(bruto("colaborador") || "").trim();
+      var pessoa = null;
+      if (!nome) erros.push("sem colaborador");
+      else {
+        pessoa = pessoas.filter(function (p) { return C.normal(p.nome) === C.normal(nome); })[0] ||
+                 pessoas.filter(function (p) { return C.normal(p.nome).indexOf(C.normal(nome)) === 0; })[0];
+        if (!pessoa) erros.push("colaborador não cadastrado: " + nome);
+        else if (pessoa.status === "Desligado") erros.push(pessoa.nome + " está desligado");
+      }
+
+      var ida = dataDaCelula(bruto("dataIda"));
+      var volta = dataDaCelula(bruto("dataVolta"));
+      if (!ida) erros.push("data de ida inválida");
+      if (!volta) erros.push("data de volta inválida");
+      if (ida && volta && C.diasEntre(ida, volta) < 0) erros.push("volta antes da ida");
+
+      var noites = ida && volta ? Math.max(0, C.diasEntre(ida, volta)) : 0;
+      var status = String(bruto("status") || "").trim();
+      if (status && C.db.params.statuses.indexOf(status) === -1) {
+        erros.push("status desconhecido: " + status);
+        status = "";
+      }
+
+      var temDiarias = String(bruto("diarias") || "").trim() !== "";
+      var temAlim = String(bruto("alimentacao") || "").trim() !== "";
+
+      var viagem = {
+        tipo: "Viagem",
+        colaborador: pessoa ? pessoa.nome : nome,
+        destino: String(bruto("destino") || "").trim(),
+        aeroportoOrigem: String(bruto("aeroportoOrigem") || "").trim() || (pessoa ? pessoa.aeroportoBase : ""),
+        dataIda: ida,
+        dataVolta: volta,
+        aereo: C.parseNum(bruto("aereo")),
+        diarias: temDiarias ? C.parseNum(bruto("diarias")) : noites,
+        valorDiaria: C.parseNum(bruto("valorDiaria")),
+        alimentacao: temAlim ? C.parseNum(bruto("alimentacao")) : noites * C.porPernoite(),
+        transporte: C.parseNum(bruto("transporte")),
+        custoAlteracao: 0,
+        status: status || "Fechado",
+        refId: null, motivo: "", pendencias: "",
+        obs: String(bruto("obs") || "").trim()
+      };
+      if (!viagem.destino) erros.push("sem destino");
+
+      resultado.push({ linhaPlanilha: l + 1, viagem: viagem, erros: erros, calc: C.calc(viagem) });
+    }
+    return resultado;
+  }
+
+  function abrirImportacao() {
+    var dialogo = abrirModal({
+      titulo: "Importar viagens de uma planilha",
+      corpo:
+        '<div class="grid" style="gap:14px">' +
+        '<div class="note">Baixe o modelo, preencha uma linha por viagem e traga de volta. ' +
+        "Cada coluna diz o que espera, e o arquivo já vem com a lista de colaboradores e de aeroportos " +
+        "para copiar. Também aceito <strong>.csv</strong>.</div>" +
+        '<div class="row"><button class="btn btn-primary" data-acao="baixar-modelo">Baixar modelo (.xlsx)</button></div>' +
+        '<div class="field"><label for="arquivo-import">Planilha preenchida</label>' +
+        '<input type="file" id="arquivo-import" name="arquivo" accept=".xlsx,.csv"></div>' +
+        '<div data-previa></div></div>',
+      rodape: '<span class="grow t-sub" data-status-import></span>' +
+        '<button class="btn" data-acao="fechar">Cancelar</button>' +
+        '<button class="btn btn-primary" data-importar disabled>Importar</button>'
+    });
+
+    var entrada = dialogo.querySelector("#arquivo-import");
+    var previa = dialogo.querySelector("[data-previa]");
+    var aviso = dialogo.querySelector("[data-status-import]");
+    var botao = dialogo.querySelector("[data-importar]");
+    var validas = [];
+
+    entrada.addEventListener("change", function () {
+      var arquivo = entrada.files && entrada.files[0];
+      previa.innerHTML = "";
+      botao.disabled = true;
+      validas = [];
+      if (!arquivo) return;
+
+      aviso.textContent = "Lendo…";
+      lerPlanilha(arquivo).then(function (linhas) {
+        var itens = interpretaPlanilha(linhas);
+        validas = itens.filter(function (i) { return !i.erros.length; });
+        aviso.textContent = "";
+        botao.disabled = !validas.length;
+        botao.textContent = validas.length ? "Importar " + validas.length + " viagem(ns)" : "Importar";
+        previa.innerHTML = montaPrevia(itens);
+      }, function (e) {
+        aviso.textContent = "";
+        previa.innerHTML = '<div class="note warn">' + esc(e.message || "Não consegui ler o arquivo.") + "</div>";
+      });
+    });
+
+    botao.addEventListener("click", function () {
+      botao.disabled = true;
+      botao.textContent = "Importando…";
+      var feitas = 0;
+      // Uma de cada vez: no servidor, lançamentos simultâneos disputariam o mesmo ID.
+      validas.reduce(function (anterior, item) {
+        return anterior.then(function () {
+          return C.salvarViagem(item.viagem).then(function () { feitas++; });
+        });
+      }, Promise.resolve()).then(function () {
+        toast(feitas + " viagem(ns) importada(s)");
+        dialogo.close();
+      }, function (e) {
+        botao.disabled = false;
+        botao.textContent = "Importar";
+        aviso.textContent = (e && e.message) || "Falhou no meio da importação.";
+        aviso.style.color = "var(--critical)";
+        if (feitas) toast(feitas + " viagem(ns) importada(s) antes da falha");
+      });
+    });
+  }
+
+  function montaPrevia(itens) {
+    if (!itens.length) return '<div class="note warn">Nenhuma linha preenchida na planilha.</div>';
+    var comErro = itens.filter(function (i) { return i.erros.length; }).length;
+
+    return '<div class="row" style="gap:8px">' +
+      '<span class="chip ok">' + (itens.length - comErro) + " prontas</span>" +
+      (comErro ? '<span class="chip crit">' + comErro + " com problema</span>" : "") +
+      "</div>" +
+      '<div class="table-wrap" style="max-height:260px;margin-top:10px"><table><thead><tr>' +
+      '<th>Linha</th><th>Colaborador</th><th>Período</th><th class="n">Total</th><th>Situação</th>' +
+      "</tr></thead><tbody>" +
+      itens.map(function (i) {
+        return "<tr><td class='num t-sub'>" + i.linhaPlanilha + "</td>" +
+          "<td>" + esc(i.viagem.colaborador || "—") + "</td>" +
+          '<td class="nowrap num">' + C.fmtDataCurta(i.viagem.dataIda) + " → " + C.fmtDataCurta(i.viagem.dataVolta) + "</td>" +
+          '<td class="n">' + C.moeda(i.calc.total) + "</td>" +
+          "<td>" + (i.erros.length
+            ? '<span class="chip crit">' + esc(i.erros.join(" · ")) + "</span>"
+            : '<span class="chip ok">pronta</span>') + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+
   // ---------- colaborador ----------
 
   function abrirColaborador(c) {
@@ -5400,14 +6185,17 @@ window.SEED = {
         V.campo("Cargo", '<input type="text" name="cargo" value="' + esc(d.cargo) + '">', "c6") +
         V.campo("Gestor direto", '<input type="text" name="gestor" list="nomes" value="' + esc(d.gestor) + '">', "c6") +
         V.campo("Cidade", '<input type="text" name="cidade" value="' + esc(d.cidade) + '">', "c4") +
-        V.campo("UF", '<input type="text" name="uf" value="' + esc(d.uf) + '" maxlength="2">', "c3") +
-        V.campo("Aeroporto base", '<input type="text" name="aeroportoBase" value="' + esc(d.aeroportoBase) + '" placeholder="CNF - Confins">', "c4") +
+        V.campo("UF", '<select name="uf">' + window.BR.opcoesUF(d.uf) + "</select>", "c3") +
+        V.campo("Aeroporto base",
+                '<input type="text" name="aeroportoBase" list="aeroportos" autocomplete="off" value="' +
+                esc(d.aeroportoBase) + '" placeholder="Selecione ou digite">', "c4") +
         V.campo("Contrato", V.selectHTML("contrato", ["PJ", "CLT"], d.contrato), "c3") +
         V.campo("Modelo", V.selectHTML("modelo", ["Remoto", "Híbrido", "Presencial"], d.modelo), "c3") +
         V.campo("E-mail", '<input type="text" name="email" value="' + esc(d.email) + '">', "c6") +
         "</div>" +
         '<datalist id="areas">' + C.areas().map(function (a) { return '<option value="' + esc(a) + '">'; }).join("") + "</datalist>" +
         '<datalist id="nomes">' + nomes.map(function (n) { return '<option value="' + esc(n) + '">'; }).join("") + "</datalist>" +
+        '<datalist id="aeroportos">' + window.BR.opcoesAeroporto() + "</datalist>" +
         "</form>",
       rodape: '<span class="grow"></span>' +
         (novo ? "" : '<button class="btn btn-danger" data-acao="excluir-colab">Excluir</button>') +
@@ -5418,6 +6206,13 @@ window.SEED = {
 
     var form = dialogo.querySelector("form");
     var nomeAntigo = d.nome;
+
+    // Cidade preenchida e aeroporto vazio: sugere o aeroporto da própria cidade.
+    form.cidade.addEventListener("blur", function () {
+      if (form.aeroportoBase.value) return;
+      var achado = window.BR.aeroportoDaCidade(form.cidade.value, form.uf.value);
+      if (achado) form.aeroportoBase.value = achado.valor;
+    });
 
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
@@ -5589,28 +6384,34 @@ window.SEED = {
    * conteúdo para copiar.
    */
   function baixar(nome, conteudo, tipo) {
-    var bom = tipo === "text/csv" ? "\ufeff" : "";
+    var binario = conteudo instanceof Blob;
+    var dados = binario ? conteudo : (tipo === "text/csv" ? "\ufeff" : "") + conteudo;
 
     if (window.claude && typeof window.claude.use === "function") {
       window.claude.use("downloads").then(function (downloads) {
-        if (!downloads) { baixarLocal(nome, bom + conteudo, tipo); return; }
-        downloads.save({ filename: nome, data: bom + conteudo }).then(
+        if (!downloads) { baixarLocal(nome, dados, tipo); return; }
+        downloads.save({ filename: nome, data: dados }).then(
           function () { toast(nome + " salvo"); },
           function (e) {
             if (e && e.code === "declined") return;
-            modalTexto(nome, conteudo);
+            if (binario) toast("Este navegador não deixou salvar o arquivo.");
+            else modalTexto(nome, conteudo);
           }
         );
-      }, function () { baixarLocal(nome, bom + conteudo, tipo); });
+      }, function () { baixarLocal(nome, dados, tipo); });
       return;
     }
 
-    baixarLocal(nome, bom + conteudo, tipo);
+    baixarLocal(nome, dados, tipo);
   }
 
   function baixarLocal(nome, conteudo, tipo) {
-    if (emIframe()) { modalTexto(nome, conteudo.replace(/^\ufeff/, "")); return; }
-    var blob = new Blob([conteudo], { type: tipo + ";charset=utf-8" });
+    if (emIframe()) {
+      if (conteudo instanceof Blob) { toast("Página incorporada: abra o app em aba própria para baixar."); return; }
+      modalTexto(nome, conteudo.replace(/^\ufeff/, ""));
+      return;
+    }
+    var blob = conteudo instanceof Blob ? conteudo : new Blob([conteudo], { type: tipo + ";charset=utf-8" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;

@@ -233,6 +233,8 @@
         estado.filtros = { busca: "", mes: "", area: "", status: "", tipo: "", avisos: false, ordem: estado.filtros.ordem };
         render(); break;
       case "exportar-viagens": baixar("viagens.csv", C.csvViagens(), "text/csv"); break;
+      case "importar-viagens": abrirImportacao(); break;
+      case "baixar-modelo": baixarModelo(); break;
       case "exportar-uber": baixar("uber.csv", C.csvUber(), "text/csv"); break;
       case "exportar-colaborador": baixar("por-colaborador-" + estado.ano + ".csv", C.csvColaborador(estado.ano), "text/csv"); break;
       case "backup-baixar": baixar("backup-viagens-" + hoje() + ".json", JSON.stringify(C.db, null, 1), "application/json"); break;
@@ -325,7 +327,9 @@
       '<span class="hint">Mesmo destino e mesmas datas para todos. Uma linha por pessoa.</span></div>' +
 
       V.campo("Destino", '<input type="text" name="destino" list="destinos" value="' + esc(v.destino) + '" required>', "c3") +
-      V.campo("Aeroporto de origem", '<input type="text" name="aeroportoOrigem" value="' + esc(v.aeroportoOrigem) + '" placeholder="CNF - Confins">', "c3") +
+      V.campo("Aeroporto de origem",
+              '<input type="text" name="aeroportoOrigem" list="aeroportos" autocomplete="off" value="' +
+              esc(v.aeroportoOrigem) + '" placeholder="Selecione ou digite">', "c3") +
 
       '<div class="section-label"><span class="eyebrow">Período</span></div>' +
       V.campo("Data de ida", '<input type="date" name="dataIda" value="' + esc(v.dataIda) + '" required>', "c3") +
@@ -358,7 +362,8 @@
       "</div>" +
 
       '<div class="summary" style="margin-top:16px" data-resumo></div>' +
-      '<datalist id="destinos">' + destinos.map(function (d) { return '<option value="' + esc(d) + '">'; }).join("") + "</datalist>";
+      '<datalist id="destinos">' + destinos.map(function (d) { return '<option value="' + esc(d) + '">'; }).join("") + "</datalist>" +
+      '<datalist id="aeroportos">' + window.BR.opcoesAeroporto() + "</datalist>";
 
     var dialogo = abrirModal({
       titulo: novo ? "Nova viagem" : (ehAlteracao ? "Alteração da viagem #" + v.refId : "Viagem #" + v.id),
@@ -624,6 +629,281 @@
     return Object.keys(set).sort(C.ordenaPt);
   }
 
+
+  // ---------- importar viagens de planilha ----------
+
+  /** Coluna do modelo → campo da viagem. A comparação ignora acento e caixa. */
+  var COLUNAS_MODELO = [
+    { titulo: "Colaborador", campo: "colaborador", largura: 34, obrigatorio: true,
+      exemplo: "", aliases: ["colaborador", "nome", "nome completo"] },
+    { titulo: "Destino", campo: "destino", largura: 20, obrigatorio: true,
+      exemplo: "São Paulo/SP", aliases: ["destino", "cidade destino"] },
+    { titulo: "Aeroporto de origem", campo: "aeroportoOrigem", largura: 24,
+      exemplo: "CNF - Confins", aliases: ["aeroporto de origem", "aeroporto", "origem"] },
+    { titulo: "Data de ida", campo: "dataIda", largura: 13, obrigatorio: true, tipo: "data",
+      exemplo: "05/10/2026", aliases: ["data de ida", "data ida", "ida", "inicio"] },
+    { titulo: "Data de volta", campo: "dataVolta", largura: 13, obrigatorio: true, tipo: "data",
+      exemplo: "09/10/2026", aliases: ["data de volta", "data volta", "volta", "retorno", "fim"] },
+    { titulo: "Aéreo (R$)", campo: "aereo", largura: 12, tipo: "numero",
+      exemplo: 1234.56, aliases: ["aereo (r$)", "aereo", "passagem", "aereo r$"] },
+    { titulo: "Diárias de hotel", campo: "diarias", largura: 15, tipo: "numero",
+      exemplo: 4, aliases: ["diarias de hotel", "diarias", "n diarias"] },
+    { titulo: "Valor da diária (R$)", campo: "valorDiaria", largura: 18, tipo: "numero",
+      exemplo: 280, aliases: ["valor da diaria (r$)", "valor da diaria", "valor diaria", "diaria"] },
+    { titulo: "Alimentação (R$)", campo: "alimentacao", largura: 17, tipo: "numero",
+      exemplo: 400, aliases: ["alimentacao (r$)", "alimentacao"] },
+    { titulo: "Transporte/Auxílio (R$)", campo: "transporte", largura: 21, tipo: "numero",
+      exemplo: 0, aliases: ["transporte/auxilio (r$)", "transporte/auxilio", "transporte", "auxilio"] },
+    { titulo: "Status", campo: "status", largura: 12,
+      exemplo: "Fechado", aliases: ["status", "situacao"] },
+    { titulo: "Observação", campo: "obs", largura: 34,
+      exemplo: "aereo + hosp", aliases: ["observacao", "obs", "comentario"] }
+  ];
+
+  function baixarModelo() {
+    var exemplo = C.colaboradoresOrdenados().filter(function (c) { return c.status === "Ativo"; })[0];
+    var linhaExemplo = COLUNAS_MODELO.map(function (c) {
+      return c.campo === "colaborador" ? (exemplo ? exemplo.nome : "") : c.exemplo;
+    });
+
+    var abas = [
+      { nome: "Viagens",
+        larguras: COLUNAS_MODELO.map(function (c) { return c.largura; }),
+        linhas: [COLUNAS_MODELO.map(function (c) { return c.titulo; }), linhaExemplo] },
+
+      { nome: "Como preencher", larguras: [30, 70],
+        linhas: [
+          ["Coluna", "O que preencher"]
+        ].concat(COLUNAS_MODELO.map(function (c) {
+          return [c.titulo + (c.obrigatorio ? " (obrigatório)" : ""), textoAjuda(c)];
+        })).concat([
+          ["", ""],
+          ["Datas", "No formato dia/mês/ano. Célula formatada como data também funciona."],
+          ["Valores", "Só números. 1234,56 ou 1234.56 — sem o R$."],
+          ["Alimentação", "Se deixar vazio, entra a regra: " + C.brlSigla(C.porPernoite()) + " por pernoite."],
+          ["Diárias", "Se deixar vazio, entra o número de noites do período."],
+          ["Linha de exemplo", "Apague a linha 2 da aba Viagens antes de importar, ou deixe — ela é conferida como qualquer outra."]
+        ]) },
+
+      { nome: "Colaboradores", larguras: [34, 30, 26],
+        linhas: [["Nome (use exatamente assim)", "Área", "Aeroporto base"]].concat(
+          C.colaboradoresOrdenados().filter(function (c) { return c.status !== "Desligado"; })
+            .map(function (c) { return [c.nome, c.area, c.aeroportoBase]; })) },
+
+      { nome: "Aeroportos", larguras: [26, 26, 6],
+        linhas: [["Aeroporto", "Cidade", "UF"]].concat(
+          window.BR.AEROPORTOS.map(function (a) { return [a.valor, a.cidade, a.uf]; })) }
+    ];
+
+    baixar("modelo-importacao-viagens.xlsx", window.XLSX.criar(abas),
+           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  }
+
+  function textoAjuda(c) {
+    if (c.campo === "colaborador") return "Nome como está no cadastro — veja a aba Colaboradores.";
+    if (c.campo === "status") return "Um destes: " + C.db.params.statuses.join(", ") + ".";
+    if (c.tipo === "data") return "Dia/mês/ano, por exemplo 05/10/2026.";
+    if (c.tipo === "numero") return "Número, sem o R$.";
+    if (c.campo === "aeroportoOrigem") return "Opcional. Veja a aba Aeroportos; vazio usa o aeroporto base da pessoa.";
+    return "Texto livre.";
+  }
+
+  function normalizaCabecalho(v) {
+    return C.normal(String(v || "").replace(/\s+/g, " ").trim());
+  }
+
+  /** Data vinda do Excel: texto dd/mm/aaaa, ISO ou número de série. */
+  function dataDaCelula(valor) {
+    if (typeof valor === "number" && valor > 20000 && valor < 80000) return window.XLSX.dataDeSerie(valor);
+    var texto = String(valor || "").trim();
+    if (!texto) return "";
+    var br = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(texto);
+    if (br) {
+      var ano = br[3].length === 2 ? "20" + br[3] : br[3];
+      return ano + "-" + C.pad(+br[2]) + "-" + C.pad(+br[1]);
+    }
+    var iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(texto);
+    return iso ? iso[0] : "";
+  }
+
+  /** Lê o arquivo escolhido e devolve as linhas como matriz. */
+  function lerPlanilha(arquivo) {
+    if (/\.csv$/i.test(arquivo.name)) {
+      return arquivo.text().then(function (texto) {
+        var sep = (texto.split("\n")[0].match(/;/g) || []).length >= (texto.split("\n")[0].match(/,/g) || []).length ? ";" : ",";
+        return texto.replace(/^﻿/, "").split(/\r?\n/).filter(function (l) { return l.trim(); })
+          .map(function (linha) {
+            return linha.split(sep).map(function (c) { return c.replace(/^"|"$/g, "").trim(); });
+          });
+      });
+    }
+    return arquivo.arrayBuffer().then(window.XLSX.ler);
+  }
+
+  /** Converte a matriz em viagens, com o motivo de cada linha recusada. */
+  function interpretaPlanilha(linhas) {
+    var cabecalho = -1, mapa = {};
+    for (var i = 0; i < Math.min(linhas.length, 15); i++) {
+      var atual = {};
+      (linhas[i] || []).forEach(function (celula, j) {
+        var chave = normalizaCabecalho(celula);
+        COLUNAS_MODELO.forEach(function (c) {
+          if (atual[c.campo] === undefined && c.aliases.indexOf(chave) > -1) atual[c.campo] = j;
+        });
+      });
+      if (atual.colaborador !== undefined && atual.dataIda !== undefined) { cabecalho = i; mapa = atual; break; }
+    }
+    if (cabecalho < 0) {
+      throw new Error("Não achei o cabeçalho. A planilha precisa ter as colunas Colaborador, Data de ida e Data de volta — baixe o modelo.");
+    }
+
+    var pessoas = C.colaboradoresOrdenados();
+    var resultado = [];
+
+    for (var l = cabecalho + 1; l < linhas.length; l++) {
+      var linha = linhas[l] || [];
+      var bruto = function (campo) { return mapa[campo] === undefined ? "" : linha[mapa[campo]]; };
+      if (!COLUNAS_MODELO.some(function (c) { return String(bruto(c.campo) || "").trim(); })) continue;   // linha vazia
+
+      var erros = [];
+      var nome = String(bruto("colaborador") || "").trim();
+      var pessoa = null;
+      if (!nome) erros.push("sem colaborador");
+      else {
+        pessoa = pessoas.filter(function (p) { return C.normal(p.nome) === C.normal(nome); })[0] ||
+                 pessoas.filter(function (p) { return C.normal(p.nome).indexOf(C.normal(nome)) === 0; })[0];
+        if (!pessoa) erros.push("colaborador não cadastrado: " + nome);
+        else if (pessoa.status === "Desligado") erros.push(pessoa.nome + " está desligado");
+      }
+
+      var ida = dataDaCelula(bruto("dataIda"));
+      var volta = dataDaCelula(bruto("dataVolta"));
+      if (!ida) erros.push("data de ida inválida");
+      if (!volta) erros.push("data de volta inválida");
+      if (ida && volta && C.diasEntre(ida, volta) < 0) erros.push("volta antes da ida");
+
+      var noites = ida && volta ? Math.max(0, C.diasEntre(ida, volta)) : 0;
+      var status = String(bruto("status") || "").trim();
+      if (status && C.db.params.statuses.indexOf(status) === -1) {
+        erros.push("status desconhecido: " + status);
+        status = "";
+      }
+
+      var temDiarias = String(bruto("diarias") || "").trim() !== "";
+      var temAlim = String(bruto("alimentacao") || "").trim() !== "";
+
+      var viagem = {
+        tipo: "Viagem",
+        colaborador: pessoa ? pessoa.nome : nome,
+        destino: String(bruto("destino") || "").trim(),
+        aeroportoOrigem: String(bruto("aeroportoOrigem") || "").trim() || (pessoa ? pessoa.aeroportoBase : ""),
+        dataIda: ida,
+        dataVolta: volta,
+        aereo: C.parseNum(bruto("aereo")),
+        diarias: temDiarias ? C.parseNum(bruto("diarias")) : noites,
+        valorDiaria: C.parseNum(bruto("valorDiaria")),
+        alimentacao: temAlim ? C.parseNum(bruto("alimentacao")) : noites * C.porPernoite(),
+        transporte: C.parseNum(bruto("transporte")),
+        custoAlteracao: 0,
+        status: status || "Fechado",
+        refId: null, motivo: "", pendencias: "",
+        obs: String(bruto("obs") || "").trim()
+      };
+      if (!viagem.destino) erros.push("sem destino");
+
+      resultado.push({ linhaPlanilha: l + 1, viagem: viagem, erros: erros, calc: C.calc(viagem) });
+    }
+    return resultado;
+  }
+
+  function abrirImportacao() {
+    var dialogo = abrirModal({
+      titulo: "Importar viagens de uma planilha",
+      corpo:
+        '<div class="grid" style="gap:14px">' +
+        '<div class="note">Baixe o modelo, preencha uma linha por viagem e traga de volta. ' +
+        "Cada coluna diz o que espera, e o arquivo já vem com a lista de colaboradores e de aeroportos " +
+        "para copiar. Também aceito <strong>.csv</strong>.</div>" +
+        '<div class="row"><button class="btn btn-primary" data-acao="baixar-modelo">Baixar modelo (.xlsx)</button></div>' +
+        '<div class="field"><label for="arquivo-import">Planilha preenchida</label>' +
+        '<input type="file" id="arquivo-import" name="arquivo" accept=".xlsx,.csv"></div>' +
+        '<div data-previa></div></div>',
+      rodape: '<span class="grow t-sub" data-status-import></span>' +
+        '<button class="btn" data-acao="fechar">Cancelar</button>' +
+        '<button class="btn btn-primary" data-importar disabled>Importar</button>'
+    });
+
+    var entrada = dialogo.querySelector("#arquivo-import");
+    var previa = dialogo.querySelector("[data-previa]");
+    var aviso = dialogo.querySelector("[data-status-import]");
+    var botao = dialogo.querySelector("[data-importar]");
+    var validas = [];
+
+    entrada.addEventListener("change", function () {
+      var arquivo = entrada.files && entrada.files[0];
+      previa.innerHTML = "";
+      botao.disabled = true;
+      validas = [];
+      if (!arquivo) return;
+
+      aviso.textContent = "Lendo…";
+      lerPlanilha(arquivo).then(function (linhas) {
+        var itens = interpretaPlanilha(linhas);
+        validas = itens.filter(function (i) { return !i.erros.length; });
+        aviso.textContent = "";
+        botao.disabled = !validas.length;
+        botao.textContent = validas.length ? "Importar " + validas.length + " viagem(ns)" : "Importar";
+        previa.innerHTML = montaPrevia(itens);
+      }, function (e) {
+        aviso.textContent = "";
+        previa.innerHTML = '<div class="note warn">' + esc(e.message || "Não consegui ler o arquivo.") + "</div>";
+      });
+    });
+
+    botao.addEventListener("click", function () {
+      botao.disabled = true;
+      botao.textContent = "Importando…";
+      var feitas = 0;
+      // Uma de cada vez: no servidor, lançamentos simultâneos disputariam o mesmo ID.
+      validas.reduce(function (anterior, item) {
+        return anterior.then(function () {
+          return C.salvarViagem(item.viagem).then(function () { feitas++; });
+        });
+      }, Promise.resolve()).then(function () {
+        toast(feitas + " viagem(ns) importada(s)");
+        dialogo.close();
+      }, function (e) {
+        botao.disabled = false;
+        botao.textContent = "Importar";
+        aviso.textContent = (e && e.message) || "Falhou no meio da importação.";
+        aviso.style.color = "var(--critical)";
+        if (feitas) toast(feitas + " viagem(ns) importada(s) antes da falha");
+      });
+    });
+  }
+
+  function montaPrevia(itens) {
+    if (!itens.length) return '<div class="note warn">Nenhuma linha preenchida na planilha.</div>';
+    var comErro = itens.filter(function (i) { return i.erros.length; }).length;
+
+    return '<div class="row" style="gap:8px">' +
+      '<span class="chip ok">' + (itens.length - comErro) + " prontas</span>" +
+      (comErro ? '<span class="chip crit">' + comErro + " com problema</span>" : "") +
+      "</div>" +
+      '<div class="table-wrap" style="max-height:260px;margin-top:10px"><table><thead><tr>' +
+      '<th>Linha</th><th>Colaborador</th><th>Período</th><th class="n">Total</th><th>Situação</th>' +
+      "</tr></thead><tbody>" +
+      itens.map(function (i) {
+        return "<tr><td class='num t-sub'>" + i.linhaPlanilha + "</td>" +
+          "<td>" + esc(i.viagem.colaborador || "—") + "</td>" +
+          '<td class="nowrap num">' + C.fmtDataCurta(i.viagem.dataIda) + " → " + C.fmtDataCurta(i.viagem.dataVolta) + "</td>" +
+          '<td class="n">' + C.moeda(i.calc.total) + "</td>" +
+          "<td>" + (i.erros.length
+            ? '<span class="chip crit">' + esc(i.erros.join(" · ")) + "</span>"
+            : '<span class="chip ok">pronta</span>') + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+
   // ---------- colaborador ----------
 
   function abrirColaborador(c) {
@@ -641,14 +921,17 @@
         V.campo("Cargo", '<input type="text" name="cargo" value="' + esc(d.cargo) + '">', "c6") +
         V.campo("Gestor direto", '<input type="text" name="gestor" list="nomes" value="' + esc(d.gestor) + '">', "c6") +
         V.campo("Cidade", '<input type="text" name="cidade" value="' + esc(d.cidade) + '">', "c4") +
-        V.campo("UF", '<input type="text" name="uf" value="' + esc(d.uf) + '" maxlength="2">', "c3") +
-        V.campo("Aeroporto base", '<input type="text" name="aeroportoBase" value="' + esc(d.aeroportoBase) + '" placeholder="CNF - Confins">', "c4") +
+        V.campo("UF", '<select name="uf">' + window.BR.opcoesUF(d.uf) + "</select>", "c3") +
+        V.campo("Aeroporto base",
+                '<input type="text" name="aeroportoBase" list="aeroportos" autocomplete="off" value="' +
+                esc(d.aeroportoBase) + '" placeholder="Selecione ou digite">', "c4") +
         V.campo("Contrato", V.selectHTML("contrato", ["PJ", "CLT"], d.contrato), "c3") +
         V.campo("Modelo", V.selectHTML("modelo", ["Remoto", "Híbrido", "Presencial"], d.modelo), "c3") +
         V.campo("E-mail", '<input type="text" name="email" value="' + esc(d.email) + '">', "c6") +
         "</div>" +
         '<datalist id="areas">' + C.areas().map(function (a) { return '<option value="' + esc(a) + '">'; }).join("") + "</datalist>" +
         '<datalist id="nomes">' + nomes.map(function (n) { return '<option value="' + esc(n) + '">'; }).join("") + "</datalist>" +
+        '<datalist id="aeroportos">' + window.BR.opcoesAeroporto() + "</datalist>" +
         "</form>",
       rodape: '<span class="grow"></span>' +
         (novo ? "" : '<button class="btn btn-danger" data-acao="excluir-colab">Excluir</button>') +
@@ -659,6 +942,13 @@
 
     var form = dialogo.querySelector("form");
     var nomeAntigo = d.nome;
+
+    // Cidade preenchida e aeroporto vazio: sugere o aeroporto da própria cidade.
+    form.cidade.addEventListener("blur", function () {
+      if (form.aeroportoBase.value) return;
+      var achado = window.BR.aeroportoDaCidade(form.cidade.value, form.uf.value);
+      if (achado) form.aeroportoBase.value = achado.valor;
+    });
 
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
@@ -830,28 +1120,34 @@
    * conteúdo para copiar.
    */
   function baixar(nome, conteudo, tipo) {
-    var bom = tipo === "text/csv" ? "\ufeff" : "";
+    var binario = conteudo instanceof Blob;
+    var dados = binario ? conteudo : (tipo === "text/csv" ? "\ufeff" : "") + conteudo;
 
     if (window.claude && typeof window.claude.use === "function") {
       window.claude.use("downloads").then(function (downloads) {
-        if (!downloads) { baixarLocal(nome, bom + conteudo, tipo); return; }
-        downloads.save({ filename: nome, data: bom + conteudo }).then(
+        if (!downloads) { baixarLocal(nome, dados, tipo); return; }
+        downloads.save({ filename: nome, data: dados }).then(
           function () { toast(nome + " salvo"); },
           function (e) {
             if (e && e.code === "declined") return;
-            modalTexto(nome, conteudo);
+            if (binario) toast("Este navegador não deixou salvar o arquivo.");
+            else modalTexto(nome, conteudo);
           }
         );
-      }, function () { baixarLocal(nome, bom + conteudo, tipo); });
+      }, function () { baixarLocal(nome, dados, tipo); });
       return;
     }
 
-    baixarLocal(nome, bom + conteudo, tipo);
+    baixarLocal(nome, dados, tipo);
   }
 
   function baixarLocal(nome, conteudo, tipo) {
-    if (emIframe()) { modalTexto(nome, conteudo.replace(/^\ufeff/, "")); return; }
-    var blob = new Blob([conteudo], { type: tipo + ";charset=utf-8" });
+    if (emIframe()) {
+      if (conteudo instanceof Blob) { toast("Página incorporada: abra o app em aba própria para baixar."); return; }
+      modalTexto(nome, conteudo.replace(/^\ufeff/, ""));
+      return;
+    }
+    var blob = conteudo instanceof Blob ? conteudo : new Blob([conteudo], { type: tipo + ";charset=utf-8" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;

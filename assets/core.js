@@ -20,12 +20,15 @@
     });
   }
 
-  function brlSigla(v) { return "R$ " + brl(v); }
+  /** Dinheiro como aparece na tela: "R$ 1.235", sem centavos. */
+  function moeda(v) { return "R$ " + brl(v, 0); }
 
-  /** Compacta valores altos para eixos de gráfico: 12.400 → "12,4 mil". */
+  var brlSigla = moeda;   // nome antigo, mantido para não quebrar chamadas
+
+  /** Compacta valores altos para eixos de gráfico: 12.000 → "12 mil". */
   function brlCurto(v) {
     var n = Number(v) || 0;
-    if (Math.abs(n) >= 1000) return brl(n / 1000, 1) + " mil";
+    if (Math.abs(n) >= 1000) return brl(n / 1000, 0) + " mil";
     return brl(n, 0);
   }
 
@@ -926,7 +929,7 @@
     get db() { return db; },
 
     // formatação
-    brl: brl, brlSigla: brlSigla, brlCurto: brlCurto, parseNum: parseNum, round2: round2,
+    brl: brl, moeda: moeda, brlSigla: brlSigla, brlCurto: brlCurto, parseNum: parseNum, round2: round2,
     fmtData: fmtData, fmtDataCurta: fmtDataCurta, mesRefDe: mesRefDe, mesRotulo: mesRotulo,
     mesNome: mesNome, anoDe: anoDe, iniciais: iniciais, normal: normal, ordenaPt: ordenaPt,
     diasEntre: diasEntre, addDias: addDias, toISO: toISO, toDate: toDate, pad: pad,

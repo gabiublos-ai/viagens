@@ -23,7 +23,7 @@
 
   function dinheiro(v, zeroFraco) {
     if (!v && zeroFraco !== false) return '<span class="zero">—</span>';
-    return C.brl(v);
+    return C.moeda(v);
   }
 
   function chipStatus(status) {
@@ -143,7 +143,7 @@
       return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center">' +
         '<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(i.nome) +
         (i.sub ? ' <span class="t-sub">' + esc(i.sub) + "</span>" : "") + "</span>" +
-        '<span class="num" style="font-size:12.5px">' + C.brl(i.valor) + "</span>" +
+        '<span class="num" style="font-size:12.5px">' + C.moeda(i.valor) + "</span>" +
         '<span style="grid-column:1/-1;height:7px;background:var(--surface-2);border-radius:3px;overflow:hidden">' +
         '<span style="display:block;height:100%;width:' + pct + '%;background:var(--s1);border-radius:3px"></span></span>' +
         "</div>";
@@ -176,12 +176,12 @@
     var html = "";
 
     html += '<div class="kpis">' +
-      kpi("Custo total " + ano, "R$ " + C.brl(r.totalAno, 0),
+      kpi("Custo total " + ano, C.moeda(r.totalAno),
           r.nViagens + " viagens · " + r.noites + " pernoites") +
-      kpi("Viagens (sem Uber)", "R$ " + C.brl(r.totalViagens, 0),
+      kpi("Viagens (sem Uber)", C.moeda(r.totalViagens),
           "Média de " + C.brlSigla(mediaViagem) + " por viagem") +
-      kpi("Uber corporativo", "R$ " + C.brl(r.totalUber, 0),
-          (r.totalAno ? C.brl(r.totalUber / r.totalAno * 100, 1) : "0") + "% do custo total · " + uber.n + " corridas") +
+      kpi("Uber corporativo", C.moeda(r.totalUber),
+          (r.totalAno ? C.brl(r.totalUber / r.totalAno * 100, 0) : "0") + "% do custo total · " + uber.n + " corridas") +
       kpi("Colaboradores com despesa", String(r.pessoas),
           "Média de " + C.brlSigla(mediaPessoa) + " por pessoa") +
       "</div>";
@@ -205,20 +205,25 @@
       "<th>Categoria</th>" + mesesAtivos.map(function (m) { return '<th class="n">' + esc(C.mesRotulo(m)) + "</th>"; }).join("") +
       '<th class="n">Total ano</th><th class="n">%</th></tr></thead><tbody>' +
       r.categorias.map(function (cat, i) {
-        var totalCat = mesesAtivos.reduce(function (s, m) { return s + r.porCategoria[cat][m]; }, 0);
-        if (!totalCat) return "";
-        return "<tr><td><span class='legend-swatch' style='display:inline-block;background:" + CORES[i % CORES.length] +
+        // Guarda a cor pela posição original, para bater com a do gráfico.
+        return { cat: cat, cor: CORES[i % CORES.length],
+                 total: mesesAtivos.reduce(function (s, m) { return s + r.porCategoria[cat][m]; }, 0) };
+      }).filter(function (l) { return l.total > 0; })
+        .sort(function (a, b) { return b.total - a.total; })
+        .map(function (linha) {
+        var cat = linha.cat, totalCat = linha.total;
+        return "<tr><td><span class='legend-swatch' style='display:inline-block;background:" + linha.cor +
           ";margin-right:7px'></span>" + esc(cat) + "</td>" +
           mesesAtivos.map(function (m) {
             var v = r.porCategoria[cat][m];
-            return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.brl(v) : "—") + "</td>";
+            return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.moeda(v) : "—") + "</td>";
           }).join("") +
-          '<td class="n">' + C.brl(totalCat) + "</td>" +
-          '<td class="n">' + (r.totalAno ? C.brl(totalCat / r.totalAno * 100, 1) : "0,0") + "%</td></tr>";
+          '<td class="n">' + C.moeda(totalCat) + "</td>" +
+          '<td class="n">' + (r.totalAno ? C.brl(totalCat / r.totalAno * 100, 0) : "0") + "%</td></tr>";
       }).join("") +
       "</tbody><tfoot><tr><td>TOTAL</td>" +
-      mesesAtivos.map(function (m) { return '<td class="n">' + C.brl(r.totalMes[m]) + "</td>"; }).join("") +
-      '<td class="n">' + C.brl(r.totalAno) + '</td><td class="n">100%</td></tr>' +
+      mesesAtivos.map(function (m) { return '<td class="n">' + C.moeda(r.totalMes[m]) + "</td>"; }).join("") +
+      '<td class="n">' + C.moeda(r.totalAno) + '</td><td class="n">100%</td></tr>' +
       '<tr><td class="t-sub">Colaboradores no mês</td>' +
       mesesAtivos.map(function (m) { return '<td class="n t-sub">' + Object.keys(r.pessoasMes[m]).length + "</td>"; }).join("") +
       '<td class="n t-sub">' + r.pessoas + '</td><td></td></tr></tfoot></table></div></div></div>';
@@ -243,8 +248,8 @@
         return "<tr><td>" + esc(a) + "</td>" +
           mesesAtivos.map(function (m) {
             var v = r.porArea[a][m];
-            return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.brl(v, 0) : "—") + "</td>";
-          }).join("") + '<td class="n">' + C.brl(t, 0) + "</td></tr>";
+            return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.moeda(v) : "—") + "</td>";
+          }).join("") + '<td class="n">' + C.moeda(t) + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
     html += '<div class="card"><div class="card-head"><h2>Top 10 colaboradores</h2>' +
@@ -297,6 +302,7 @@
       '<h2>Viagens</h2>' +
       '<span class="chip">' + lista.length + " lançamento" + (lista.length === 1 ? "" : "s") + "</span>" +
       '<span class="grow"></span>' +
+      '<button class="btn btn-sm" data-acao="importar-viagens">Importar planilha</button>' +
       '<button class="btn btn-sm" data-acao="exportar-viagens">Exportar CSV</button>' +
       '<button class="btn btn-primary btn-sm" data-acao="nova-viagem">+ Nova viagem</button>' +
       "</div>" +
@@ -352,12 +358,12 @@
         (v.diarias ? " · " + C.brl(v.diarias, 0) + " diárias" : "") + "</span></td>" +
         '<td class="n">' + dinheiro(v.aereo) + "</td>" +
         '<td class="n">' + dinheiro(v.hospedagem) +
-        (v.valorDiaria ? '<br><span class="t-sub">' + C.brl(v.valorDiaria) + "/noite</span>" : "") + "</td>" +
+        (v.valorDiaria ? '<br><span class="t-sub">' + C.moeda(v.valorDiaria) + "/noite</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(v.alimentacao) +
         (v.difAlim ? '<br><span class="t-sub" style="color:var(--' + (v.difAlim < 0 ? "critical" : "warning") + ')">' +
-          (v.difAlim > 0 ? "+" : "") + C.brl(v.difAlim) + "</span>" : "") + "</td>" +
+          (v.difAlim > 0 ? "+" : "") + C.moeda(v.difAlim) + "</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(outros) + "</td>" +
-        '<td class="n"><strong>' + C.brl(v.total) + "</strong></td>" +
+        '<td class="n"><strong>' + C.moeda(v.total) + "</strong></td>" +
         "<td>" + chipStatus(v.status) + "</td>" +
         "<td>" + chipsConferencia(v) + "</td>" +
         '<td class="col-acoes"><div class="actions-cell">' +
@@ -369,11 +375,11 @@
     });
 
     html += "</tbody><tfoot><tr><td colspan='4'>" + lista.length + " lançamentos · " + noites + " pernoites</td>" +
-      '<td class="n">' + C.brl(lista.reduce(function (s, v) { return s + (Number(v.aereo) || 0); }, 0)) + "</td>" +
-      '<td class="n">' + C.brl(lista.reduce(function (s, v) { return s + v.hospedagem; }, 0)) + "</td>" +
-      '<td class="n">' + C.brl(lista.reduce(function (s, v) { return s + (Number(v.alimentacao) || 0); }, 0)) + "</td>" +
-      '<td class="n">' + C.brl(lista.reduce(function (s, v) { return s + (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0); }, 0)) + "</td>" +
-      '<td class="n">' + C.brl(soma) + '</td><td colspan="2"></td><td class="col-acoes"></td></tr></tfoot></table></div></div></div>';
+      '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.aereo) || 0); }, 0)) + "</td>" +
+      '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + v.hospedagem; }, 0)) + "</td>" +
+      '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.alimentacao) || 0); }, 0)) + "</td>" +
+      '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0); }, 0)) + "</td>" +
+      '<td class="n">' + C.moeda(soma) + '</td><td colspan="2"></td><td class="col-acoes"></td></tr></tfoot></table></div></div></div>';
 
     return html;
   }
@@ -458,8 +464,8 @@
     var html = "";
 
     html += '<div class="kpis">' +
-      kpi("Gasto no período", "R$ " + C.brl(u.total, 0), u.n + " corridas") +
-      kpi("Ticket médio", "R$ " + C.brl(u.ticket), "Corrida mais cara: " + C.brlSigla(u.maiorValor)) +
+      kpi("Gasto no período", C.moeda(u.total), u.n + " corridas") +
+      kpi("Ticket médio", C.moeda(u.ticket), "Corrida mais cara: " + C.brlSigla(u.maiorValor)) +
       kpi("De/para aeroporto", C.brl(u.pctAeroporto * 100, 0) + "%", u.aeroporto + " de " + u.n + " corridas") +
       kpi("Corridas acima de R$ 150", String(u.acima150), C.brlSigla(u.valorAcima150) + " concentrados") +
       "</div>";
@@ -497,7 +503,7 @@
       mesesU.map(function (m) {
         var d = u.porMes[m];
         return "<tr><td>" + esc(C.mesRotulo(m)) + '</td><td class="n">' + d.n + "</td>" +
-          '<td class="n">' + C.brl(d.valor) + '</td><td class="n">' + (d.n ? C.brl(d.valor / d.n) : "—") + "</td>" +
+          '<td class="n">' + C.moeda(d.valor) + '</td><td class="n">' + (d.n ? C.moeda(d.valor / d.n) : "—") + "</td>" +
           '<td class="n">' + (d.n ? C.brl(d.aeroporto / d.n * 100, 0) + "%" : "—") + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
@@ -506,7 +512,7 @@
       '<th class="n">Corridas</th><th class="n">Valor</th><th class="n">Ticket</th></tr></thead><tbody>' +
       u.porServico.map(function (s) {
         return "<tr><td>" + esc(s.nome) + '</td><td class="n">' + s.n + "</td>" +
-          '<td class="n">' + C.brl(s.valor) + '</td><td class="n">' + (s.n ? C.brl(s.valor / s.n) : "—") + "</td></tr>";
+          '<td class="n">' + C.moeda(s.valor) + '</td><td class="n">' + (s.n ? C.moeda(s.valor / s.n) : "—") + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
     html += '</div><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(400px,1fr))">';
@@ -558,7 +564,7 @@
           "<td>" + esc(c.servico || "—") + '<br><span class="t-sub">' + esc(c.cidade || "") + "</span></td>" +
           '<td style="max-width:280px"><span class="t-sub">' + esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>" +
           (c.aeroporto ? ' <span class="chip accent">aeroporto</span>' : "") + "</td>" +
-          '<td class="n">' + C.brl(c.valor) + (c.tipo !== "Fare" ? '<br><span class="t-sub">' + esc(c.tipo) + "</span>" : "") + "</td>" +
+          '<td class="n">' + C.moeda(c.valor) + (c.tipo !== "Fare" ? '<br><span class="t-sub">' + esc(c.tipo) + "</span>" : "") + "</td>" +
           '<td><span class="chip ' + classe + '">' + (classe === "warn" ? "⚠ " : "") + esc(aud.texto) + "</span></td>" +
           '<td class="t-sub">' + esc(c.alerta) + "</td>" +
           '<td class="col-acoes"><div class="actions-cell">' +
@@ -619,7 +625,7 @@
         (c.aeroportoBase ? '<br><span class="route">' + esc(c.aeroportoBase) + "</span>" : "") + "</td>" +
         '<td class="n">' + (g ? g.viagens : '<span class="zero">—</span>') + "</td>" +
         '<td class="n">' + (g && g.noites ? g.noites : '<span class="zero">—</span>') + "</td>" +
-        '<td class="n">' + (g ? "<strong>" + C.brl(g.total) + "</strong>" : '<span class="zero">—</span>') + "</td>" +
+        '<td class="n">' + (g ? "<strong>" + C.moeda(g.total) + "</strong>" : '<span class="zero">—</span>') + "</td>" +
         '<td class="col-acoes"><div class="actions-cell">' +
         '<button class="icon-btn" data-acao="nova-viagem-para" data-nome="' + esc(c.nome) + '" title="Lançar viagem para ' + esc(c.nome) + '" aria-label="Lançar viagem">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>' +
@@ -642,13 +648,13 @@
         pc.map(function (l) {
           return "<tr><td>" + esc(l.nome) + "</td><td>" + esc(l.area) + "</td>" +
             ["aereo", "hospedagem", "alimentacao", "transporte", "alteracoes", "uber"].map(function (k) {
-              return '<td class="n' + (l[k] ? "" : " zero") + '">' + (l[k] ? C.brl(l[k]) : "—") + "</td>";
+              return '<td class="n' + (l[k] ? "" : " zero") + '">' + (l[k] ? C.moeda(l[k]) : "—") + "</td>";
             }).join("") +
-            '<td class="n"><strong>' + C.brl(l.total) + "</strong></td></tr>";
+            '<td class="n"><strong>' + C.moeda(l.total) + "</strong></td></tr>";
         }).join("") +
         "</tbody><tfoot><tr><td colspan='2'>TOTAL</td>" +
         ["aereo", "hospedagem", "alimentacao", "transporte", "alteracoes", "uber", "total"].map(function (k) {
-          return '<td class="n">' + C.brl(pc.reduce(function (s, l) { return s + l[k]; }, 0)) + "</td>";
+          return '<td class="n">' + C.moeda(pc.reduce(function (s, l) { return s + l[k]; }, 0)) + "</td>";
         }).join("") + "</tr></tfoot></table></div></div></div>";
     }
 
@@ -709,6 +715,7 @@
       '<button class="btn" data-acao="backup-restaurar">Restaurar backup…</button>' +
       "</div>" +
       '<div class="row">' +
+      '<button class="btn" data-acao="importar-viagens">Importar viagens…</button>' +
       '<button class="btn" data-acao="exportar-viagens">Viagens (.csv)</button>' +
       '<button class="btn" data-acao="exportar-uber">Uber (.csv)</button>' +
       '<button class="btn" data-acao="exportar-colaborador">Por colaborador (.csv)</button>' +

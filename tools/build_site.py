@@ -14,7 +14,7 @@ import shutil
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = os.path.join(RAIZ, "site")
-COPIAR = ["styles.css", "armazenamento.js", "core.js", "views.js", "app.js"]
+COPIAR = ["styles.css", "dados-br.js", "xlsx.js", "armazenamento.js", "core.js", "views.js", "app.js"]
 
 
 def main():
