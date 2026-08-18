@@ -220,6 +220,7 @@
         }, falhou);
         break;
       case "alteracao": abrirAlteracao(C.viagemPorId(id)); break;
+      case "registrar-alteracao": escolherViagemParaAlterar(); break;
       case "validar":
       case "desvalidar":
         C.validarConferencia(id).then(function () {
@@ -428,6 +429,41 @@
     recalcular(form);
     var primeiro = form.querySelector('[name="colaborador"]');
     if (primeiro) primeiro.focus();
+  }
+
+  /**
+   * Ponto de entrada visível para registrar uma alteração: escolhe a viagem
+   * primeiro, para quem não conhece o botão ↻ da linha.
+   */
+  function escolherViagemParaAlterar() {
+    var candidatas = C.viagens()
+      .filter(function (v) { return v.tipo !== "Alteração"; })
+      .sort(function (a, b) { return (b.dataIda || "").localeCompare(a.dataIda || ""); });
+
+    if (!candidatas.length) { toast("Não há viagem lançada para alterar"); return; }
+
+    var dialogo = abrirModal({
+      titulo: "Registrar alteração de viagem",
+      estreito: true,
+      corpo: '<form id="form-escolhe" method="dialog"><div class="grid" style="gap:12px">' +
+        '<div class="note">Cancelamento, remarcação de voo, extensão do período, troca de hotel — ' +
+        "a viagem original continua como está, e a alteração entra como um lançamento ligado a ela, " +
+        "com o próprio custo. Assim dá para medir quanto as mudanças custaram no ano.</div>" +
+        V.campo("Viagem a alterar", V.selectHTML("id", candidatas.map(function (v) {
+          return { v: v.id, r: "#" + v.id + " · " + v.colaborador + " · " +
+                   C.fmtDataCurta(v.dataIda) + "→" + C.fmtDataCurta(v.dataVolta) + " · " + v.destino };
+        }), String(candidatas[0].id), "required"), "c12") +
+        "</div></form>",
+      rodape: '<span class="grow"></span><button class="btn" data-acao="fechar">Cancelar</button>' +
+        '<button class="btn btn-primary" type="submit" form="form-escolhe">Continuar</button>'
+    });
+
+    dialogo.querySelector("form").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var id = new FormData(ev.target).get("id");
+      dialogo.close();
+      abrirAlteracao(C.viagemPorId(id));
+    });
   }
 
   function abrirAlteracao(original) {

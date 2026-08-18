@@ -361,7 +361,13 @@ td.zero { color: var(--text-3); }
   font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
   flex: none;
 }
-.person-name { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* O nome e a área ocupam blocos próprios: só assim as reticências funcionam,
+   já que max-width e text-overflow não valem para elemento inline. */
+.person > span:not(.avatar) { display: block; min-width: 0; }
+.person-name { display: block; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Numa coluna congelada o texto não pode vazar: corta com reticências. */
+.person .t-sub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+td.fix2 .person > span:not(.avatar) { max-width: 176px; overflow: hidden; }
 
 /* ---------- Gráficos ---------- */
 
@@ -516,6 +522,27 @@ body.trancado .tabs { display: none; }
 
 .actions-cell { display: flex; gap: 2px; justify-content: flex-end; }
 
+/* Colunas congeladas à esquerda: ID, colaborador e trecho ficam à vista
+   enquanto o resto da tabela rola na horizontal. */
+th.fix1, td.fix1 { position: sticky; left: 0; width: 52px; min-width: 52px; }
+th.fix2, td.fix2 { position: sticky; left: 52px; min-width: 236px; max-width: 236px; }
+th.fix3, td.fix3 { position: sticky; left: 288px; min-width: 152px; border-right: 1px solid var(--border); }
+
+td.fix1, td.fix2, td.fix3 { background: var(--surface); z-index: 2; }
+thead th.fix1, thead th.fix2, thead th.fix3 { background: var(--surface-2); z-index: 3; }
+tbody tr:hover td.fix1, tbody tr:hover td.fix2, tbody tr:hover td.fix3 { background: var(--surface-2); }
+tr.row-alt td.fix1, tr.row-alt td.fix2, tr.row-alt td.fix3 {
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+tfoot td.fix1, tfoot td.fix2, tfoot td.fix3 { background: var(--surface-2); z-index: 2; }
+
+/* O rótulo do mês acompanha a rolagem horizontal. */
+.mes-divisor { position: sticky; left: 10px; display: inline-block; }
+
+@media (max-width: 720px) {
+  th.fix1, td.fix1, th.fix2, td.fix2, th.fix3, td.fix3 { position: static; min-width: 0; }
+}
+
 /* Ações sempre alcançáveis, mesmo com a tabela rolando na horizontal */
 th.col-acoes, td.col-acoes {
   position: sticky;
@@ -523,7 +550,8 @@ th.col-acoes, td.col-acoes {
   background: var(--surface);
   border-left: 1px solid var(--border);
 }
-thead th.col-acoes { background: var(--surface-2); }
+thead th.col-acoes { background: var(--surface-2); z-index: 3; }
+td.col-acoes { z-index: 2; }
 tbody tr:hover td.col-acoes { background: var(--surface-2); }
 
 @media (prefers-reduced-motion: reduce) {

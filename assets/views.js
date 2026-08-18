@@ -17,7 +17,7 @@
     return '<div class="person">' +
       '<span class="avatar" aria-hidden="true">' + esc(C.iniciais(nome)) + "</span>" +
       '<span style="min-width:0"><span class="person-name">' + esc(nome || "—") + "</span>" +
-      (sub ? '<br><span class="t-sub">' + esc(sub) + "</span>" : "") +
+      (sub ? '<span class="t-sub">' + esc(sub) + "</span>" : "") +
       "</span></div>";
   }
 
@@ -311,6 +311,7 @@
       '<h2>Viagens</h2>' +
       '<span class="chip">' + lista.length + " lançamento" + (lista.length === 1 ? "" : "s") + "</span>" +
       '<span class="grow"></span>' +
+      '<button class="btn btn-sm" data-acao="registrar-alteracao">Registrar alteração</button>' +
       '<button class="btn btn-sm" data-acao="importar-viagens">Importar planilha</button>' +
       '<button class="btn btn-sm" data-acao="exportar-viagens">Exportar CSV</button>' +
       '<button class="btn btn-primary btn-sm" data-acao="nova-viagem">+ Nova viagem</button>' +
@@ -340,7 +341,7 @@
     }
 
     html += '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-      "<th>ID</th><th>Colaborador</th><th>Trecho</th><th>Período</th>" +
+      '<th class="fix1">ID</th><th class="fix2">Colaborador</th><th class="fix3">Trecho</th><th>Período</th>' +
       '<th class="n">Aéreo</th><th class="n">Hospedagem</th><th class="n">Alimentação</th><th class="n">Outros</th>' +
       '<th class="n">Total</th><th>Status</th><th>Conferência</th><th class="col-acoes"></th></tr></thead><tbody>';
 
@@ -353,15 +354,15 @@
         var doMes = lista.filter(function (x) { return x.mesRef === mesAtual; });
         var totalMes = doMes.reduce(function (s, x) { return s + x.total; }, 0);
         html += '<tr><td colspan="12" style="background:var(--surface-2);padding:6px 10px">' +
-          '<span class="eyebrow">' + esc(C.mesNome(mesAtual)) + "</span> " +
-          '<span class="t-sub">· ' + doMes.length + " lançamentos · " + C.brlSigla(totalMes) + "</span></td></tr>";
+          '<span class="mes-divisor"><span class="eyebrow">' + esc(C.mesNome(mesAtual)) + "</span> " +
+          '<span class="t-sub">· ' + doMes.length + " lançamentos · " + C.brlSigla(totalMes) + "</span></span></td></tr>";
       }
 
       var outros = (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0);
       html += '<tr data-id="' + v.id + '"' + (v.tipo === "Alteração" ? ' class="row-alt"' : "") + ">" +
-        '<td class="num t-sub nowrap">' + (v.tipo === "Alteração" ? "↳ " : "") + v.id + "</td>" +
-        "<td>" + pessoa(v.colaborador, v.area) + "</td>" +
-        "<td>" + rota(v) +
+        '<td class="num t-sub nowrap fix1">' + (v.tipo === "Alteração" ? "↳ " : "") + v.id + "</td>" +
+        '<td class="fix2">' + pessoa(v.colaborador, v.area) + "</td>" +
+        '<td class="fix3">' + rota(v) +
         (v.tipo === "Alteração"
           ? ' <span class="chip warn" title="' + esc(v.motivo || "") + '">' +
             esc(v.tipoAlteracao || "Alteração") + " de #" + esc(v.refId) + "</span>"
@@ -390,7 +391,8 @@
         "</div></td></tr>";
     });
 
-    html += "</tbody><tfoot><tr><td colspan='4'>" + lista.length + " lançamentos · " + noites + " pernoites</td>" +
+    html += '</tbody><tfoot><tr><td class="fix1"></td><td class="fix2">' + lista.length + " lançamentos</td>" +
+      '<td class="fix3"></td><td>' + noites + " pernoites</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.aereo) || 0); }, 0)) + "</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + v.hospedagem; }, 0)) + "</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.alimentacao) || 0); }, 0)) + "</td>" +

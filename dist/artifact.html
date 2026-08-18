@@ -363,7 +363,13 @@ td.zero { color: var(--text-3); }
   font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
   flex: none;
 }
-.person-name { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* O nome e a área ocupam blocos próprios: só assim as reticências funcionam,
+   já que max-width e text-overflow não valem para elemento inline. */
+.person > span:not(.avatar) { display: block; min-width: 0; }
+.person-name { display: block; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Numa coluna congelada o texto não pode vazar: corta com reticências. */
+.person .t-sub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+td.fix2 .person > span:not(.avatar) { max-width: 176px; overflow: hidden; }
 
 /* ---------- Gráficos ---------- */
 
@@ -518,6 +524,27 @@ body.trancado .tabs { display: none; }
 
 .actions-cell { display: flex; gap: 2px; justify-content: flex-end; }
 
+/* Colunas congeladas à esquerda: ID, colaborador e trecho ficam à vista
+   enquanto o resto da tabela rola na horizontal. */
+th.fix1, td.fix1 { position: sticky; left: 0; width: 52px; min-width: 52px; }
+th.fix2, td.fix2 { position: sticky; left: 52px; min-width: 236px; max-width: 236px; }
+th.fix3, td.fix3 { position: sticky; left: 288px; min-width: 152px; border-right: 1px solid var(--border); }
+
+td.fix1, td.fix2, td.fix3 { background: var(--surface); z-index: 2; }
+thead th.fix1, thead th.fix2, thead th.fix3 { background: var(--surface-2); z-index: 3; }
+tbody tr:hover td.fix1, tbody tr:hover td.fix2, tbody tr:hover td.fix3 { background: var(--surface-2); }
+tr.row-alt td.fix1, tr.row-alt td.fix2, tr.row-alt td.fix3 {
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+tfoot td.fix1, tfoot td.fix2, tfoot td.fix3 { background: var(--surface-2); z-index: 2; }
+
+/* O rótulo do mês acompanha a rolagem horizontal. */
+.mes-divisor { position: sticky; left: 10px; display: inline-block; }
+
+@media (max-width: 720px) {
+  th.fix1, td.fix1, th.fix2, td.fix2, th.fix3, td.fix3 { position: static; min-width: 0; }
+}
+
 /* Ações sempre alcançáveis, mesmo com a tabela rolando na horizontal */
 th.col-acoes, td.col-acoes {
   position: sticky;
@@ -525,7 +552,8 @@ th.col-acoes, td.col-acoes {
   background: var(--surface);
   border-left: 1px solid var(--border);
 }
-thead th.col-acoes { background: var(--surface-2); }
+thead th.col-acoes { background: var(--surface-2); z-index: 3; }
+td.col-acoes { z-index: 2; }
 tbody tr:hover td.col-acoes { background: var(--surface-2); }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4569,7 +4597,7 @@ window.SEED = {
     return '<div class="person">' +
       '<span class="avatar" aria-hidden="true">' + esc(C.iniciais(nome)) + "</span>" +
       '<span style="min-width:0"><span class="person-name">' + esc(nome || "—") + "</span>" +
-      (sub ? '<br><span class="t-sub">' + esc(sub) + "</span>" : "") +
+      (sub ? '<span class="t-sub">' + esc(sub) + "</span>" : "") +
       "</span></div>";
   }
 
@@ -4863,6 +4891,7 @@ window.SEED = {
       '<h2>Viagens</h2>' +
       '<span class="chip">' + lista.length + " lançamento" + (lista.length === 1 ? "" : "s") + "</span>" +
       '<span class="grow"></span>' +
+      '<button class="btn btn-sm" data-acao="registrar-alteracao">Registrar alteração</button>' +
       '<button class="btn btn-sm" data-acao="importar-viagens">Importar planilha</button>' +
       '<button class="btn btn-sm" data-acao="exportar-viagens">Exportar CSV</button>' +
       '<button class="btn btn-primary btn-sm" data-acao="nova-viagem">+ Nova viagem</button>' +
@@ -4892,7 +4921,7 @@ window.SEED = {
     }
 
     html += '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-      "<th>ID</th><th>Colaborador</th><th>Trecho</th><th>Período</th>" +
+      '<th class="fix1">ID</th><th class="fix2">Colaborador</th><th class="fix3">Trecho</th><th>Período</th>' +
       '<th class="n">Aéreo</th><th class="n">Hospedagem</th><th class="n">Alimentação</th><th class="n">Outros</th>' +
       '<th class="n">Total</th><th>Status</th><th>Conferência</th><th class="col-acoes"></th></tr></thead><tbody>';
 
@@ -4905,15 +4934,15 @@ window.SEED = {
         var doMes = lista.filter(function (x) { return x.mesRef === mesAtual; });
         var totalMes = doMes.reduce(function (s, x) { return s + x.total; }, 0);
         html += '<tr><td colspan="12" style="background:var(--surface-2);padding:6px 10px">' +
-          '<span class="eyebrow">' + esc(C.mesNome(mesAtual)) + "</span> " +
-          '<span class="t-sub">· ' + doMes.length + " lançamentos · " + C.brlSigla(totalMes) + "</span></td></tr>";
+          '<span class="mes-divisor"><span class="eyebrow">' + esc(C.mesNome(mesAtual)) + "</span> " +
+          '<span class="t-sub">· ' + doMes.length + " lançamentos · " + C.brlSigla(totalMes) + "</span></span></td></tr>";
       }
 
       var outros = (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0);
       html += '<tr data-id="' + v.id + '"' + (v.tipo === "Alteração" ? ' class="row-alt"' : "") + ">" +
-        '<td class="num t-sub nowrap">' + (v.tipo === "Alteração" ? "↳ " : "") + v.id + "</td>" +
-        "<td>" + pessoa(v.colaborador, v.area) + "</td>" +
-        "<td>" + rota(v) +
+        '<td class="num t-sub nowrap fix1">' + (v.tipo === "Alteração" ? "↳ " : "") + v.id + "</td>" +
+        '<td class="fix2">' + pessoa(v.colaborador, v.area) + "</td>" +
+        '<td class="fix3">' + rota(v) +
         (v.tipo === "Alteração"
           ? ' <span class="chip warn" title="' + esc(v.motivo || "") + '">' +
             esc(v.tipoAlteracao || "Alteração") + " de #" + esc(v.refId) + "</span>"
@@ -4942,7 +4971,8 @@ window.SEED = {
         "</div></td></tr>";
     });
 
-    html += "</tbody><tfoot><tr><td colspan='4'>" + lista.length + " lançamentos · " + noites + " pernoites</td>" +
+    html += '</tbody><tfoot><tr><td class="fix1"></td><td class="fix2">' + lista.length + " lançamentos</td>" +
+      '<td class="fix3"></td><td>' + noites + " pernoites</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.aereo) || 0); }, 0)) + "</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + v.hospedagem; }, 0)) + "</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.alimentacao) || 0); }, 0)) + "</td>" +
@@ -5566,6 +5596,7 @@ window.SEED = {
         }, falhou);
         break;
       case "alteracao": abrirAlteracao(C.viagemPorId(id)); break;
+      case "registrar-alteracao": escolherViagemParaAlterar(); break;
       case "validar":
       case "desvalidar":
         C.validarConferencia(id).then(function () {
@@ -5774,6 +5805,41 @@ window.SEED = {
     recalcular(form);
     var primeiro = form.querySelector('[name="colaborador"]');
     if (primeiro) primeiro.focus();
+  }
+
+  /**
+   * Ponto de entrada visível para registrar uma alteração: escolhe a viagem
+   * primeiro, para quem não conhece o botão ↻ da linha.
+   */
+  function escolherViagemParaAlterar() {
+    var candidatas = C.viagens()
+      .filter(function (v) { return v.tipo !== "Alteração"; })
+      .sort(function (a, b) { return (b.dataIda || "").localeCompare(a.dataIda || ""); });
+
+    if (!candidatas.length) { toast("Não há viagem lançada para alterar"); return; }
+
+    var dialogo = abrirModal({
+      titulo: "Registrar alteração de viagem",
+      estreito: true,
+      corpo: '<form id="form-escolhe" method="dialog"><div class="grid" style="gap:12px">' +
+        '<div class="note">Cancelamento, remarcação de voo, extensão do período, troca de hotel — ' +
+        "a viagem original continua como está, e a alteração entra como um lançamento ligado a ela, " +
+        "com o próprio custo. Assim dá para medir quanto as mudanças custaram no ano.</div>" +
+        V.campo("Viagem a alterar", V.selectHTML("id", candidatas.map(function (v) {
+          return { v: v.id, r: "#" + v.id + " · " + v.colaborador + " · " +
+                   C.fmtDataCurta(v.dataIda) + "→" + C.fmtDataCurta(v.dataVolta) + " · " + v.destino };
+        }), String(candidatas[0].id), "required"), "c12") +
+        "</div></form>",
+      rodape: '<span class="grow"></span><button class="btn" data-acao="fechar">Cancelar</button>' +
+        '<button class="btn btn-primary" type="submit" form="form-escolhe">Continuar</button>'
+    });
+
+    dialogo.querySelector("form").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var id = new FormData(ev.target).get("id");
+      dialogo.close();
+      abrirAlteracao(C.viagemPorId(id));
+    });
   }
 
   function abrirAlteracao(original) {
