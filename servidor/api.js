@@ -172,7 +172,8 @@ function proximoId(dados) {
 
 const CAMPOS_VIAGEM = ["tipo", "colaborador", "destino", "aeroportoOrigem", "dataIda", "dataVolta",
   "aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao",
-  "status", "refId", "motivo", "pendencias", "obs", "conferencia"];
+  "status", "refId", "motivo", "pendencias", "obs", "conferencia",
+  "hospedagem", "tipoAlteracao"];
 
 const CAMPOS_COLABORADOR = ["nome", "status", "area", "cargo", "nivel", "gestor", "contrato",
   "cidade", "uf", "aeroportoBase", "email", "emailAlt", "modelo"];
@@ -190,7 +191,7 @@ function texto(v, limite = 500) {
 function limpaViagem(bruta) {
   const v = {};
   for (const campo of CAMPOS_VIAGEM) {
-    if (["aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao"].includes(campo)) {
+    if (["aereo", "hospedagem", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao"].includes(campo)) {
       v[campo] = numero(bruta[campo]);
     } else if (campo === "refId") {
       v[campo] = bruta[campo] ? Number(bruta[campo]) : null;

@@ -312,13 +312,15 @@
 
   // ---------- formulário de viagem ----------
 
-  var CAMPOS_MOEDA = ["aereo", "valorDiaria", "alimentacao", "transporte", "custoAlteracao"];
+  var CAMPOS_MOEDA = ["aereo", "hospedagem", "alimentacao", "transporte", "custoAlteracao"];
 
   function abrirViagem(viagem, pre) {
     var novo = !viagem;
     var v = viagem ? Object.assign({}, viagem) : C.viagemVazia();
     if (pre) Object.assign(v, pre);
     if (novo && !v.dataIda) v.dataIda = "";
+    // Lançamento antigo guardava diárias × valor; o campo agora é o total.
+    var inicial = { hospedagem: C.calc(v).hospedagem };
 
     var ehAlteracao = v.tipo === "Alteração";
     var colabs = C.colaboradoresOrdenados();
@@ -356,11 +358,10 @@
 
       '<div class="section-label"><span class="eyebrow">Custos</span></div>' +
       V.campo("Aéreo (R$)", '<input type="text" class="money" name="aereo" value="' + C.brl(v.aereo) + '">', "c3") +
-      '<div class="field c3"><label>Diárias de hotel</label>' +
-      '<input type="text" class="money" name="diarias" value="' + (v.diarias || 0) + '">' +
-      '<span class="hint" data-info="diarias"></span></div>' +
-      V.campo("Valor da diária (R$)", '<input type="text" class="money" name="valorDiaria" value="' + C.brl(v.valorDiaria) + '">', "c3") +
-      '<div class="field c3"><label>Hospedagem (R$)</label><input type="text" class="money" name="hospedagem" readonly value="0"><span class="hint">Diárias × valor</span></div>' +
+
+      '<div class="field c3"><label>Hospedagem — total (R$)</label>' +
+      '<input type="text" class="money" name="hospedagem" value="' + C.brl(inicial.hospedagem) + '">' +
+      '<span class="hint" data-info="hospedagem"></span></div>' +
 
       '<div class="field c3"><label>Alimentação (R$)</label>' +
       '<input type="text" class="money" name="alimentacao" value="' + C.brl(v.alimentacao) + '">' +
@@ -371,9 +372,13 @@
       (ehAlteracao ?
         V.campo("Custo da alteração (R$)", '<input type="text" class="money" name="custoAlteracao" value="' + C.brl(v.custoAlteracao) + '">', "c3") +
         V.campo("Viagem original", '<input type="text" readonly value="#' + esc(v.refId || "") + '">', "c3") +
-        '<div class="section-label"><span class="eyebrow">Alteração</span></div>' +
-        V.campo("Motivo da alteração", '<input type="text" name="motivo" value="' + esc(v.motivo) + '">', "c6") +
-        V.campo("Pendências em aberto", '<input type="text" name="pendencias" value="' + esc(v.pendencias) + '" placeholder="Hospedagem + Alimentação">', "c6",
+        '<div class="section-label"><span class="eyebrow">O que aconteceu</span></div>' +
+        V.campo("Tipo de alteração",
+                V.selectHTML("tipoAlteracao", C.TIPOS_ALTERACAO.map(function (t) { return t.v; }),
+                             v.tipoAlteracao || C.TIPOS_ALTERACAO[0].v), "c4",
+                "Cancelamento e no-show marcam a viagem original como Cancelada.") +
+        V.campo("Motivo / detalhe", '<input type="text" name="motivo" value="' + esc(v.motivo) + '" placeholder="Remarcação do retorno de 21/08 para 28/08">', "c8") +
+        V.campo("Pendências em aberto", '<input type="text" name="pendencias" value="' + esc(v.pendencias) + '" placeholder="Hospedagem + Alimentação">', "c12",
                 "Deixe vazio quando tudo estiver contratado — o aviso some sozinho.")
         : "") +
 
@@ -399,7 +404,6 @@
     form.dataset.tipo = v.tipo;
     form.dataset.refid = v.refId || "";
     if (!novo || v.alimentacao) form.dataset.alimTocada = "1";
-    if (!novo || v.diarias) form.dataset.diariasTocada = "1";
 
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
@@ -437,7 +441,8 @@
     v.dataIda = original.dataVolta;      // a extensão começa onde a viagem terminava
     v.dataVolta = original.dataVolta;
     v.status = "Pendente";
-    v.obs = "Extensão da viagem #" + original.id;
+    v.tipoAlteracao = C.TIPOS_ALTERACAO[0].v;
+    v.obs = "Alteração da viagem #" + original.id;
     abrirViagem(null, v);
     var form = document.querySelector("#form-viagem");
     form.dataset.tipo = "Alteração";
@@ -452,9 +457,7 @@
 
     if (alvo) {
       if (alvo.name === "alimentacao") form.dataset.alimTocada = "1";
-      if (alvo.name === "diarias") form.dataset.diariasTocada = "1";
-      // Mexeu nas datas: as diárias voltam a seguir as noites do período.
-      if (alvo.name === "dataIda" || alvo.name === "dataVolta") form.dataset.diariasTocada = "";
+
       if (alvo.name === "colaborador") {
         var c = C.colaborador(alvo.value);
         var campoAero = form.querySelector('[name="aeroportoOrigem"]');
@@ -469,8 +472,7 @@
 
     var noites = Math.max(0, C.diasEntre(d.dataIda, d.dataVolta));
 
-    // Preenchimentos automáticos, até o usuário assumir o campo
-    if (!form.dataset.diariasTocada && noites) form.querySelector('[name="diarias"]').value = noites;
+    // Preenchimento automático da alimentação, até o usuário assumir o campo
     if (!form.dataset.alimTocada && noites) {
       form.querySelector('[name="alimentacao"]').value = C.brl(noites * C.porPernoite());
     }
@@ -481,12 +483,12 @@
     form.querySelector('[name="noites"]').value = noites + (noites === 1 ? " noite" : " noites");
     form.querySelector('[name="hospedagem"]').value = C.brl(calc.hospedagem);
 
-    var infoDiarias = form.querySelector("[data-info='diarias']");
-    if (infoDiarias) {
-      var diarias = C.parseNum(form.querySelector('[name="diarias"]').value);
-      infoDiarias.textContent = diarias === noites
-        ? "segue as " + noites + " noite(s) do período"
-        : "período tem " + noites + " noite(s)";
+    var infoHosp = form.querySelector("[data-info='hospedagem']");
+    if (infoHosp) {
+      var hosp = C.parseNum(form.querySelector('[name="hospedagem"]').value);
+      infoHosp.textContent = !hosp ? "Valor cheio do hotel no período"
+        : noites ? C.moeda(hosp / noites) + " por noite · " + noites + " noite(s)"
+        : "Período sem pernoite";
     }
 
     var infoRegra = form.querySelector("[data-info='regra']");
@@ -512,8 +514,9 @@
     var resumo = form.querySelector("[data-resumo]");
     if (resumo) {
       var linhas = [
-        ["Aéreo", d.aereo], ["Hospedagem", calc.hospedagem], ["Alimentação", d.alimentacao],
-        ["Transporte / Auxílio", d.transporte]
+        ["Aéreo", d.aereo],
+        ["Hospedagem" + (calc.porNoite ? " (" + C.moeda(calc.porNoite) + "/noite)" : ""), calc.hospedagem],
+        ["Alimentação", d.alimentacao], ["Transporte / Auxílio", d.transporte]
       ];
       if (form.dataset.tipo === "Alteração") linhas.push(["Custo da alteração", d.custoAlteracao]);
       resumo.innerHTML = linhas.filter(function (l) { return l[1]; }).map(function (l) {
@@ -529,7 +532,7 @@
           ? '<div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:4px">' + calc.avisos.map(function (a) {
               return '<span class="chip ' + a.nivel + '">⚠ ' + esc(a.texto) + "</span>";
             }).join("") + "</div>"
-          : '<div style="padding-top:4px"><span class="chip ok">OK — noites, diárias e alimentação batem</span></div>');
+          : '<div style="padding-top:4px"><span class="chip ok">OK — período, hospedagem e alimentação batem</span></div>');
     }
   }
 
@@ -547,12 +550,12 @@
       id: Number(form.dataset.id) || 0,
       tipo: form.dataset.tipo || "Viagem",
       refId: form.dataset.refid ? Number(form.dataset.refid) : null,
+      tipoAlteracao: fd.get("tipoAlteracao") || "",
       colaborador: fd.get("colaborador") || "",
       destino: (fd.get("destino") || "").trim(),
       aeroportoOrigem: (fd.get("aeroportoOrigem") || "").trim(),
       dataIda: fd.get("dataIda") || "",
       dataVolta: fd.get("dataVolta") || "",
-      diarias: C.parseNum(fd.get("diarias")),
       status: fd.get("status") || "Fechado",
       motivo: (fd.get("motivo") || "").trim(),
       pendencias: (fd.get("pendencias") || "").trim(),
@@ -591,11 +594,13 @@
     }, Promise.resolve());
 
     fila.then(function () {
-      // Ao registrar uma alteração, a viagem original passa a 'Alterada'
+      // A viagem original passa a "Alterada" — ou "Cancelado", num cancelamento.
       if (!form.dataset.originalId) return;
       var orig = C.viagemPorId(form.dataset.originalId);
-      if (orig && orig.status !== "Alterada") {
-        return C.salvarViagem(Object.assign({}, orig, { status: "Alterada" }));
+      if (!orig) return;
+      var novoStatus = C.tipoAlteracao(d.tipoAlteracao).cancela ? "Cancelado" : "Alterada";
+      if (orig.status !== novoStatus) {
+        return C.salvarViagem(Object.assign({}, orig, { status: novoStatus }));
       }
     }).then(function () {
       botoes.forEach(function (b) { b.disabled = false; });
@@ -619,7 +624,7 @@
       // Mantém destino e datas, limpa pessoa e valores — o padrão de quem lança em série.
       form.dataset.id = "";
       form.dataset.originalId = "";
-      ["aereo", "valorDiaria", "transporte", "custoAlteracao"].forEach(function (k) {
+      ["aereo", "hospedagem", "transporte", "custoAlteracao"].forEach(function (k) {
         var campo = form.querySelector('[name="' + k + '"]');
         if (campo) campo.value = "0,00";
       });
@@ -627,7 +632,6 @@
       if (sel) { sel.value = ""; sel.focus(); }
       form.querySelectorAll('[name="lote-nome"]').forEach(function (c) { c.checked = false; });
       form.dataset.alimTocada = "";
-      form.dataset.diariasTocada = "";
       recalcular(form);
     }
   }
@@ -675,10 +679,8 @@
       exemplo: "09/10/2026", aliases: ["data de volta", "data volta", "volta", "retorno", "fim"] },
     { titulo: "Aéreo (R$)", campo: "aereo", largura: 12, tipo: "numero",
       exemplo: 1234.56, aliases: ["aereo (r$)", "aereo", "passagem", "aereo r$"] },
-    { titulo: "Diárias de hotel", campo: "diarias", largura: 15, tipo: "numero",
-      exemplo: 4, aliases: ["diarias de hotel", "diarias", "n diarias"] },
-    { titulo: "Valor da diária (R$)", campo: "valorDiaria", largura: 18, tipo: "numero",
-      exemplo: 280, aliases: ["valor da diaria (r$)", "valor da diaria", "valor diaria", "diaria"] },
+    { titulo: "Hospedagem — total (R$)", campo: "hospedagem", largura: 22, tipo: "numero",
+      exemplo: 1120, aliases: ["hospedagem - total (r$)", "hospedagem — total (r$)", "hospedagem (r$)", "hospedagem", "hotel"] },
     { titulo: "Alimentação (R$)", campo: "alimentacao", largura: 17, tipo: "numero",
       exemplo: 400, aliases: ["alimentacao (r$)", "alimentacao"] },
     { titulo: "Transporte/Auxílio (R$)", campo: "transporte", largura: 21, tipo: "numero",
@@ -710,7 +712,7 @@
           ["Datas", "No formato dia/mês/ano. Célula formatada como data também funciona."],
           ["Valores", "Só números. 1234,56 ou 1234.56 — sem o R$."],
           ["Alimentação", "Se deixar vazio, entra a regra: " + C.brlSigla(C.porPernoite()) + " por pernoite."],
-          ["Diárias", "Se deixar vazio, entra o número de noites do período."],
+          ["Hospedagem", "Lance o total do período. O valor por noite sai da divisão pelas noites."],
           ["Linha de exemplo", "Apague a linha 2 da aba Viagens antes de importar, ou deixe — ela é conferida como qualquer outra."]
         ]) },
 
@@ -734,6 +736,7 @@
     if (c.tipo === "data") return "Dia/mês/ano, por exemplo 05/10/2026.";
     if (c.tipo === "numero") return "Número, sem o R$.";
     if (c.campo === "aeroportoOrigem") return "Opcional. Veja a aba Aeroportos; vazio usa o aeroporto base da pessoa.";
+    if (c.campo === "hospedagem") return "Valor cheio do hotel no período. O app divide pelas noites sozinho.";
     return "Texto livre.";
   }
 
@@ -818,8 +821,11 @@
         status = "";
       }
 
-      var temDiarias = String(bruto("diarias") || "").trim() !== "";
       var temAlim = String(bruto("alimentacao") || "").trim() !== "";
+      // Planilha antiga, com diárias e valor da diária, ainda é aceita.
+      var hospedagem = String(bruto("hospedagem") || "").trim() !== ""
+        ? C.parseNum(bruto("hospedagem"))
+        : C.parseNum(bruto("diarias")) * C.parseNum(bruto("valorDiaria"));
 
       var viagem = {
         tipo: "Viagem",
@@ -829,8 +835,7 @@
         dataIda: ida,
         dataVolta: volta,
         aereo: C.parseNum(bruto("aereo")),
-        diarias: temDiarias ? C.parseNum(bruto("diarias")) : noites,
-        valorDiaria: C.parseNum(bruto("valorDiaria")),
+        hospedagem: hospedagem,
         alimentacao: temAlim ? C.parseNum(bruto("alimentacao")) : noites * C.porPernoite(),
         transporte: C.parseNum(bruto("transporte")),
         custoAlteracao: 0,

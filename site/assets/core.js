@@ -356,6 +356,24 @@
 
   // ---------- regras de viagem ----------
 
+  /** O que pode ter acontecido com uma viagem já aprovada. */
+  var TIPOS_ALTERACAO = [
+    { v: "Remarcação de voo", cancela: false, periodo: true },
+    { v: "Extensão do período", cancela: false, periodo: true },
+    { v: "Antecipação do retorno", cancela: false, periodo: true },
+    { v: "Cancelamento da viagem", cancela: true, periodo: false },
+    { v: "No-show", cancela: true, periodo: false },
+    { v: "Troca de hotel", cancela: false, periodo: false },
+    { v: "Outro", cancela: false, periodo: true }
+  ];
+
+  function tipoAlteracao(nome) {
+    for (var i = 0; i < TIPOS_ALTERACAO.length; i++) {
+      if (TIPOS_ALTERACAO[i].v === nome) return TIPOS_ALTERACAO[i];
+    }
+    return TIPOS_ALTERACAO[0];
+  }
+
   /** Valor devido de alimentação por pernoite (jantar + café da manhã). */
   function porPernoite() {
     var r = db.params.regras;
@@ -368,7 +386,13 @@
    */
   function calc(v) {
     var noites = Math.max(0, diasEntre(v.dataIda, v.dataVolta));
-    var hospedagem = round2((Number(v.diarias) || 0) * (Number(v.valorDiaria) || 0));
+
+    // A hospedagem passou a ser lançada pelo total. Lançamentos antigos, feitos
+    // por diárias × valor, continuam valendo pelo cálculo antigo.
+    var hospedagem = v.hospedagem === undefined || v.hospedagem === null || v.hospedagem === ""
+      ? round2((Number(v.diarias) || 0) * (Number(v.valorDiaria) || 0))
+      : round2(Number(v.hospedagem) || 0);
+    var porNoite = noites ? round2(hospedagem / noites) : 0;
     var total = round2((Number(v.aereo) || 0) + hospedagem + (Number(v.alimentacao) || 0) +
                        (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0));
     var alimDevida = round2(noites * porPernoite());
@@ -376,9 +400,9 @@
 
     var avisos = [];
     if (v.pendencias) avisos.push({ nivel: "crit", curto: "Pendente", texto: "Pendente: " + v.pendencias });
-    if ((Number(v.diarias) || 0) > 0 && Number(v.diarias) !== noites) {
-      avisos.push({ nivel: "warn", curto: "Noites ≠ diárias",
-                    texto: noites + " noites e " + brl(v.diarias, 0) + " diárias de hotel" });
+    if (hospedagem > 0 && noites === 0) {
+      avisos.push({ nivel: "warn", curto: "Hospedagem sem noite",
+                    texto: "Tem hospedagem lançada, mas o período não tem pernoite" });
     }
     if (difAlim !== 0) {
       avisos.push({ nivel: "warn", curto: "Alimentação",
@@ -396,6 +420,7 @@
       gestor: gestorDe(v.colaborador),
       noites: noites,
       hospedagem: hospedagem,
+      porNoite: porNoite,
       total: total,
       alimDevida: alimDevida,
       difAlim: difAlim,
@@ -427,14 +452,15 @@
 
   var CAMPOS_VIAGEM = ["tipo", "colaborador", "destino", "aeroportoOrigem", "dataIda", "dataVolta",
                        "aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao",
-                       "status", "refId", "motivo", "pendencias", "obs", "conferencia"];
+                       "status", "refId", "motivo", "pendencias", "obs", "conferencia",
+                       "hospedagem", "tipoAlteracao"];
 
   function viagemVazia() {
     return {
       id: 0, tipo: "Viagem", colaborador: "", destino: "São Paulo/SP", aeroportoOrigem: "",
-      dataIda: "", dataVolta: "", aereo: 0, diarias: 0, valorDiaria: 0, alimentacao: 0,
+      dataIda: "", dataVolta: "", aereo: 0, hospedagem: 0, diarias: 0, valorDiaria: 0, alimentacao: 0,
       transporte: 0, custoAlteracao: 0, status: "Fechado", refId: null,
-      motivo: "", pendencias: "", obs: "", conferencia: null
+      motivo: "", pendencias: "", obs: "", conferencia: null, tipoAlteracao: ""
     };
   }
 
@@ -891,17 +917,18 @@
 
   function csvViagens() {
     var cab = ["ID", "Tipo", "Mês ref.", "Colaborador", "Área", "Gestor direto", "Destino",
-               "Aeroporto origem", "Data ida", "Data volta", "Noites", "Aéreo (R$)", "Diárias",
-               "Valor diária (R$)", "Hospedagem (R$)", "Alimentação (R$)", "Transporte/Aux. (R$)",
+               "Aeroporto origem", "Data ida", "Data volta", "Noites", "Aéreo (R$)",
+               "Hospedagem (R$)", "Hospedagem por noite (R$)", "Alimentação (R$)", "Transporte/Aux. (R$)",
                "Custo de alteração (R$)", "TOTAL (R$)", "Alimentação devida (regra)", "Diferença alim.",
-               "Conferência", "Status", "Ref. ID alterado", "Motivo da alteração", "Pendências em aberto", "Observação"];
+               "Conferência", "Status", "Tipo de alteração", "Ref. ID alterado", "Motivo da alteração",
+               "Pendências em aberto", "Observação"];
     var linhas = viagens().sort(function (a, b) { return a.id - b.id; }).map(function (v) {
       return [v.id, v.tipo, v.mesRef, v.colaborador, v.area, v.gestor, v.destino, v.aeroportoOrigem,
-              fmtData(v.dataIda), fmtData(v.dataVolta), v.noites, v.aereo, v.diarias, v.valorDiaria,
-              v.hospedagem, v.alimentacao, v.transporte, v.custoAlteracao, v.total, v.alimDevida,
+              fmtData(v.dataIda), fmtData(v.dataVolta), v.noites, v.aereo,
+              v.hospedagem, v.porNoite, v.alimentacao, v.transporte, v.custoAlteracao, v.total, v.alimDevida,
               v.difAlim,
               v.ok ? "OK" : (v.conferido ? "Conferido: " : "") + v.avisos.map(function (a) { return a.texto; }).join(" · "),
-              v.status, v.refId || "", v.motivo, v.pendencias, v.obs];
+              v.status, v.tipoAlteracao || "", v.refId || "", v.motivo, v.pendencias, v.obs];
     });
     return montaCSV(cab, linhas);
   }
@@ -969,6 +996,7 @@
     viagemVazia: viagemVazia, salvarViagem: salvarViagem, excluirViagem: excluirViagem,
     duplicarViagem: duplicarViagem, alteracoesDe: alteracoesDe, porPernoite: porPernoite,
     validarConferencia: validarConferencia,
+    TIPOS_ALTERACAO: TIPOS_ALTERACAO, tipoAlteracao: tipoAlteracao,
     proximoId: proximoId,
 
     // uber

@@ -361,13 +361,16 @@
       html += '<tr data-id="' + v.id + '"' + (v.tipo === "Alteração" ? ' class="row-alt"' : "") + ">" +
         '<td class="num t-sub nowrap">' + (v.tipo === "Alteração" ? "↳ " : "") + v.id + "</td>" +
         "<td>" + pessoa(v.colaborador, v.area) + "</td>" +
-        "<td>" + rota(v) + (v.tipo === "Alteração" ? ' <span class="chip warn">alteração de #' + esc(v.refId) + "</span>" : "") + "</td>" +
+        "<td>" + rota(v) +
+        (v.tipo === "Alteração"
+          ? ' <span class="chip warn" title="' + esc(v.motivo || "") + '">' +
+            esc(v.tipoAlteracao || "Alteração") + " de #" + esc(v.refId) + "</span>"
+          : "") + "</td>" +
         '<td class="nowrap"><span class="num">' + C.fmtDataCurta(v.dataIda) + " → " + C.fmtDataCurta(v.dataVolta) + "</span>" +
-        '<br><span class="t-sub">' + v.noites + (v.noites === 1 ? " noite" : " noites") +
-        (v.diarias ? " · " + C.brl(v.diarias, 0) + " diárias" : "") + "</span></td>" +
+        '<br><span class="t-sub">' + v.noites + (v.noites === 1 ? " noite" : " noites") + "</span></td>" +
         '<td class="n">' + dinheiro(v.aereo) + "</td>" +
         '<td class="n">' + dinheiro(v.hospedagem) +
-        (v.valorDiaria ? '<br><span class="t-sub">' + C.moeda(v.valorDiaria) + "/noite</span>" : "") + "</td>" +
+        (v.porNoite ? '<br><span class="t-sub">' + C.moeda(v.porNoite) + "/noite</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(v.alimentacao) +
         (v.difAlim ? '<br><span class="t-sub" style="color:var(--' + (v.difAlim < 0 ? "critical" : "warning") + ')">' +
           (v.difAlim > 0 ? "+" : "") + C.moeda(v.difAlim) + "</span>" : "") + "</td>" +
