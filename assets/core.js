@@ -137,7 +137,8 @@
     servicos: [], tiposTransacao: [],
     palavrasAeroporto: ["aeroport", "airport", "terminal", "linneu gomes", "confins", "rocha pombo"],
     regras: { jantar: 70, cafe: 30, toleranciaUber: 1 },
-    dePara: []
+    dePara: [],
+    conferenciasUber: {}
   };
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -241,6 +242,7 @@
       if (!db.params[k]) db.params[k] = clone(base[k] || PARAMS_PADRAO[k] || []);
     });
     db.params.regras = Object.assign({}, PARAMS_PADRAO.regras, base.regras || {}, db.params.regras || {});
+    if (!db.params.conferenciasUber || typeof db.params.conferenciasUber !== "object") db.params.conferenciasUber = {};
     db.uber = db.uber || [];
     db.viagens = db.viagens || [];
     db.colaboradores = db.colaboradores || [];
@@ -645,6 +647,55 @@
     return { situacao: "fora", texto: "Fora do período" };
   }
 
+  /**
+   * Chave curta e estável da corrida, usada para guardar a validação. A linha
+   * inteira é a chave do banco, mas é longa demais para virar nome de campo.
+   */
+  function chaveCorrida(linha) {
+    var p = String(linha).split(";");
+    return [p[0], p[1], p[2], p[3], p[9], p[10]].join("|").slice(0, 120);
+  }
+
+  /**
+   * Tudo que pede atenção numa corrida, numa lista só. A tela mostra uma
+   * legenda única ("Atenção") e detalha os motivos aqui embaixo.
+   */
+  function avisosDaCorrida(c, viagensPorPessoa) {
+    var avisos = [];
+    if (c.desconhecido) {
+      avisos.push({ curto: "Nome fora do De-Para",
+        texto: 'O relatório traz "' + c.nomeRelatorio + '", que não bate com nenhum colaborador. Cadastre o vínculo para a corrida entrar no custo da pessoa.' });
+    }
+    if (c.auditoria.situacao === "sem-viagem") {
+      avisos.push({ curto: "Sem viagem registrada",
+        texto: c.colaborador
+          ? "Não existe viagem lançada para " + c.colaborador + " nessa data. Pode ser deslocamento urbano, ou a viagem ainda não foi lançada."
+          : "Sem colaborador identificado, não dá para confrontar com viagem nenhuma." });
+    }
+    if (c.auditoria.situacao === "fora") {
+      var lista = (viagensPorPessoa && viagensPorPessoa[c.colaborador]) || [];
+      var perto = lista.filter(function (v) { return v.dataIda && v.dataVolta; })
+        .map(function (v) { return "#" + v.id + " " + fmtData(v.dataIda) + " a " + fmtData(v.dataVolta); })
+        .slice(0, 3).join(" · ");
+      avisos.push({ curto: "Fora do período",
+        texto: "A corrida é de " + fmtData(c.data) + " e não cai dentro de nenhuma viagem de " + c.colaborador + "." +
+               (perto ? " Viagens da pessoa: " + perto + "." : "") });
+    }
+    if (c.auditoria.situacao === "sem-data" && c.considerar) {
+      avisos.push({ curto: "Sem data",
+        texto: "O relatório não traz data para esse lançamento" + (c.mesRef ? ", que foi atribuído a " + mesRotulo(c.mesRef) + " pelo lote em que veio." : ".") });
+    }
+    if (c.origem && c.origem === c.destino) {
+      avisos.push({ curto: "Origem igual ao destino",
+        texto: "Partida e chegada no mesmo endereço — normalmente corrida cancelada depois do embarque ou erro do app." });
+    }
+    if (c.valor > 150) {
+      avisos.push({ curto: "Acima de R$ 150",
+        texto: "Corrida de " + moeda(c.valor) + ", acima do teto de R$ 150. Vale conferir se havia alternativa ou carona." });
+    }
+    return avisos;
+  }
+
   /** Todas as corridas com seus campos derivados (memoizado até o próximo salvar). */
   function corridas() {
     if (cacheUber) return cacheUber;
@@ -658,18 +709,62 @@
     cacheUber = db.uber.map(function (reg, i) {
       var c = parseLinhaUber(reg.linha);
       c.indice = i;
+      c.chave = chaveCorrida(reg.linha);
       c.colaborador = resolveNome(c.nomeRelatorio);
       c.desconhecido = !!c.nomeRelatorio && !c.colaborador;
       c.area = c.colaborador ? areaDe(c.colaborador) : "—";
       c.mesRef = c.data ? mesRefDe(c.data) : "";
       c.aeroporto = ehAeroporto(c.origem, c.destino);
       c.considerar = c.tipo !== "Payment";      // pagamentos da fatura não são despesa nova
+      c.viagem = null;
       c.auditoria = auditaCorrida(c, porPessoa);
-      c.alerta = c.origem && c.origem === c.destino ? "Origem = destino"
-               : (c.valor > 150 ? "Corrida acima de R$ 150" : "");
+      if (c.auditoria.viagemId) c.viagem = viagemPorId(c.auditoria.viagemId);
       return c;
     });
+
+    // Encargos (multa de atraso, ajuste) vêm sem data no relatório. Para não
+    // ficarem de fora do painel, herdam o mês do lançamento datado mais
+    // próximo: a base guarda os relatórios na ordem em que foram importados.
+    cacheUber.forEach(function (c, i) {
+      if (c.mesRef || !c.considerar) return;
+      for (var d = 1; d < cacheUber.length; d++) {
+        var vizinho = (cacheUber[i - d] && cacheUber[i - d].mesRef) ? cacheUber[i - d]
+                    : (cacheUber[i + d] && cacheUber[i + d].mesRef) ? cacheUber[i + d] : null;
+        if (vizinho) { c.mesRef = vizinho.mesRef; c.mesEstimado = true; break; }
+      }
+    });
+
+    var validadas = db.params.conferenciasUber || {};
+    cacheUber.forEach(function (c) {
+      c.avisos = avisosDaCorrida(c, porPessoa);
+      c.assinatura = c.avisos.map(function (a) { return a.curto; }).join(" | ");
+      var conf = validadas[c.chave];
+      c.conferencia = conf && conf.assinatura === c.assinatura ? conf : null;
+      c.conferido = !!(c.conferencia && c.avisos.length);
+      c.precisaConferir = c.avisos.length > 0 && !c.conferido;
+      // Mantido para quem lia o campo antigo de alerta em texto.
+      c.alerta = c.avisos.map(function (a) { return a.curto; }).join(" · ");
+    });
     return cacheUber;
+  }
+
+  /** Marca (ou desmarca) a validação de uma corrida sinalizada. */
+  function validarCorrida(chave, quem, motivo) {
+    var c = null;
+    corridas().forEach(function (x) { if (x.chave === chave) c = x; });
+    if (!c || !c.avisos.length) return Promise.resolve(null);
+
+    if (!db.params.conferenciasUber) db.params.conferenciasUber = {};
+    if (c.conferido) delete db.params.conferenciasUber[chave];
+    else {
+      db.params.conferenciasUber[chave] = {
+        por: quem || meta.nome || "",
+        em: new Date().toISOString(),
+        assinatura: c.assinatura,
+        motivo: String(motivo || "").slice(0, 300)
+      };
+    }
+    return salvarParams();
   }
 
   /** Importa linhas cruas do relatório, ignorando as que já estão na base. */
@@ -695,6 +790,12 @@
     var resultado = { novas: novas, repetidas: repetidas };
     if (!novas) return Promise.resolve(resultado);
     return armazem.importarUber(linhas).then(aplica).then(function () { return resultado; });
+  }
+
+  function corridaPorChave(chave) {
+    var achou = null;
+    corridas().forEach(function (c) { if (c.chave === chave) achou = c; });
+    return achou;
   }
 
   function excluirCorrida(indice) {
@@ -892,7 +993,8 @@
       }).sort(function (a, b) { return b.valor - a.valor; });
     }
 
-    var alertas = corridas().filter(function (c) { return c.auditoria.situacao === "fora" || c.auditoria.situacao === "sem-viagem"; });
+    var alertas = corridas().filter(function (c) { return c.precisaConferir; });
+    var validadas = corridas().filter(function (c) { return c.conferido; });
     var desconhecidos = {};
     corridas().forEach(function (c) { if (c.desconhecido) desconhecidos[c.nomeRelatorio] = (desconhecidos[c.nomeRelatorio] || 0) + 1; });
 
@@ -914,6 +1016,7 @@
       porServico: ordena(porServico),
       porCidade: ordena(porCidade),
       alertas: alertas,
+      validadas: validadas.length,
       desconhecidos: Object.keys(desconhecidos).map(function (k) { return { nome: k, n: desconhecidos[k] }; }),
       periodo: comData.length
         ? { de: comData.map(function (c) { return c.data; }).sort()[0],
@@ -1040,6 +1143,7 @@
     // uber
     corridas: corridas, parseLinhaUber: parseLinhaUber, adicionarCorridas: adicionarCorridas,
     excluirCorrida: excluirCorrida, limparUber: limparUber, resolveNome: resolveNome,
+    validarCorrida: validarCorrida, corridaPorChave: corridaPorChave,
 
     // análises
     CATEGORIAS: CATEGORIAS, resumoAnual: resumoAnual, porColaborador: porColaborador,

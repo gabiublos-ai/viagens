@@ -543,6 +543,33 @@ body.trancado .tabs { display: none; }
   color: var(--text-2);
 }
 .note.warn { border-left-color: var(--warning); background: var(--warning-bg); }
+.note.ok { border-left-color: var(--good); background: var(--good-bg); }
+
+/* Nome e trajeto na tabela do Uber abrem a corrida: parecem texto, funcionam
+   como botão. */
+.link-cel {
+  display: block; width: 100%; text-align: left;
+  background: none; border: 0; padding: 0; margin: 0;
+  cursor: pointer; border-radius: var(--r-sm);
+}
+.link-cel:hover { text-decoration: underline; text-underline-offset: 2px; }
+.chip.como-botao { cursor: pointer; font: inherit; font-size: 11px; }
+.chip.como-botao:hover { filter: brightness(.96); }
+
+.motivos { display: flex; flex-direction: column; gap: 1px; max-width: 190px; }
+.motivos > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Ficha da corrida */
+.det-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px 16px; }
+.det { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.det-valor { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.det-trajeto {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-top: 14px; padding: 12px;
+  background: var(--surface-2); border-radius: var(--r-sm);
+}
+.det-trajeto .chip { align-self: flex-start; }
+.lista-avisos { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
 
 .actions-cell { display: flex; gap: 2px; justify-content: flex-end; }
 
@@ -3727,7 +3754,8 @@ window.SEED = {
     servicos: [], tiposTransacao: [],
     palavrasAeroporto: ["aeroport", "airport", "terminal", "linneu gomes", "confins", "rocha pombo"],
     regras: { jantar: 70, cafe: 30, toleranciaUber: 1 },
-    dePara: []
+    dePara: [],
+    conferenciasUber: {}
   };
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -3831,6 +3859,7 @@ window.SEED = {
       if (!db.params[k]) db.params[k] = clone(base[k] || PARAMS_PADRAO[k] || []);
     });
     db.params.regras = Object.assign({}, PARAMS_PADRAO.regras, base.regras || {}, db.params.regras || {});
+    if (!db.params.conferenciasUber || typeof db.params.conferenciasUber !== "object") db.params.conferenciasUber = {};
     db.uber = db.uber || [];
     db.viagens = db.viagens || [];
     db.colaboradores = db.colaboradores || [];
@@ -4235,6 +4264,55 @@ window.SEED = {
     return { situacao: "fora", texto: "Fora do período" };
   }
 
+  /**
+   * Chave curta e estável da corrida, usada para guardar a validação. A linha
+   * inteira é a chave do banco, mas é longa demais para virar nome de campo.
+   */
+  function chaveCorrida(linha) {
+    var p = String(linha).split(";");
+    return [p[0], p[1], p[2], p[3], p[9], p[10]].join("|").slice(0, 120);
+  }
+
+  /**
+   * Tudo que pede atenção numa corrida, numa lista só. A tela mostra uma
+   * legenda única ("Atenção") e detalha os motivos aqui embaixo.
+   */
+  function avisosDaCorrida(c, viagensPorPessoa) {
+    var avisos = [];
+    if (c.desconhecido) {
+      avisos.push({ curto: "Nome fora do De-Para",
+        texto: 'O relatório traz "' + c.nomeRelatorio + '", que não bate com nenhum colaborador. Cadastre o vínculo para a corrida entrar no custo da pessoa.' });
+    }
+    if (c.auditoria.situacao === "sem-viagem") {
+      avisos.push({ curto: "Sem viagem registrada",
+        texto: c.colaborador
+          ? "Não existe viagem lançada para " + c.colaborador + " nessa data. Pode ser deslocamento urbano, ou a viagem ainda não foi lançada."
+          : "Sem colaborador identificado, não dá para confrontar com viagem nenhuma." });
+    }
+    if (c.auditoria.situacao === "fora") {
+      var lista = (viagensPorPessoa && viagensPorPessoa[c.colaborador]) || [];
+      var perto = lista.filter(function (v) { return v.dataIda && v.dataVolta; })
+        .map(function (v) { return "#" + v.id + " " + fmtData(v.dataIda) + " a " + fmtData(v.dataVolta); })
+        .slice(0, 3).join(" · ");
+      avisos.push({ curto: "Fora do período",
+        texto: "A corrida é de " + fmtData(c.data) + " e não cai dentro de nenhuma viagem de " + c.colaborador + "." +
+               (perto ? " Viagens da pessoa: " + perto + "." : "") });
+    }
+    if (c.auditoria.situacao === "sem-data" && c.considerar) {
+      avisos.push({ curto: "Sem data",
+        texto: "O relatório não traz data para esse lançamento" + (c.mesRef ? ", que foi atribuído a " + mesRotulo(c.mesRef) + " pelo lote em que veio." : ".") });
+    }
+    if (c.origem && c.origem === c.destino) {
+      avisos.push({ curto: "Origem igual ao destino",
+        texto: "Partida e chegada no mesmo endereço — normalmente corrida cancelada depois do embarque ou erro do app." });
+    }
+    if (c.valor > 150) {
+      avisos.push({ curto: "Acima de R$ 150",
+        texto: "Corrida de " + moeda(c.valor) + ", acima do teto de R$ 150. Vale conferir se havia alternativa ou carona." });
+    }
+    return avisos;
+  }
+
   /** Todas as corridas com seus campos derivados (memoizado até o próximo salvar). */
   function corridas() {
     if (cacheUber) return cacheUber;
@@ -4248,18 +4326,62 @@ window.SEED = {
     cacheUber = db.uber.map(function (reg, i) {
       var c = parseLinhaUber(reg.linha);
       c.indice = i;
+      c.chave = chaveCorrida(reg.linha);
       c.colaborador = resolveNome(c.nomeRelatorio);
       c.desconhecido = !!c.nomeRelatorio && !c.colaborador;
       c.area = c.colaborador ? areaDe(c.colaborador) : "—";
       c.mesRef = c.data ? mesRefDe(c.data) : "";
       c.aeroporto = ehAeroporto(c.origem, c.destino);
       c.considerar = c.tipo !== "Payment";      // pagamentos da fatura não são despesa nova
+      c.viagem = null;
       c.auditoria = auditaCorrida(c, porPessoa);
-      c.alerta = c.origem && c.origem === c.destino ? "Origem = destino"
-               : (c.valor > 150 ? "Corrida acima de R$ 150" : "");
+      if (c.auditoria.viagemId) c.viagem = viagemPorId(c.auditoria.viagemId);
       return c;
     });
+
+    // Encargos (multa de atraso, ajuste) vêm sem data no relatório. Para não
+    // ficarem de fora do painel, herdam o mês do lançamento datado mais
+    // próximo: a base guarda os relatórios na ordem em que foram importados.
+    cacheUber.forEach(function (c, i) {
+      if (c.mesRef || !c.considerar) return;
+      for (var d = 1; d < cacheUber.length; d++) {
+        var vizinho = (cacheUber[i - d] && cacheUber[i - d].mesRef) ? cacheUber[i - d]
+                    : (cacheUber[i + d] && cacheUber[i + d].mesRef) ? cacheUber[i + d] : null;
+        if (vizinho) { c.mesRef = vizinho.mesRef; c.mesEstimado = true; break; }
+      }
+    });
+
+    var validadas = db.params.conferenciasUber || {};
+    cacheUber.forEach(function (c) {
+      c.avisos = avisosDaCorrida(c, porPessoa);
+      c.assinatura = c.avisos.map(function (a) { return a.curto; }).join(" | ");
+      var conf = validadas[c.chave];
+      c.conferencia = conf && conf.assinatura === c.assinatura ? conf : null;
+      c.conferido = !!(c.conferencia && c.avisos.length);
+      c.precisaConferir = c.avisos.length > 0 && !c.conferido;
+      // Mantido para quem lia o campo antigo de alerta em texto.
+      c.alerta = c.avisos.map(function (a) { return a.curto; }).join(" · ");
+    });
     return cacheUber;
+  }
+
+  /** Marca (ou desmarca) a validação de uma corrida sinalizada. */
+  function validarCorrida(chave, quem, motivo) {
+    var c = null;
+    corridas().forEach(function (x) { if (x.chave === chave) c = x; });
+    if (!c || !c.avisos.length) return Promise.resolve(null);
+
+    if (!db.params.conferenciasUber) db.params.conferenciasUber = {};
+    if (c.conferido) delete db.params.conferenciasUber[chave];
+    else {
+      db.params.conferenciasUber[chave] = {
+        por: quem || meta.nome || "",
+        em: new Date().toISOString(),
+        assinatura: c.assinatura,
+        motivo: String(motivo || "").slice(0, 300)
+      };
+    }
+    return salvarParams();
   }
 
   /** Importa linhas cruas do relatório, ignorando as que já estão na base. */
@@ -4285,6 +4407,12 @@ window.SEED = {
     var resultado = { novas: novas, repetidas: repetidas };
     if (!novas) return Promise.resolve(resultado);
     return armazem.importarUber(linhas).then(aplica).then(function () { return resultado; });
+  }
+
+  function corridaPorChave(chave) {
+    var achou = null;
+    corridas().forEach(function (c) { if (c.chave === chave) achou = c; });
+    return achou;
   }
 
   function excluirCorrida(indice) {
@@ -4482,7 +4610,8 @@ window.SEED = {
       }).sort(function (a, b) { return b.valor - a.valor; });
     }
 
-    var alertas = corridas().filter(function (c) { return c.auditoria.situacao === "fora" || c.auditoria.situacao === "sem-viagem"; });
+    var alertas = corridas().filter(function (c) { return c.precisaConferir; });
+    var validadas = corridas().filter(function (c) { return c.conferido; });
     var desconhecidos = {};
     corridas().forEach(function (c) { if (c.desconhecido) desconhecidos[c.nomeRelatorio] = (desconhecidos[c.nomeRelatorio] || 0) + 1; });
 
@@ -4504,6 +4633,7 @@ window.SEED = {
       porServico: ordena(porServico),
       porCidade: ordena(porCidade),
       alertas: alertas,
+      validadas: validadas.length,
       desconhecidos: Object.keys(desconhecidos).map(function (k) { return { nome: k, n: desconhecidos[k] }; }),
       periodo: comData.length
         ? { de: comData.map(function (c) { return c.data; }).sort()[0],
@@ -4630,6 +4760,7 @@ window.SEED = {
     // uber
     corridas: corridas, parseLinhaUber: parseLinhaUber, adicionarCorridas: adicionarCorridas,
     excluirCorrida: excluirCorrida, limparUber: limparUber, resolveNome: resolveNome,
+    validarCorrida: validarCorrida, corridaPorChave: corridaPorChave,
 
     // análises
     CATEGORIAS: CATEGORIAS, resumoAnual: resumoAnual, porColaborador: porColaborador,
@@ -5167,7 +5298,14 @@ window.SEED = {
 
     var lista = todas.slice();
     if (f.mes) lista = lista.filter(function (c) { return c.mesRef === f.mes; });
-    if (f.situacao) lista = lista.filter(function (c) { return c.auditoria.situacao === f.situacao; });
+    if (f.situacao) {
+      lista = lista.filter(function (c) {
+        if (f.situacao === "atencao") return c.precisaConferir;
+        if (f.situacao === "validada") return c.conferido;
+        if (f.situacao === "na") return !c.considerar || c.tipo !== "Fare";
+        return !c.avisos.length && c.tipo === "Fare";   // "ok"
+      });
+    }
     if (f.busca) {
       var q = C.normal(f.busca);
       lista = lista.filter(function (c) {
@@ -5184,6 +5322,13 @@ window.SEED = {
       kpi("De/para aeroporto", C.brl(u.pctAeroporto * 100, 0) + "%", u.aeroporto + " de " + u.n + " corridas") +
       kpi("Corridas acima de R$ 150", String(u.acima150), C.brlSigla(u.valorAcima150) + " concentrados") +
       "</div>";
+
+    if (u.alertas.length) {
+      html += '<div class="note warn"><strong>' + u.alertas.length + " corrida" +
+        (u.alertas.length > 1 ? "s pedem" : " pede") + " validação.</strong> " +
+        "Abra o selo ⚠ Atenção na linha para ver o motivo e validar. " +
+        (u.validadas ? u.validadas + " já validada" + (u.validadas > 1 ? "s" : "") + "." : "") + "</div>";
+    }
 
     if (u.desconhecidos.length) {
       html += '<div class="note warn"><strong>' + u.desconhecidos.length +
@@ -5255,9 +5400,11 @@ window.SEED = {
       '<input type="search" class="search" name="busca-uber" placeholder="Buscar pessoa, cidade, endereço…" value="' + esc(f.busca || "") + '">' +
       selectHTML("mes-uber", [{ v: "", r: "Todos os meses" }].concat(mesesU.map(function (m) { return { v: m, r: C.mesRotulo(m) }; })), f.mes) +
       selectHTML("situacao-uber", [
-        { v: "", r: "Toda a auditoria" }, { v: "ok", r: "OK" },
-        { v: "fora", r: "⚠ Fora do período" }, { v: "sem-viagem", r: "⚠ Sem viagem registrada" },
-        { v: "na", r: "n/a (encargos)" }, { v: "sem-data", r: "Sem data" }
+        { v: "", r: "Toda a auditoria" },
+        { v: "atencao", r: "⚠ Pontos de atenção" },
+        { v: "validada", r: "✓ Validadas" },
+        { v: "ok", r: "OK" },
+        { v: "na", r: "Encargos da fatura" }
       ], f.situacao) + "</div></div>";
 
     if (!lista.length) {
@@ -5267,22 +5414,23 @@ window.SEED = {
 
     html += '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
       "<th>Data</th><th>Colaborador</th><th>Serviço</th><th>Trajeto</th>" +
-      '<th class="n">Valor</th><th>Auditoria</th><th>Alerta</th><th class="col-acoes"></th></tr></thead><tbody>' +
+      '<th class="n">Valor</th><th>Auditoria</th><th>Motivo</th><th class="col-acoes"></th></tr></thead><tbody>' +
       lista.slice(0, 400).map(function (c) {
-        var aud = c.auditoria;
-        var classe = aud.situacao === "ok" ? "ok" : aud.situacao === "na" || aud.situacao === "sem-data" ? "" : "warn";
         return "<tr>" +
           '<td class="nowrap"><span class="num">' + (c.data ? C.fmtData(c.data) : "—") + "</span>" +
-          (c.hora ? '<br><span class="t-sub">' + esc(c.hora) + "</span>" : "") + "</td>" +
-          "<td>" + (c.colaborador ? pessoa(c.colaborador, c.area)
-            : '<span class="chip crit">⚠ incluir no De-Para</span><br><span class="t-sub">' + esc(c.nomeRelatorio || "—") + "</span>") + "</td>" +
+          (c.hora ? '<br><span class="t-sub">' + esc(c.hora) + "</span>"
+                  : (c.mesRef ? '<br><span class="t-sub">' + esc(C.mesRotulo(c.mesRef)) + "</span>" : "")) + "</td>" +
+          '<td>' + abreCorrida(c, c.colaborador ? pessoa(c.colaborador, c.area)
+            : '<span class="chip crit">⚠ sem De-Para</span><br><span class="t-sub">' + esc(c.nomeRelatorio || "—") + "</span>") + "</td>" +
           "<td>" + esc(c.servico || "—") + '<br><span class="t-sub">' + esc(c.cidade || "") + "</span></td>" +
-          '<td style="max-width:280px"><span class="t-sub">' + esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>" +
-          (c.aeroporto ? ' <span class="chip accent">aeroporto</span>' : "") + "</td>" +
+          '<td style="max-width:280px">' + abreCorrida(c, '<span class="t-sub">' + esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>" +
+            (c.aeroporto ? ' <span class="chip accent">aeroporto</span>' : "")) + "</td>" +
           '<td class="n">' + C.moeda(c.valor) + (c.tipo !== "Fare" ? '<br><span class="t-sub">' + esc(c.tipo) + "</span>" : "") + "</td>" +
-          '<td><span class="chip ' + classe + '">' + (classe === "warn" ? "⚠ " : "") + esc(aud.texto) + "</span></td>" +
-          '<td class="t-sub">' + esc(c.alerta) + "</td>" +
+          "<td>" + selo(c) + "</td>" +
+          "<td>" + motivos(c) + "</td>" +
           '<td class="col-acoes"><div class="actions-cell">' +
+          botaoIcone("ver-corrida", c.chave, "Ver a corrida completa",
+            '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>') +
           botaoIcone("excluir-corrida", c.indice, "Excluir corrida", '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>') +
           "</div></td></tr>";
       }).join("") + "</tbody></table></div>" +
@@ -5290,6 +5438,37 @@ window.SEED = {
       "</div></div>";
 
     return html;
+  }
+
+  /** Nome e trajeto abrem a corrida por inteiro. */
+  function abreCorrida(c, conteudo) {
+    return '<button class="link-cel" data-acao="ver-corrida" data-id="' + esc(c.chave) +
+      '" title="Ver a corrida completa">' + conteudo + "</button>";
+  }
+
+  /**
+   * Uma legenda só para tudo que a auditoria aponta. O detalhe de cada motivo
+   * fica na coluna do lado, e o selo abre o bloco de validação.
+   */
+  function selo(c) {
+    if (c.conferido) {
+      return '<button class="chip ok como-botao" data-acao="ver-corrida" data-id="' + esc(c.chave) + '" title="' +
+        esc("Validado por " + (c.conferencia.por || "—") + (c.conferencia.motivo ? " · " + c.conferencia.motivo : "")) +
+        '">✓ Validado</button>';
+    }
+    if (c.avisos.length) {
+      return '<button class="chip warn como-botao" data-acao="ver-corrida" data-id="' + esc(c.chave) +
+        '" title="Abrir para conferir e validar">⚠ Atenção</button>';
+    }
+    if (c.tipo !== "Fare") return '<span class="chip">encargo</span>';
+    return '<span class="chip ok">OK</span>';
+  }
+
+  function motivos(c) {
+    if (!c.avisos.length) return '<span class="t-sub">—</span>';
+    return '<div class="motivos">' + c.avisos.map(function (a) {
+      return '<span class="t-sub" title="' + esc(a.texto) + '">' + esc(a.curto) + "</span>";
+    }).join("") + "</div>";
   }
 
   function linhaAtencao(rotulo, valor, comentario) {
@@ -5729,6 +5908,7 @@ window.SEED = {
           C.excluirCorrida(Number(id)).then(function () { toast("Corrida excluída"); }, falhou);
         }
         break;
+      case "ver-corrida": abrirCorrida(C.corridaPorChave(botao.dataset.id)); break;
       case "importar-uber": importarUber(); break;
       case "limpar-uber":
         if (confirm("Remover todas as " + C.corridas().length + " corridas da base do Uber?")) {
@@ -6688,6 +6868,105 @@ window.SEED = {
   }
 
   // ---------- Uber: importação ----------
+
+  /**
+   * A corrida por inteiro: horário, endereços completos, valor, a viagem a que
+   * ela se liga e — quando há aviso — o bloco de validação.
+   */
+  function abrirCorrida(c) {
+    if (!c) return;
+    var esc = V.esc;
+
+    function item(rotulo, valor) {
+      return '<div class="det"><span class="eyebrow">' + esc(rotulo) + "</span>" +
+        '<span class="det-valor">' + valor + "</span></div>";
+    }
+
+    var v = c.viagem;
+    var corpo = '<div class="det-grid">' +
+      item("Data", c.data ? esc(C.fmtData(c.data)) : "sem data no relatório") +
+      item("Hora da solicitação", c.hora ? esc(c.hora) : "—") +
+      item("Colaborador", c.colaborador
+        ? esc(c.colaborador) + '<br><span class="t-sub">' + esc(c.area || "") + "</span>"
+        : '<span class="chip crit">sem De-Para</span>') +
+      item("Nome no relatório", esc(c.nomeRelatorio || "—")) +
+      item("Serviço", esc(c.servico || "—")) +
+      item("Cidade", esc(c.cidade || "—")) +
+      item("Tipo de transação", esc(c.tipo || "—")) +
+      item("Valor", "<strong>" + C.moeda(c.valor) + "</strong>") +
+      "</div>" +
+
+      '<div class="det-trajeto">' +
+      '<div class="det"><span class="eyebrow">Partida</span><span class="det-valor">' +
+      esc(c.origem || "—") + "</span></div>" +
+      '<div class="det"><span class="eyebrow">Destino</span><span class="det-valor">' +
+      esc(c.destino || "—") + "</span></div>" +
+      (c.aeroporto ? '<span class="chip accent">trecho de aeroporto</span>' : "") +
+      "</div>";
+
+    corpo += v
+      ? '<div class="note"><strong>Viagem #' + v.id + " · " + esc(v.colaborador) + "</strong><br>" +
+        esc(C.fmtData(v.dataIda)) + " a " + esc(C.fmtData(v.dataVolta)) + " · " + esc(v.destino || "") +
+        (v.aeroportoOrigem ? " · saindo de " + esc(v.aeroportoOrigem) : "") +
+        "<br>Aéreo " + C.moeda(v.aereo) + " · hospedagem " + C.moeda(C.calc(v).hospedagem) +
+        " · alimentação " + C.moeda(v.alimentacao) + " · total <strong>" + C.moeda(C.calc(v).total) + "</strong>" +
+        (v.obs ? '<br><span class="t-sub">' + esc(v.obs) + "</span>" : "") + "</div>"
+      : (c.tipo === "Fare"
+          ? '<div class="note">Sem viagem correspondente na base.</div>'
+          : '<div class="note">Encargo da fatura — não se liga a uma viagem.</div>');
+
+    if (c.avisos.length) {
+      corpo += '<div class="note warn"><strong>Pontos de atenção</strong><ul class="lista-avisos">' +
+        c.avisos.map(function (a) {
+          return "<li><strong>" + esc(a.curto) + "</strong> — " + esc(a.texto) + "</li>";
+        }).join("") + "</ul></div>";
+
+      corpo += c.conferido
+        ? '<div class="note ok"><strong>✓ Validado</strong> por ' + esc(c.conferencia.por || "—") +
+          " em " + esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) +
+          (c.conferencia.motivo ? '<br><span class="t-sub">' + esc(c.conferencia.motivo) + "</span>" : "") +
+          "</div>"
+        : '<form id="form-valida-corrida" method="dialog"><div class="form-grid">' +
+          V.campo("Justificativa (opcional)",
+            '<input type="text" name="motivo" placeholder="Deslocamento urbano autorizado pelo gestor">', "c12",
+            "Fica registrada junto com quem validou. Se a corrida ou a viagem mudarem, o aviso volta a aparecer.") +
+          "</div></form>";
+    }
+
+    var rodape = '<span class="grow"></span><button class="btn" data-acao="fechar">Fechar</button>';
+    if (c.avisos.length) {
+      rodape += c.conferido
+        ? '<button class="btn" data-acao="desvalidar-corrida">Desfazer validação</button>'
+        : '<button class="btn btn-primary" type="submit" form="form-valida-corrida">Validar</button>';
+    }
+
+    var dialogo = abrirModal({
+      titulo: "Corrida de " + (c.data ? C.fmtData(c.data) : "data desconhecida") + (c.hora ? " · " + c.hora : ""),
+      corpo: corpo,
+      rodape: rodape
+    });
+
+    var form = dialogo.querySelector("#form-valida-corrida");
+    if (form) {
+      form.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        C.validarCorrida(c.chave, null, new FormData(form).get("motivo")).then(function () {
+          toast("Corrida validada — sai dos pontos de atenção");
+          dialogo.close();
+        }, falhou);
+      });
+    }
+    var desfazer = dialogo.querySelector('[data-acao="desvalidar-corrida"]');
+    if (desfazer) {
+      desfazer.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        C.validarCorrida(c.chave).then(function () {
+          toast("Validação desfeita");
+          dialogo.close();
+        }, falhou);
+      });
+    }
+  }
 
   function importarUber() {
     var caixa = document.querySelector('[name="colar-uber"]');

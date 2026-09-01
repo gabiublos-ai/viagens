@@ -523,7 +523,14 @@
 
     var lista = todas.slice();
     if (f.mes) lista = lista.filter(function (c) { return c.mesRef === f.mes; });
-    if (f.situacao) lista = lista.filter(function (c) { return c.auditoria.situacao === f.situacao; });
+    if (f.situacao) {
+      lista = lista.filter(function (c) {
+        if (f.situacao === "atencao") return c.precisaConferir;
+        if (f.situacao === "validada") return c.conferido;
+        if (f.situacao === "na") return !c.considerar || c.tipo !== "Fare";
+        return !c.avisos.length && c.tipo === "Fare";   // "ok"
+      });
+    }
     if (f.busca) {
       var q = C.normal(f.busca);
       lista = lista.filter(function (c) {
@@ -540,6 +547,13 @@
       kpi("De/para aeroporto", C.brl(u.pctAeroporto * 100, 0) + "%", u.aeroporto + " de " + u.n + " corridas") +
       kpi("Corridas acima de R$ 150", String(u.acima150), C.brlSigla(u.valorAcima150) + " concentrados") +
       "</div>";
+
+    if (u.alertas.length) {
+      html += '<div class="note warn"><strong>' + u.alertas.length + " corrida" +
+        (u.alertas.length > 1 ? "s pedem" : " pede") + " validação.</strong> " +
+        "Abra o selo ⚠ Atenção na linha para ver o motivo e validar. " +
+        (u.validadas ? u.validadas + " já validada" + (u.validadas > 1 ? "s" : "") + "." : "") + "</div>";
+    }
 
     if (u.desconhecidos.length) {
       html += '<div class="note warn"><strong>' + u.desconhecidos.length +
@@ -611,9 +625,11 @@
       '<input type="search" class="search" name="busca-uber" placeholder="Buscar pessoa, cidade, endereço…" value="' + esc(f.busca || "") + '">' +
       selectHTML("mes-uber", [{ v: "", r: "Todos os meses" }].concat(mesesU.map(function (m) { return { v: m, r: C.mesRotulo(m) }; })), f.mes) +
       selectHTML("situacao-uber", [
-        { v: "", r: "Toda a auditoria" }, { v: "ok", r: "OK" },
-        { v: "fora", r: "⚠ Fora do período" }, { v: "sem-viagem", r: "⚠ Sem viagem registrada" },
-        { v: "na", r: "n/a (encargos)" }, { v: "sem-data", r: "Sem data" }
+        { v: "", r: "Toda a auditoria" },
+        { v: "atencao", r: "⚠ Pontos de atenção" },
+        { v: "validada", r: "✓ Validadas" },
+        { v: "ok", r: "OK" },
+        { v: "na", r: "Encargos da fatura" }
       ], f.situacao) + "</div></div>";
 
     if (!lista.length) {
@@ -623,22 +639,23 @@
 
     html += '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
       "<th>Data</th><th>Colaborador</th><th>Serviço</th><th>Trajeto</th>" +
-      '<th class="n">Valor</th><th>Auditoria</th><th>Alerta</th><th class="col-acoes"></th></tr></thead><tbody>' +
+      '<th class="n">Valor</th><th>Auditoria</th><th>Motivo</th><th class="col-acoes"></th></tr></thead><tbody>' +
       lista.slice(0, 400).map(function (c) {
-        var aud = c.auditoria;
-        var classe = aud.situacao === "ok" ? "ok" : aud.situacao === "na" || aud.situacao === "sem-data" ? "" : "warn";
         return "<tr>" +
           '<td class="nowrap"><span class="num">' + (c.data ? C.fmtData(c.data) : "—") + "</span>" +
-          (c.hora ? '<br><span class="t-sub">' + esc(c.hora) + "</span>" : "") + "</td>" +
-          "<td>" + (c.colaborador ? pessoa(c.colaborador, c.area)
-            : '<span class="chip crit">⚠ incluir no De-Para</span><br><span class="t-sub">' + esc(c.nomeRelatorio || "—") + "</span>") + "</td>" +
+          (c.hora ? '<br><span class="t-sub">' + esc(c.hora) + "</span>"
+                  : (c.mesRef ? '<br><span class="t-sub">' + esc(C.mesRotulo(c.mesRef)) + "</span>" : "")) + "</td>" +
+          '<td>' + abreCorrida(c, c.colaborador ? pessoa(c.colaborador, c.area)
+            : '<span class="chip crit">⚠ sem De-Para</span><br><span class="t-sub">' + esc(c.nomeRelatorio || "—") + "</span>") + "</td>" +
           "<td>" + esc(c.servico || "—") + '<br><span class="t-sub">' + esc(c.cidade || "") + "</span></td>" +
-          '<td style="max-width:280px"><span class="t-sub">' + esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>" +
-          (c.aeroporto ? ' <span class="chip accent">aeroporto</span>' : "") + "</td>" +
+          '<td style="max-width:280px">' + abreCorrida(c, '<span class="t-sub">' + esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>" +
+            (c.aeroporto ? ' <span class="chip accent">aeroporto</span>' : "")) + "</td>" +
           '<td class="n">' + C.moeda(c.valor) + (c.tipo !== "Fare" ? '<br><span class="t-sub">' + esc(c.tipo) + "</span>" : "") + "</td>" +
-          '<td><span class="chip ' + classe + '">' + (classe === "warn" ? "⚠ " : "") + esc(aud.texto) + "</span></td>" +
-          '<td class="t-sub">' + esc(c.alerta) + "</td>" +
+          "<td>" + selo(c) + "</td>" +
+          "<td>" + motivos(c) + "</td>" +
           '<td class="col-acoes"><div class="actions-cell">' +
+          botaoIcone("ver-corrida", c.chave, "Ver a corrida completa",
+            '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>') +
           botaoIcone("excluir-corrida", c.indice, "Excluir corrida", '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>') +
           "</div></td></tr>";
       }).join("") + "</tbody></table></div>" +
@@ -646,6 +663,37 @@
       "</div></div>";
 
     return html;
+  }
+
+  /** Nome e trajeto abrem a corrida por inteiro. */
+  function abreCorrida(c, conteudo) {
+    return '<button class="link-cel" data-acao="ver-corrida" data-id="' + esc(c.chave) +
+      '" title="Ver a corrida completa">' + conteudo + "</button>";
+  }
+
+  /**
+   * Uma legenda só para tudo que a auditoria aponta. O detalhe de cada motivo
+   * fica na coluna do lado, e o selo abre o bloco de validação.
+   */
+  function selo(c) {
+    if (c.conferido) {
+      return '<button class="chip ok como-botao" data-acao="ver-corrida" data-id="' + esc(c.chave) + '" title="' +
+        esc("Validado por " + (c.conferencia.por || "—") + (c.conferencia.motivo ? " · " + c.conferencia.motivo : "")) +
+        '">✓ Validado</button>';
+    }
+    if (c.avisos.length) {
+      return '<button class="chip warn como-botao" data-acao="ver-corrida" data-id="' + esc(c.chave) +
+        '" title="Abrir para conferir e validar">⚠ Atenção</button>';
+    }
+    if (c.tipo !== "Fare") return '<span class="chip">encargo</span>';
+    return '<span class="chip ok">OK</span>';
+  }
+
+  function motivos(c) {
+    if (!c.avisos.length) return '<span class="t-sub">—</span>';
+    return '<div class="motivos">' + c.avisos.map(function (a) {
+      return '<span class="t-sub" title="' + esc(a.texto) + '">' + esc(a.curto) + "</span>";
+    }).join("") + "</div>";
   }
 
   function linhaAtencao(rotulo, valor, comentario) {

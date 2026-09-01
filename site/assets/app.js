@@ -234,6 +234,7 @@
           C.excluirCorrida(Number(id)).then(function () { toast("Corrida excluída"); }, falhou);
         }
         break;
+      case "ver-corrida": abrirCorrida(C.corridaPorChave(botao.dataset.id)); break;
       case "importar-uber": importarUber(); break;
       case "limpar-uber":
         if (confirm("Remover todas as " + C.corridas().length + " corridas da base do Uber?")) {
@@ -1193,6 +1194,105 @@
   }
 
   // ---------- Uber: importação ----------
+
+  /**
+   * A corrida por inteiro: horário, endereços completos, valor, a viagem a que
+   * ela se liga e — quando há aviso — o bloco de validação.
+   */
+  function abrirCorrida(c) {
+    if (!c) return;
+    var esc = V.esc;
+
+    function item(rotulo, valor) {
+      return '<div class="det"><span class="eyebrow">' + esc(rotulo) + "</span>" +
+        '<span class="det-valor">' + valor + "</span></div>";
+    }
+
+    var v = c.viagem;
+    var corpo = '<div class="det-grid">' +
+      item("Data", c.data ? esc(C.fmtData(c.data)) : "sem data no relatório") +
+      item("Hora da solicitação", c.hora ? esc(c.hora) : "—") +
+      item("Colaborador", c.colaborador
+        ? esc(c.colaborador) + '<br><span class="t-sub">' + esc(c.area || "") + "</span>"
+        : '<span class="chip crit">sem De-Para</span>') +
+      item("Nome no relatório", esc(c.nomeRelatorio || "—")) +
+      item("Serviço", esc(c.servico || "—")) +
+      item("Cidade", esc(c.cidade || "—")) +
+      item("Tipo de transação", esc(c.tipo || "—")) +
+      item("Valor", "<strong>" + C.moeda(c.valor) + "</strong>") +
+      "</div>" +
+
+      '<div class="det-trajeto">' +
+      '<div class="det"><span class="eyebrow">Partida</span><span class="det-valor">' +
+      esc(c.origem || "—") + "</span></div>" +
+      '<div class="det"><span class="eyebrow">Destino</span><span class="det-valor">' +
+      esc(c.destino || "—") + "</span></div>" +
+      (c.aeroporto ? '<span class="chip accent">trecho de aeroporto</span>' : "") +
+      "</div>";
+
+    corpo += v
+      ? '<div class="note"><strong>Viagem #' + v.id + " · " + esc(v.colaborador) + "</strong><br>" +
+        esc(C.fmtData(v.dataIda)) + " a " + esc(C.fmtData(v.dataVolta)) + " · " + esc(v.destino || "") +
+        (v.aeroportoOrigem ? " · saindo de " + esc(v.aeroportoOrigem) : "") +
+        "<br>Aéreo " + C.moeda(v.aereo) + " · hospedagem " + C.moeda(C.calc(v).hospedagem) +
+        " · alimentação " + C.moeda(v.alimentacao) + " · total <strong>" + C.moeda(C.calc(v).total) + "</strong>" +
+        (v.obs ? '<br><span class="t-sub">' + esc(v.obs) + "</span>" : "") + "</div>"
+      : (c.tipo === "Fare"
+          ? '<div class="note">Sem viagem correspondente na base.</div>'
+          : '<div class="note">Encargo da fatura — não se liga a uma viagem.</div>');
+
+    if (c.avisos.length) {
+      corpo += '<div class="note warn"><strong>Pontos de atenção</strong><ul class="lista-avisos">' +
+        c.avisos.map(function (a) {
+          return "<li><strong>" + esc(a.curto) + "</strong> — " + esc(a.texto) + "</li>";
+        }).join("") + "</ul></div>";
+
+      corpo += c.conferido
+        ? '<div class="note ok"><strong>✓ Validado</strong> por ' + esc(c.conferencia.por || "—") +
+          " em " + esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) +
+          (c.conferencia.motivo ? '<br><span class="t-sub">' + esc(c.conferencia.motivo) + "</span>" : "") +
+          "</div>"
+        : '<form id="form-valida-corrida" method="dialog"><div class="form-grid">' +
+          V.campo("Justificativa (opcional)",
+            '<input type="text" name="motivo" placeholder="Deslocamento urbano autorizado pelo gestor">', "c12",
+            "Fica registrada junto com quem validou. Se a corrida ou a viagem mudarem, o aviso volta a aparecer.") +
+          "</div></form>";
+    }
+
+    var rodape = '<span class="grow"></span><button class="btn" data-acao="fechar">Fechar</button>';
+    if (c.avisos.length) {
+      rodape += c.conferido
+        ? '<button class="btn" data-acao="desvalidar-corrida">Desfazer validação</button>'
+        : '<button class="btn btn-primary" type="submit" form="form-valida-corrida">Validar</button>';
+    }
+
+    var dialogo = abrirModal({
+      titulo: "Corrida de " + (c.data ? C.fmtData(c.data) : "data desconhecida") + (c.hora ? " · " + c.hora : ""),
+      corpo: corpo,
+      rodape: rodape
+    });
+
+    var form = dialogo.querySelector("#form-valida-corrida");
+    if (form) {
+      form.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        C.validarCorrida(c.chave, null, new FormData(form).get("motivo")).then(function () {
+          toast("Corrida validada — sai dos pontos de atenção");
+          dialogo.close();
+        }, falhou);
+      });
+    }
+    var desfazer = dialogo.querySelector('[data-acao="desvalidar-corrida"]');
+    if (desfazer) {
+      desfazer.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        C.validarCorrida(c.chave).then(function () {
+          toast("Validação desfeita");
+          dialogo.close();
+        }, falhou);
+      });
+    }
+  }
 
   function importarUber() {
     var caixa = document.querySelector('[name="colar-uber"]');
