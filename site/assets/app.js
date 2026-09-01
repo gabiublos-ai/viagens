@@ -493,28 +493,60 @@
         '<div class="field c12"><label>O que aconteceu com os custos</label>' +
         V.selectHTML("tratamento", [
           { v: "zerar", r: "Nada foi cobrado — zerar os valores" },
-          { v: "multa", r: "Houve multa ou valor não reembolsável" },
+          { v: "multa", r: "Houve multa ou valores não reembolsáveis" },
           { v: "manter", r: "Manter os valores como estão" }
         ], "zerar") + "</div>" +
 
-        '<div class="field c6" data-bloco="multa" hidden><label>Valor cobrado (R$)</label>' +
+        '<div class="c12" data-bloco="multa" hidden><div class="form-grid">' +
+        '<div class="field c4"><label>Aéreo cobrado (R$)</label>' +
+        '<input type="text" class="money" name="aereo" value="' + C.brl(v.aereo) + '">' +
+        '<span class="hint">Lançado: ' + C.moeda(v.aereo) + ". Zere se virou crédito ou foi reembolsado.</span></div>" +
+
+        '<div class="field c4"><label>Hospedagem cobrada (R$)</label>' +
+        '<input type="text" class="money" name="hospedagem" value="' + C.brl(c.hospedagem) + '">' +
+        '<span class="hint">Lançado: ' + C.moeda(c.hospedagem) + ". Zere se o hotel não cobrou.</span></div>" +
+
+        '<div class="field c4"><label>Multa ou taxa (R$)</label>' +
         '<input type="text" class="money" name="multa" value="0,00">' +
-        '<span class="hint">Multa da companhia, no-show do hotel, taxa de remarcação.</span></div>' +
+        '<span class="hint">Taxa de remarcação, no-show, taxa administrativa.</span></div>' +
+
+        '<div class="c12"><div class="note" data-bloco="resumo">Custo da viagem cancelada: <strong>' +
+        C.moeda(0) + "</strong></div></div>" +
+        "</div></div>" +
         "</div></form>",
       rodape: '<span class="grow"></span><button class="btn" data-acao="fechar">Voltar</button>' +
         '<button class="btn btn-danger" type="submit" form="form-cancela">Cancelar a viagem</button>'
     });
 
     var form = dialogo.querySelector("form");
-    form.tratamento.addEventListener("change", function () {
-      form.querySelector('[data-bloco="multa"]').hidden = form.tratamento.value !== "multa";
-    });
+
+    function custosCobrados() {
+      var fd = new FormData(form);
+      return {
+        aereo: C.parseNum(fd.get("aereo")),
+        hospedagem: C.parseNum(fd.get("hospedagem")),
+        multa: C.parseNum(fd.get("multa"))
+      };
+    }
+
+    function atualizaResumo() {
+      var multa = form.tratamento.value === "multa";
+      form.querySelector('[data-bloco="multa"]').hidden = !multa;
+      if (!multa) return;
+      var t = custosCobrados();
+      form.querySelector('[data-bloco="resumo"]').innerHTML =
+        "Custo da viagem cancelada: <strong>" + C.moeda(t.aereo + t.hospedagem + t.multa) + "</strong>";
+    }
+
+    form.addEventListener("change", atualizaResumo);
+    form.addEventListener("input", atualizaResumo);
+    atualizaResumo();
 
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
       var fd = new FormData(form);
       C.cancelarViagem(v.id, (fd.get("motivo") || "").trim(), fd.get("tratamento"),
-                       C.parseNum(fd.get("multa"))).then(function () {
+                       custosCobrados()).then(function () {
         toast("Viagem #" + v.id + " cancelada");
         dialogo.close();
       }, falhou);

@@ -546,19 +546,26 @@
    * zerados, trocados por uma multa, ou mantidos como estão.
    * @param {string} tratamento  "zerar" | "multa" | "manter"
    */
-  function cancelarViagem(id, motivo, tratamento, multa) {
+  /**
+   * Cancela a viagem. Em "multa", `custos` diz o que ficou efetivamente cobrado
+   * — aéreo não reembolsado, hospedagem de no-show e a taxa/multa. Um número no
+   * lugar do objeto continua valendo como a multa (chamadas antigas).
+   */
+  function cancelarViagem(id, motivo, tratamento, custos) {
     var v = viagemPorId(id);
     if (!v) return Promise.resolve(null);
 
     var novo = { status: "Cancelado", motivo: motivo || "" };
     if (tratamento === "zerar" || tratamento === "multa") {
-      novo.aereo = 0;
-      novo.hospedagem = 0;
+      var c = custos && typeof custos === "object" ? custos : { multa: custos };
+      var cobrado = tratamento === "multa";
+      novo.aereo = cobrado ? (Number(c.aereo) || 0) : 0;
+      novo.hospedagem = cobrado ? (Number(c.hospedagem) || 0) : 0;
       novo.diarias = 0;
       novo.valorDiaria = 0;
       novo.alimentacao = 0;
       novo.transporte = 0;
-      novo.custoAlteracao = tratamento === "multa" ? (Number(multa) || 0) : 0;
+      novo.custoAlteracao = cobrado ? (Number(c.multa) || 0) : 0;
     }
     return salvarViagem(Object.assign({}, v, novo));
   }

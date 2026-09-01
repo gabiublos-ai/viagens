@@ -341,8 +341,8 @@
       return html;
     }
 
-    html += '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-      '<th class="fix1">ID</th><th class="fix2">Colaborador</th><th class="fix3">Trecho</th><th>Período</th>' +
+    html += '<div class="card-body flush"><div class="table-wrap"><table class="compacta"><thead><tr>' +
+      '<th class="fix1">ID</th><th class="fix2">Colaborador</th><th class="fix3">Trecho e período</th>' +
       '<th class="n">Aéreo</th><th class="n">Hospedagem</th><th class="n">Alimentação</th><th class="n">Outros</th>' +
       '<th class="n">Total</th><th>Status</th><th>Conferência</th><th class="col-acoes"></th></tr></thead><tbody>';
 
@@ -354,7 +354,7 @@
         mesAtual = v.mesRef;
         var doMes = lista.filter(function (x) { return x.mesRef === mesAtual; });
         var totalMes = doMes.reduce(function (s, x) { return s + x.total; }, 0);
-        html += '<tr><td colspan="12" style="background:var(--surface-2);padding:6px 10px">' +
+        html += '<tr><td colspan="11" style="background:var(--surface-2);padding:6px 10px">' +
           '<span class="mes-divisor"><span class="eyebrow">' + esc(C.mesNome(mesAtual)) + "</span> " +
           '<span class="t-sub">· ' + doMes.length + " lançamentos · " + C.brlSigla(totalMes) + "</span></span></td></tr>";
       }
@@ -367,9 +367,9 @@
         (v.tipo === "Alteração"
           ? ' <span class="chip warn" title="' + esc(v.motivo || "") + '">' +
             esc(v.tipoAlteracao || "Alteração") + " de #" + esc(v.refId) + "</span>"
-          : "") + "</td>" +
-        '<td class="nowrap"><span class="num">' + C.fmtDataCurta(v.dataIda) + " → " + C.fmtDataCurta(v.dataVolta) + "</span>" +
-        '<br><span class="t-sub">' + v.noites + (v.noites === 1 ? " noite" : " noites") + "</span></td>" +
+          : "") +
+        '<span class="t-sub periodo"><span class="num">' + C.fmtDataCurta(v.dataIda) + " → " + C.fmtDataCurta(v.dataVolta) +
+        "</span> · " + v.noites + (v.noites === 1 ? " noite" : " noites") + "</span></td>" +
         '<td class="n">' + dinheiro(v.aereo) + "</td>" +
         '<td class="n">' + dinheiro(v.hospedagem) +
         (v.porNoite ? '<br><span class="t-sub">' + C.moeda(v.porNoite) + "/noite</span>" : "") + "</td>" +
@@ -397,7 +397,7 @@
     });
 
     html += '</tbody><tfoot><tr><td class="fix1"></td><td class="fix2">' + lista.length + " lançamentos</td>" +
-      '<td class="fix3"></td><td>' + noites + " pernoites</td>" +
+      '<td class="fix3">' + noites + " pernoites</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.aereo) || 0); }, 0)) + "</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + v.hospedagem; }, 0)) + "</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.alimentacao) || 0); }, 0)) + "</td>" +

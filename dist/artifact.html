@@ -318,6 +318,18 @@ tbody tr:hover td { background: var(--surface-2); }
 tfoot td { padding: 9px 10px; font-weight: 650; border-top: 1px solid var(--border-strong); background: var(--surface-2); }
 td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* Tabela compacta: mesma informação em menos largura, para caber sem rolagem
+   horizontal nas telas comuns. */
+table.compacta { font-size: 12px; }
+table.compacta thead th { font-size: 10px; padding: 6px 7px; letter-spacing: .04em; }
+table.compacta tbody td { padding: 6px 7px; }
+table.compacta tfoot td { padding: 7px 7px; }
+table.compacta .chip { font-size: 10.5px; padding: 1px 6px; }
+table.compacta .icon-btn { width: 26px; height: 26px; }
+table.compacta .avatar { width: 24px; height: 24px; font-size: 9.5px; }
+/* O período entra como segunda linha da coluna de trecho. */
+.periodo { display: block; white-space: nowrap; margin-top: 1px; }
+
 th.ord { cursor: pointer; user-select: none; }
 th.ord:hover { color: var(--text); background: var(--surface-3); }
 th.ord-ativa { color: var(--accent); }
@@ -369,7 +381,7 @@ td.zero { color: var(--text-3); }
 .person-name { display: block; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Numa coluna congelada o texto não pode vazar: corta com reticências. */
 .person .t-sub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-td.fix2 .person > span:not(.avatar) { max-width: 176px; overflow: hidden; }
+td.fix2 .person > span:not(.avatar) { max-width: 166px; overflow: hidden; }
 
 /* ---------- Gráficos ---------- */
 
@@ -526,9 +538,9 @@ body.trancado .tabs { display: none; }
 
 /* Colunas congeladas à esquerda: ID, colaborador e trecho ficam à vista
    enquanto o resto da tabela rola na horizontal. */
-th.fix1, td.fix1 { position: sticky; left: 0; width: 52px; min-width: 52px; }
-th.fix2, td.fix2 { position: sticky; left: 52px; min-width: 236px; max-width: 236px; }
-th.fix3, td.fix3 { position: sticky; left: 288px; min-width: 152px; border-right: 1px solid var(--border); }
+th.fix1, td.fix1 { position: sticky; left: 0; width: 44px; min-width: 44px; }
+th.fix2, td.fix2 { position: sticky; left: 44px; min-width: 220px; max-width: 220px; }
+th.fix3, td.fix3 { position: sticky; left: 264px; min-width: 170px; max-width: 220px; border-right: 1px solid var(--border); }
 
 td.fix1, td.fix2, td.fix3 { background: var(--surface); z-index: 2; }
 thead th.fix1, thead th.fix2, thead th.fix3 { background: var(--surface-2); z-index: 3; }
@@ -4110,19 +4122,26 @@ window.SEED = {
    * zerados, trocados por uma multa, ou mantidos como estão.
    * @param {string} tratamento  "zerar" | "multa" | "manter"
    */
-  function cancelarViagem(id, motivo, tratamento, multa) {
+  /**
+   * Cancela a viagem. Em "multa", `custos` diz o que ficou efetivamente cobrado
+   * — aéreo não reembolsado, hospedagem de no-show e a taxa/multa. Um número no
+   * lugar do objeto continua valendo como a multa (chamadas antigas).
+   */
+  function cancelarViagem(id, motivo, tratamento, custos) {
     var v = viagemPorId(id);
     if (!v) return Promise.resolve(null);
 
     var novo = { status: "Cancelado", motivo: motivo || "" };
     if (tratamento === "zerar" || tratamento === "multa") {
-      novo.aereo = 0;
-      novo.hospedagem = 0;
+      var c = custos && typeof custos === "object" ? custos : { multa: custos };
+      var cobrado = tratamento === "multa";
+      novo.aereo = cobrado ? (Number(c.aereo) || 0) : 0;
+      novo.hospedagem = cobrado ? (Number(c.hospedagem) || 0) : 0;
       novo.diarias = 0;
       novo.valorDiaria = 0;
       novo.alimentacao = 0;
       novo.transporte = 0;
-      novo.custoAlteracao = tratamento === "multa" ? (Number(multa) || 0) : 0;
+      novo.custoAlteracao = cobrado ? (Number(c.multa) || 0) : 0;
     }
     return salvarViagem(Object.assign({}, v, novo));
   }
@@ -4952,8 +4971,8 @@ window.SEED = {
       return html;
     }
 
-    html += '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-      '<th class="fix1">ID</th><th class="fix2">Colaborador</th><th class="fix3">Trecho</th><th>Período</th>' +
+    html += '<div class="card-body flush"><div class="table-wrap"><table class="compacta"><thead><tr>' +
+      '<th class="fix1">ID</th><th class="fix2">Colaborador</th><th class="fix3">Trecho e período</th>' +
       '<th class="n">Aéreo</th><th class="n">Hospedagem</th><th class="n">Alimentação</th><th class="n">Outros</th>' +
       '<th class="n">Total</th><th>Status</th><th>Conferência</th><th class="col-acoes"></th></tr></thead><tbody>';
 
@@ -4965,7 +4984,7 @@ window.SEED = {
         mesAtual = v.mesRef;
         var doMes = lista.filter(function (x) { return x.mesRef === mesAtual; });
         var totalMes = doMes.reduce(function (s, x) { return s + x.total; }, 0);
-        html += '<tr><td colspan="12" style="background:var(--surface-2);padding:6px 10px">' +
+        html += '<tr><td colspan="11" style="background:var(--surface-2);padding:6px 10px">' +
           '<span class="mes-divisor"><span class="eyebrow">' + esc(C.mesNome(mesAtual)) + "</span> " +
           '<span class="t-sub">· ' + doMes.length + " lançamentos · " + C.brlSigla(totalMes) + "</span></span></td></tr>";
       }
@@ -4978,9 +4997,9 @@ window.SEED = {
         (v.tipo === "Alteração"
           ? ' <span class="chip warn" title="' + esc(v.motivo || "") + '">' +
             esc(v.tipoAlteracao || "Alteração") + " de #" + esc(v.refId) + "</span>"
-          : "") + "</td>" +
-        '<td class="nowrap"><span class="num">' + C.fmtDataCurta(v.dataIda) + " → " + C.fmtDataCurta(v.dataVolta) + "</span>" +
-        '<br><span class="t-sub">' + v.noites + (v.noites === 1 ? " noite" : " noites") + "</span></td>" +
+          : "") +
+        '<span class="t-sub periodo"><span class="num">' + C.fmtDataCurta(v.dataIda) + " → " + C.fmtDataCurta(v.dataVolta) +
+        "</span> · " + v.noites + (v.noites === 1 ? " noite" : " noites") + "</span></td>" +
         '<td class="n">' + dinheiro(v.aereo) + "</td>" +
         '<td class="n">' + dinheiro(v.hospedagem) +
         (v.porNoite ? '<br><span class="t-sub">' + C.moeda(v.porNoite) + "/noite</span>" : "") + "</td>" +
@@ -5008,7 +5027,7 @@ window.SEED = {
     });
 
     html += '</tbody><tfoot><tr><td class="fix1"></td><td class="fix2">' + lista.length + " lançamentos</td>" +
-      '<td class="fix3"></td><td>' + noites + " pernoites</td>" +
+      '<td class="fix3">' + noites + " pernoites</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.aereo) || 0); }, 0)) + "</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + v.hospedagem; }, 0)) + "</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.alimentacao) || 0); }, 0)) + "</td>" +
@@ -5907,28 +5926,60 @@ window.SEED = {
         '<div class="field c12"><label>O que aconteceu com os custos</label>' +
         V.selectHTML("tratamento", [
           { v: "zerar", r: "Nada foi cobrado — zerar os valores" },
-          { v: "multa", r: "Houve multa ou valor não reembolsável" },
+          { v: "multa", r: "Houve multa ou valores não reembolsáveis" },
           { v: "manter", r: "Manter os valores como estão" }
         ], "zerar") + "</div>" +
 
-        '<div class="field c6" data-bloco="multa" hidden><label>Valor cobrado (R$)</label>' +
+        '<div class="c12" data-bloco="multa" hidden><div class="form-grid">' +
+        '<div class="field c4"><label>Aéreo cobrado (R$)</label>' +
+        '<input type="text" class="money" name="aereo" value="' + C.brl(v.aereo) + '">' +
+        '<span class="hint">Lançado: ' + C.moeda(v.aereo) + ". Zere se virou crédito ou foi reembolsado.</span></div>" +
+
+        '<div class="field c4"><label>Hospedagem cobrada (R$)</label>' +
+        '<input type="text" class="money" name="hospedagem" value="' + C.brl(c.hospedagem) + '">' +
+        '<span class="hint">Lançado: ' + C.moeda(c.hospedagem) + ". Zere se o hotel não cobrou.</span></div>" +
+
+        '<div class="field c4"><label>Multa ou taxa (R$)</label>' +
         '<input type="text" class="money" name="multa" value="0,00">' +
-        '<span class="hint">Multa da companhia, no-show do hotel, taxa de remarcação.</span></div>' +
+        '<span class="hint">Taxa de remarcação, no-show, taxa administrativa.</span></div>' +
+
+        '<div class="c12"><div class="note" data-bloco="resumo">Custo da viagem cancelada: <strong>' +
+        C.moeda(0) + "</strong></div></div>" +
+        "</div></div>" +
         "</div></form>",
       rodape: '<span class="grow"></span><button class="btn" data-acao="fechar">Voltar</button>' +
         '<button class="btn btn-danger" type="submit" form="form-cancela">Cancelar a viagem</button>'
     });
 
     var form = dialogo.querySelector("form");
-    form.tratamento.addEventListener("change", function () {
-      form.querySelector('[data-bloco="multa"]').hidden = form.tratamento.value !== "multa";
-    });
+
+    function custosCobrados() {
+      var fd = new FormData(form);
+      return {
+        aereo: C.parseNum(fd.get("aereo")),
+        hospedagem: C.parseNum(fd.get("hospedagem")),
+        multa: C.parseNum(fd.get("multa"))
+      };
+    }
+
+    function atualizaResumo() {
+      var multa = form.tratamento.value === "multa";
+      form.querySelector('[data-bloco="multa"]').hidden = !multa;
+      if (!multa) return;
+      var t = custosCobrados();
+      form.querySelector('[data-bloco="resumo"]').innerHTML =
+        "Custo da viagem cancelada: <strong>" + C.moeda(t.aereo + t.hospedagem + t.multa) + "</strong>";
+    }
+
+    form.addEventListener("change", atualizaResumo);
+    form.addEventListener("input", atualizaResumo);
+    atualizaResumo();
 
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
       var fd = new FormData(form);
       C.cancelarViagem(v.id, (fd.get("motivo") || "").trim(), fd.get("tratamento"),
-                       C.parseNum(fd.get("multa"))).then(function () {
+                       custosCobrados()).then(function () {
         toast("Viagem #" + v.id + " cancelada");
         dialogo.close();
       }, falhou);

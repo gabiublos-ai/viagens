@@ -316,6 +316,18 @@ tbody tr:hover td { background: var(--surface-2); }
 tfoot td { padding: 9px 10px; font-weight: 650; border-top: 1px solid var(--border-strong); background: var(--surface-2); }
 td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* Tabela compacta: mesma informação em menos largura, para caber sem rolagem
+   horizontal nas telas comuns. */
+table.compacta { font-size: 12px; }
+table.compacta thead th { font-size: 10px; padding: 6px 7px; letter-spacing: .04em; }
+table.compacta tbody td { padding: 6px 7px; }
+table.compacta tfoot td { padding: 7px 7px; }
+table.compacta .chip { font-size: 10.5px; padding: 1px 6px; }
+table.compacta .icon-btn { width: 26px; height: 26px; }
+table.compacta .avatar { width: 24px; height: 24px; font-size: 9.5px; }
+/* O período entra como segunda linha da coluna de trecho. */
+.periodo { display: block; white-space: nowrap; margin-top: 1px; }
+
 th.ord { cursor: pointer; user-select: none; }
 th.ord:hover { color: var(--text); background: var(--surface-3); }
 th.ord-ativa { color: var(--accent); }
@@ -367,7 +379,7 @@ td.zero { color: var(--text-3); }
 .person-name { display: block; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Numa coluna congelada o texto não pode vazar: corta com reticências. */
 .person .t-sub { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-td.fix2 .person > span:not(.avatar) { max-width: 176px; overflow: hidden; }
+td.fix2 .person > span:not(.avatar) { max-width: 166px; overflow: hidden; }
 
 /* ---------- Gráficos ---------- */
 
@@ -524,9 +536,9 @@ body.trancado .tabs { display: none; }
 
 /* Colunas congeladas à esquerda: ID, colaborador e trecho ficam à vista
    enquanto o resto da tabela rola na horizontal. */
-th.fix1, td.fix1 { position: sticky; left: 0; width: 52px; min-width: 52px; }
-th.fix2, td.fix2 { position: sticky; left: 52px; min-width: 236px; max-width: 236px; }
-th.fix3, td.fix3 { position: sticky; left: 288px; min-width: 152px; border-right: 1px solid var(--border); }
+th.fix1, td.fix1 { position: sticky; left: 0; width: 44px; min-width: 44px; }
+th.fix2, td.fix2 { position: sticky; left: 44px; min-width: 220px; max-width: 220px; }
+th.fix3, td.fix3 { position: sticky; left: 264px; min-width: 170px; max-width: 220px; border-right: 1px solid var(--border); }
 
 td.fix1, td.fix2, td.fix3 { background: var(--surface); z-index: 2; }
 thead th.fix1, thead th.fix2, thead th.fix3 { background: var(--surface-2); z-index: 3; }
