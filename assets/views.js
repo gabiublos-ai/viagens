@@ -228,15 +228,22 @@
             var v = r.porCategoria[cat][m];
             return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.moeda(v) : "—") + "</td>";
           }).join("") +
-          '<td class="n">' + C.moeda(totalCat) + "</td>" +
+          '<td class="n"><strong>' + C.moeda(totalCat) + "</strong></td>" +
           '<td class="n">' + (r.totalAno ? C.brl(totalCat / r.totalAno * 100, 0) : "0") + "%</td></tr>";
       }).join("") +
-      "</tbody><tfoot><tr><td>TOTAL</td>" +
-      mesesAtivos.map(function (m) { return '<td class="n">' + C.moeda(r.totalMes[m]) + "</td>"; }).join("") +
-      '<td class="n">' + C.moeda(r.totalAno) + '</td><td class="n">100%</td></tr>' +
+      "</tbody><tfoot><tr><td><strong>TOTAL</strong></td>" +
+      mesesAtivos.map(function (m) { return '<td class="n"><strong>' + C.moeda(r.totalMes[m]) + "</strong></td>"; }).join("") +
+      '<td class="n"><strong>' + C.moeda(r.totalAno) + '</strong></td><td class="n"><strong>100%</strong></td></tr>' +
       '<tr><td class="t-sub">Colaboradores no mês</td>' +
       mesesAtivos.map(function (m) { return '<td class="n t-sub">' + Object.keys(r.pessoasMes[m]).length + "</td>"; }).join("") +
-      '<td class="n t-sub">' + r.pessoas + '</td><td></td></tr></tfoot></table></div></div></div>';
+      '<td class="n t-sub">' + r.pessoas + '</td><td></td></tr>' +
+      '<tr><td class="t-sub">Média por pessoa</td>' +
+      mesesAtivos.map(function (m) {
+        var n = Object.keys(r.pessoasMes[m]).length;
+        return '<td class="n t-sub">' + (n ? C.moeda(r.totalMes[m] / n) : "—") + "</td>";
+      }).join("") +
+      '<td class="n t-sub">' + (r.pessoas ? C.moeda(r.totalAno / r.pessoas) : "—") +
+      "</td><td></td></tr></tfoot></table></div></div></div>";
 
     // Área × mês
     var areasComGasto = Object.keys(r.porArea).filter(function (a) {
@@ -259,8 +266,16 @@
           mesesAtivos.map(function (m) {
             var v = r.porArea[a][m];
             return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.moeda(v) : "—") + "</td>";
-          }).join("") + '<td class="n">' + C.moeda(t) + "</td></tr>";
-      }).join("") + "</tbody></table></div></div></div>";
+          }).join("") + '<td class="n"><strong>' + C.moeda(t) + "</strong></td></tr>";
+      }).join("") +
+      "</tbody><tfoot><tr><td><strong>TOTAL</strong></td>" +
+      mesesAtivos.map(function (m) {
+        var tm = areasComGasto.reduce(function (s2, a) { return s2 + r.porArea[a][m]; }, 0);
+        return '<td class="n"><strong>' + C.moeda(tm) + "</strong></td>";
+      }).join("") +
+      '<td class="n"><strong>' + C.moeda(areasComGasto.reduce(function (s2, a) {
+        return s2 + mesesAtivos.reduce(function (s3, m) { return s3 + r.porArea[a][m]; }, 0);
+      }, 0)) + "</strong></td></tr></tfoot></table></div></div></div>";
 
     html += '<div class="card"><div class="card-head"><h2>Top 10 colaboradores</h2>' +
       '<span class="grow"></span><button class="btn btn-sm" data-ir="equipe">Ver todos</button></div>' +
@@ -373,7 +388,7 @@
       return html;
     }
 
-    html += '<div class="card-body flush"><div class="table-wrap"><table class="compacta"><thead><tr>' +
+    html += '<div class="card-body flush"><div class="table-wrap rolagem"><table class="compacta"><thead><tr>' +
       '<th class="fix1">ID</th><th class="fix2">Colaborador</th><th class="fix3">Trecho e período</th>' +
       '<th class="n">Aéreo</th><th class="n">Hospedagem</th><th class="n">Alimentação</th><th class="n">Outros</th>' +
       '<th class="n">Total</th><th>Status</th><th>Conferência</th><th class="col-acoes"></th></tr></thead><tbody>';

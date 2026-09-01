@@ -66,13 +66,33 @@ def main():
     print("no ar: %d colaboradores · %d viagens · %d linhas de Uber (revisão %d)"
           % (len(atuais), len(estado["dados"]["viagens"]), len(estado["dados"]["uber"]), estado["revisao"]))
 
-    incluidos, alterados = [], 0
+    def combina(novo, antigo):
+        """A planilha manda no que ela preenche. O que ela deixa em branco não
+        apaga o que já está no ar — cidade, aeroporto e afins completados no
+        próprio app continuam valendo. O nome fica com a grafia cadastrada,
+        que é a chave dos lançamentos de viagem."""
+        if not antigo:
+            return dict(novo)
+        junto = dict(antigo)
+        for campo, valor in novo.items():
+            if campo == "nome":
+                continue
+            if str(valor).strip() or not str(junto.get(campo, "")).strip():
+                junto[campo] = valor
+        return junto
+
+    enviar, incluidos, alterados = [], [], []
     for c in novos:
         antigo = acha(c["nome"], atuais)
+        junto = combina(c, antigo)
+        enviar.append(junto)
         if not antigo:
             incluidos.append(c["nome"])
-        elif any(str(antigo.get(k, "")) != str(v) for k, v in c.items()):
-            alterados += 1
+        else:
+            dif = ["%s: %s → %s" % (k, antigo.get(k, "") or "—", junto[k] or "—")
+                   for k in junto if str(antigo.get(k, "")) != str(junto[k])]
+            if dif:
+                alterados.append((junto["nome"], dif))
 
     # Quem foi cadastrado direto no app e não está na base local: por padrão
     # continua no ar; com --remover-fora sai, a menos que tenha viagem lançada.
@@ -85,9 +105,13 @@ def main():
         extras, removidos = sobrando, []
 
     print("a enviar: %d da planilha (%d novos, %d alterados) + %d cadastrados no próprio app"
-          % (len(novos), len(incluidos), alterados, len(extras)))
+          % (len(novos), len(incluidos), len(alterados), len(extras)))
     for n in incluidos:
         print("   +", n)
+    for nome, dif in alterados:
+        print("   ~", nome)
+        for d in dif:
+            print("       ", d)
     for c in extras:
         print("   ·", c["nome"], "(mantido)")
     for c in removidos:
@@ -97,7 +121,7 @@ def main():
         print("\n(simulação — nada foi enviado)")
         return 0
 
-    estado["dados"]["colaboradores"] = sorted(novos + extras, key=lambda c: norma(c["nome"]))
+    estado["dados"]["colaboradores"] = sorted(enviar + extras, key=lambda c: norma(c["nome"]))
     resposta = s.chamar("PUT", "/api/estado", {"dados": estado["dados"]})
     print("\nenviado · revisão %d · %d colaboradores · %d viagens · %d linhas de Uber"
           % (resposta["revisao"], len(resposta["dados"]["colaboradores"]),

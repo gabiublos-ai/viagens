@@ -300,6 +300,16 @@ main { max-width: 1460px; margin: 0 auto; padding: 20px; display: flex; flex-dir
 /* ---------- Tabelas ---------- */
 
 .table-wrap { overflow-x: auto; }
+
+/* Tabela longa com rolagem própria: assim o cabeçalho e a linha de totais
+   ficam presos enquanto as linhas passam. Sem essa altura, quem rola é a
+   página inteira e o `position: sticky` do thead não teria a que se prender. */
+.table-wrap.rolagem { overflow: auto; max-height: calc(100vh - 300px); min-height: 340px; }
+.table-wrap.rolagem tfoot td { position: sticky; bottom: 0; z-index: 2; }
+.table-wrap.rolagem tfoot td.fix1,
+.table-wrap.rolagem tfoot td.fix2,
+.table-wrap.rolagem tfoot td.fix3,
+.table-wrap.rolagem tfoot td.col-acoes { z-index: 3; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 thead th {
   position: sticky; top: 0; z-index: 1;
