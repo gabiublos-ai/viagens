@@ -274,6 +274,36 @@
 
   // ---------- aba: viagens ----------
 
+  /**
+   * Coloca cada alteração logo abaixo da reserva que ela altera, em vez de
+   * deixá-la solta na ordem geral. Marca em `mesGrupo` o mês em que a linha
+   * conta: a alteração acompanha o mês da viagem original, senão o divisor de
+   * mês quebraria no meio do bloco. Quando a viagem original ficou fora do
+   * filtro, a alteração continua onde a ordenação a colocou.
+   */
+  function juntaAlteracoes(lista) {
+    var filhas = {};
+    lista.forEach(function (v) { if (v.tipo !== "Alteração") filhas[v.id] = []; });
+
+    var soltas = lista.filter(function (v) {
+      if (v.tipo === "Alteração" && filhas[v.refId]) { filhas[v.refId].push(v); return false; }
+      v.presaA = 0;
+      return true;
+    });
+
+    var ordenada = [];
+    soltas.forEach(function (v) {
+      v.mesGrupo = v.mesRef;
+      ordenada.push(v);
+      (filhas[v.id] || []).sort(function (a, b) { return a.id - b.id; }).forEach(function (alt) {
+        alt.mesGrupo = v.mesRef;
+        alt.presaA = v.id;
+        ordenada.push(alt);
+      });
+    });
+    return ordenada;
+  }
+
   function viagensView(estado) {
     var f = estado.filtros;
     var lista = C.viagens();
@@ -304,6 +334,8 @@
 
     var soma = lista.reduce(function (s, v) { return s + v.total; }, 0);
     var noites = lista.reduce(function (s, v) { return s + v.noites; }, 0);
+
+    lista = juntaAlteracoes(lista);
 
     var meses = C.mesesComDados();
     var html = "";
@@ -350,9 +382,9 @@
     var agrupar = ordem === "data-desc" || ordem === "data-asc";
 
     lista.forEach(function (v) {
-      if (agrupar && v.mesRef !== mesAtual) {
-        mesAtual = v.mesRef;
-        var doMes = lista.filter(function (x) { return x.mesRef === mesAtual; });
+      if (agrupar && v.mesGrupo !== mesAtual) {
+        mesAtual = v.mesGrupo;
+        var doMes = lista.filter(function (x) { return x.mesGrupo === mesAtual; });
         var totalMes = doMes.reduce(function (s, x) { return s + x.total; }, 0);
         html += '<tr><td colspan="11" style="background:var(--surface-2);padding:6px 10px">' +
           '<span class="mes-divisor"><span class="eyebrow">' + esc(C.mesNome(mesAtual)) + "</span> " +
@@ -360,13 +392,14 @@
       }
 
       var outros = (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0);
-      html += '<tr data-id="' + v.id + '"' + (v.tipo === "Alteração" ? ' class="row-alt"' : "") + ">" +
+      html += '<tr data-id="' + v.id + '"' +
+        (v.tipo === "Alteração" ? ' class="row-alt' + (v.presaA ? " row-presa" : "") + '"' : "") + ">" +
         '<td class="num t-sub nowrap fix1">' + (v.tipo === "Alteração" ? "↳ " : "") + v.id + "</td>" +
         '<td class="fix2">' + pessoa(v.colaborador, v.area) + "</td>" +
         '<td class="fix3">' + rota(v) +
         (v.tipo === "Alteração"
           ? ' <span class="chip warn" title="' + esc(v.motivo || "") + '">' +
-            esc(v.tipoAlteracao || "Alteração") + " de #" + esc(v.refId) + "</span>"
+            esc(v.tipoAlteracao || "Alteração") + (v.presaA ? "" : " de #" + esc(v.refId)) + "</span>"
           : "") +
         '<span class="t-sub periodo"><span class="num">' + C.fmtDataCurta(v.dataIda) + " → " + C.fmtDataCurta(v.dataVolta) +
         "</span> · " + v.noites + (v.noites === 1 ? " noite" : " noites") + "</span></td>" +

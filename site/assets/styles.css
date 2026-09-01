@@ -546,6 +546,10 @@ tbody tr:hover td.fix1, tbody tr:hover td.fix2, tbody tr:hover td.fix3 { backgro
 tr.row-alt td.fix1, tr.row-alt td.fix2, tr.row-alt td.fix3 {
   background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
 }
+/* A alteração aparece encostada na reserva original: recuo no ID e sem
+   divisória entre as duas linhas, para lerem como um bloco só. */
+tr.row-presa td.fix1 { padding-left: 14px; }
+tbody tr:has(+ tr.row-presa) td { border-bottom-color: transparent; }
 tfoot td.fix1, tfoot td.fix2, tfoot td.fix3 { background: var(--surface-2); z-index: 2; }
 
 /* O rótulo do mês acompanha a rolagem horizontal. */
