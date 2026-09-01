@@ -374,10 +374,13 @@
     return TIPOS_ALTERACAO[0];
   }
 
-  /** Valor devido de alimentação por pernoite (jantar + café da manhã). */
-  function porPernoite() {
+  /**
+   * Valor devido de alimentação por pernoite. Quando o hotel serve café da
+   * manhã, só o jantar é devido — o café sai da conta.
+   */
+  function porPernoite(cafeIncluso) {
     var r = db.params.regras;
-    return (Number(r.jantar) || 0) + (Number(r.cafe) || 0);
+    return (Number(r.jantar) || 0) + (cafeIncluso ? 0 : (Number(r.cafe) || 0));
   }
 
   /**
@@ -395,7 +398,9 @@
     var porNoite = noites ? round2(hospedagem / noites) : 0;
     var total = round2((Number(v.aereo) || 0) + hospedagem + (Number(v.alimentacao) || 0) +
                        (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0));
-    var alimDevida = round2(noites * porPernoite());
+    // Viagem cancelada não gera diária de alimentação.
+    var cancelada = v.status === "Cancelado";
+    var alimDevida = cancelada ? 0 : round2(noites * porPernoite(v.cafeIncluso));
     var difAlim = round2((Number(v.alimentacao) || 0) - alimDevida);
 
     var avisos = [];
@@ -419,6 +424,9 @@
       area: areaDe(v.colaborador),
       gestor: gestorDe(v.colaborador),
       noites: noites,
+      // A viagem cancelada não aconteceu: não conta pernoite nem entra no calendário.
+      noitesEfetivas: cancelada ? 0 : noites,
+      cancelada: cancelada,
       hospedagem: hospedagem,
       porNoite: porNoite,
       total: total,
@@ -453,14 +461,15 @@
   var CAMPOS_VIAGEM = ["tipo", "colaborador", "destino", "aeroportoOrigem", "dataIda", "dataVolta",
                        "aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao",
                        "status", "refId", "motivo", "pendencias", "obs", "conferencia",
-                       "hospedagem", "tipoAlteracao"];
+                       "hospedagem", "tipoAlteracao", "cafeIncluso"];
 
   function viagemVazia() {
     return {
       id: 0, tipo: "Viagem", colaborador: "", destino: "São Paulo/SP", aeroportoOrigem: "",
       dataIda: "", dataVolta: "", aereo: 0, hospedagem: 0, diarias: 0, valorDiaria: 0, alimentacao: 0,
       transporte: 0, custoAlteracao: 0, status: "Fechado", refId: null,
-      motivo: "", pendencias: "", obs: "", conferencia: null, tipoAlteracao: ""
+      motivo: "", pendencias: "", obs: "", conferencia: null, tipoAlteracao: "",
+      cafeIncluso: false
     };
   }
 
@@ -530,6 +539,28 @@
       assinatura: c.assinatura
     };
     return salvarViagem(Object.assign({}, v, { conferencia: nova }));
+  }
+
+  /**
+   * Cancela uma viagem, guardando o motivo. Os custos já lançados podem ser
+   * zerados, trocados por uma multa, ou mantidos como estão.
+   * @param {string} tratamento  "zerar" | "multa" | "manter"
+   */
+  function cancelarViagem(id, motivo, tratamento, multa) {
+    var v = viagemPorId(id);
+    if (!v) return Promise.resolve(null);
+
+    var novo = { status: "Cancelado", motivo: motivo || "" };
+    if (tratamento === "zerar" || tratamento === "multa") {
+      novo.aereo = 0;
+      novo.hospedagem = 0;
+      novo.diarias = 0;
+      novo.valorDiaria = 0;
+      novo.alimentacao = 0;
+      novo.transporte = 0;
+      novo.custoAlteracao = tratamento === "multa" ? (Number(multa) || 0) : 0;
+    }
+    return salvarViagem(Object.assign({}, v, novo));
   }
 
   /** Alterações ligadas a uma viagem. */
@@ -732,7 +763,7 @@
       pessoas[v.colaborador] = 1;
       pessoasMes[m][v.colaborador] = 1;
       if (v.tipo !== "Alteração") nViagens++;
-      noites += v.noites;
+      noites += v.noitesEfetivas;
     });
 
     corridas().forEach(function (c) {
@@ -785,7 +816,7 @@
       l.transporte += Number(v.transporte) || 0;
       l.alteracoes += Number(v.custoAlteracao) || 0;
       l.total += v.total;
-      l.noites += v.noites;
+      l.noites += v.noitesEfetivas;
       if (v.tipo !== "Alteração") l.viagens++;
     });
     corridas().forEach(function (c) {
@@ -892,7 +923,7 @@
     var linhas = {};
 
     viagens().forEach(function (v) {
-      if (!v.dataIda || !v.dataVolta) return;
+      if (!v.dataIda || !v.dataVolta || v.cancelada) return;
       for (var d = 1; d <= nDias; d++) {
         var iso = ano + "-" + pad(mes) + "-" + pad(d);
         if (diasEntre(v.dataIda, iso) < 0 || diasEntre(iso, v.dataVolta) < 0) continue;
@@ -995,7 +1026,7 @@
     calc: calc, viagens: viagens, viagemPorId: viagemPorId, viagemCompleta: viagemCompleta,
     viagemVazia: viagemVazia, salvarViagem: salvarViagem, excluirViagem: excluirViagem,
     duplicarViagem: duplicarViagem, alteracoesDe: alteracoesDe, porPernoite: porPernoite,
-    validarConferencia: validarConferencia,
+    validarConferencia: validarConferencia, cancelarViagem: cancelarViagem,
     TIPOS_ALTERACAO: TIPOS_ALTERACAO, tipoAlteracao: tipoAlteracao,
     proximoId: proximoId,
 

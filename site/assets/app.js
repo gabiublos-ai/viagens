@@ -221,6 +221,7 @@
         break;
       case "alteracao": abrirAlteracao(C.viagemPorId(id)); break;
       case "registrar-alteracao": escolherViagemParaAlterar(); break;
+      case "cancelar": abrirCancelamento(C.viagemPorId(id)); break;
       case "validar":
       case "desvalidar":
         C.validarConferencia(id).then(function () {
@@ -368,6 +369,12 @@
       '<input type="text" class="money" name="alimentacao" value="' + C.brl(v.alimentacao) + '">' +
       '<span class="hint"><button type="button" class="btn btn-ghost btn-sm" data-acao="usar-regra" style="padding:0">usar a regra</button> ' +
       "<span data-info='regra'></span></span></div>" +
+
+      '<div class="field c3"><label>Café da manhã</label>' +
+      '<label class="chip" style="cursor:pointer;gap:7px;align-self:flex-start;padding:7px 10px">' +
+      '<input type="checkbox" name="cafeIncluso" style="width:auto"' + (v.cafeIncluso ? " checked" : "") +
+      "> Incluso na hospedagem</label>" +
+      '<span class="hint" data-info="cafe"></span></div>' +
       V.campo("Transporte / Auxílio (R$)", '<input type="text" class="money" name="transporte" value="' + C.brl(v.transporte) + '">', "c3") +
 
       (ehAlteracao ?
@@ -466,6 +473,54 @@
     });
   }
 
+  /** Cancela a viagem: guarda o motivo e decide o que fazer com os custos. */
+  function abrirCancelamento(v) {
+    if (!v) return;
+    var c = C.calc(v);
+
+    var dialogo = abrirModal({
+      titulo: "Cancelar a viagem #" + v.id,
+      estreito: true,
+      corpo: '<form id="form-cancela" method="dialog"><div class="form-grid">' +
+        '<div class="c12"><div class="note">' + esc(v.colaborador) + " · " +
+        esc(C.fmtData(v.dataIda)) + " a " + esc(C.fmtData(v.dataVolta)) + " · " + esc(v.destino) +
+        "<br>Lançado hoje: <strong>" + C.moeda(c.total) + "</strong>.</div></div>" +
+
+        V.campo("Motivo do cancelamento",
+                '<input type="text" name="motivo" required value="' + esc(v.motivo) + '" ' +
+                'placeholder="Reunião adiada pelo cliente">', "c12") +
+
+        '<div class="field c12"><label>O que aconteceu com os custos</label>' +
+        V.selectHTML("tratamento", [
+          { v: "zerar", r: "Nada foi cobrado — zerar os valores" },
+          { v: "multa", r: "Houve multa ou valor não reembolsável" },
+          { v: "manter", r: "Manter os valores como estão" }
+        ], "zerar") + "</div>" +
+
+        '<div class="field c6" data-bloco="multa" hidden><label>Valor cobrado (R$)</label>' +
+        '<input type="text" class="money" name="multa" value="0,00">' +
+        '<span class="hint">Multa da companhia, no-show do hotel, taxa de remarcação.</span></div>' +
+        "</div></form>",
+      rodape: '<span class="grow"></span><button class="btn" data-acao="fechar">Voltar</button>' +
+        '<button class="btn btn-danger" type="submit" form="form-cancela">Cancelar a viagem</button>'
+    });
+
+    var form = dialogo.querySelector("form");
+    form.tratamento.addEventListener("change", function () {
+      form.querySelector('[data-bloco="multa"]').hidden = form.tratamento.value !== "multa";
+    });
+
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var fd = new FormData(form);
+      C.cancelarViagem(v.id, (fd.get("motivo") || "").trim(), fd.get("tratamento"),
+                       C.parseNum(fd.get("multa"))).then(function () {
+        toast("Viagem #" + v.id + " cancelada");
+        dialogo.close();
+      }, falhou);
+    });
+  }
+
   function abrirAlteracao(original) {
     if (!original) return;
     var v = C.viagemVazia();
@@ -493,6 +548,8 @@
 
     if (alvo) {
       if (alvo.name === "alimentacao") form.dataset.alimTocada = "1";
+      // Marcar o café incluso refaz a conta, mesmo que o valor já tenha sido mexido.
+      if (alvo.name === "cafeIncluso") form.dataset.alimTocada = "";
 
       if (alvo.name === "colaborador") {
         var c = C.colaborador(alvo.value);
@@ -509,8 +566,9 @@
     var noites = Math.max(0, C.diasEntre(d.dataIda, d.dataVolta));
 
     // Preenchimento automático da alimentação, até o usuário assumir o campo
+    var cafeIncluso = !!(form.querySelector('[name="cafeIncluso"]') || {}).checked;
     if (!form.dataset.alimTocada && noites) {
-      form.querySelector('[name="alimentacao"]').value = C.brl(noites * C.porPernoite());
+      form.querySelector('[name="alimentacao"]').value = C.brl(noites * C.porPernoite(cafeIncluso));
     }
 
     d = dadosDoFormulario(form);
@@ -525,6 +583,14 @@
       infoHosp.textContent = !hosp ? "Valor cheio do hotel no período"
         : noites ? C.moeda(hosp / noites) + " por noite · " + noites + " noite(s)"
         : "Período sem pernoite";
+    }
+
+    var infoCafe = form.querySelector("[data-info='cafe']");
+    if (infoCafe) {
+      var r = C.db.params.regras;
+      infoCafe.textContent = cafeIncluso
+        ? "Só o jantar é devido: " + C.moeda(r.jantar) + " por noite"
+        : "Jantar " + C.moeda(r.jantar) + " + café " + C.moeda(r.cafe) + " por noite";
     }
 
     var infoRegra = form.querySelector("[data-info='regra']");
@@ -575,7 +641,7 @@
   function aplicarRegraAlimentacao(form) {
     var d = dadosDoFormulario(form);
     var noites = Math.max(0, C.diasEntre(d.dataIda, d.dataVolta));
-    form.querySelector('[name="alimentacao"]').value = C.brl(noites * C.porPernoite());
+    form.querySelector('[name="alimentacao"]').value = C.brl(noites * C.porPernoite(d.cafeIncluso));
     form.dataset.alimTocada = "1";
     recalcular(form);
   }
@@ -593,6 +659,7 @@
       dataIda: fd.get("dataIda") || "",
       dataVolta: fd.get("dataVolta") || "",
       status: fd.get("status") || "Fechado",
+      cafeIncluso: !!fd.get("cafeIncluso"),
       motivo: (fd.get("motivo") || "").trim(),
       pendencias: (fd.get("pendencias") || "").trim(),
       obs: (fd.get("obs") || "").trim()
@@ -872,7 +939,7 @@
         dataVolta: volta,
         aereo: C.parseNum(bruto("aereo")),
         hospedagem: hospedagem,
-        alimentacao: temAlim ? C.parseNum(bruto("alimentacao")) : noites * C.porPernoite(),
+        alimentacao: temAlim ? C.parseNum(bruto("alimentacao")) : noites * C.porPernoite(false),
         transporte: C.parseNum(bruto("transporte")),
         custoAlteracao: 0,
         status: status || "Fechado",

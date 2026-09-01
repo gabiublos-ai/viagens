@@ -26,12 +26,13 @@
     return C.moeda(v);
   }
 
-  function chipStatus(status) {
+  function chipStatus(status, motivo) {
     var classe = status === "Fechado" ? "ok"
                : status === "Pendente" ? "warn"
                : status === "Cancelado" ? "crit"
                : "accent";
-    return '<span class="chip ' + classe + '">' + esc(status) + "</span>";
+    return '<span class="chip ' + classe + '"' + (motivo ? ' title="' + esc(motivo) + '"' : "") + ">" +
+      esc(status) + "</span>";
   }
 
   function chipsConferencia(v) {
@@ -373,13 +374,17 @@
         '<td class="n">' + dinheiro(v.hospedagem) +
         (v.porNoite ? '<br><span class="t-sub">' + C.moeda(v.porNoite) + "/noite</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(v.alimentacao) +
+        (v.cafeIncluso ? '<br><span class="t-sub" title="Hospedagem com café da manhã: só o jantar é devido">café incluso</span>' : "") +
         (v.difAlim ? '<br><span class="t-sub" style="color:var(--' + (v.difAlim < 0 ? "critical" : "warning") + ')">' +
           (v.difAlim > 0 ? "+" : "") + C.moeda(v.difAlim) + "</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(outros) + "</td>" +
         '<td class="n"><strong>' + C.moeda(v.total) + "</strong></td>" +
-        "<td>" + chipStatus(v.status) + "</td>" +
+        "<td>" + chipStatus(v.status, v.status === "Cancelado" ? v.motivo : "") + "</td>" +
         "<td>" + chipsConferencia(v) + "</td>" +
         '<td class="col-acoes"><div class="actions-cell">' +
+        (v.tipo === "Alteração" || v.cancelada ? "" : botaoIcone("cancelar", v.id,
+           "Cancelar a viagem — informa o motivo e o que aconteceu com os custos",
+           '<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>')) +
         (v.ok ? "" : botaoIcone(v.conferido ? "desvalidar" : "validar", v.id,
            v.conferido ? "Desfazer a conferência" : "Validar a conferência — para de aparecer como alerta",
            v.conferido ? '<path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/>'
@@ -713,8 +718,10 @@
 
     html += '<div class="card"><div class="card-head"><h2>Regra de alimentação</h2></div>' +
       '<div class="card-body grid" style="gap:12px">' +
-      '<div class="note">Cada noite fora vale <strong>' + C.brlSigla(C.porPernoite()) +
-      "</strong>. Mudar aqui recalcula toda a base — o valor devido, a diferença e a conferência de cada viagem.</div>" +
+      '<div class="note">Cada noite fora vale <strong>' + C.brlSigla(C.porPernoite(false)) +
+      "</strong>. Quando a hospedagem já inclui café da manhã, a viagem pode ser marcada assim no lançamento e " +
+      "passa a valer só o jantar, <strong>" + C.brlSigla(C.db.params.regras.jantar) + "</strong> por noite. " +
+      "Mudar aqui recalcula toda a base — o valor devido, a diferença e a conferência de cada viagem.</div>" +
       '<div class="form-grid">' +
       campo("Jantar por pernoite (R$)", '<input type="text" class="money" name="regra-jantar" value="' + C.brl(r.jantar) + '">', "c6") +
       campo("Café da manhã por manhã em viagem (R$)", '<input type="text" class="money" name="regra-cafe" value="' + C.brl(r.cafe) + '">', "c6") +

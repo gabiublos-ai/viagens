@@ -3938,10 +3938,13 @@ window.SEED = {
     return TIPOS_ALTERACAO[0];
   }
 
-  /** Valor devido de alimentação por pernoite (jantar + café da manhã). */
-  function porPernoite() {
+  /**
+   * Valor devido de alimentação por pernoite. Quando o hotel serve café da
+   * manhã, só o jantar é devido — o café sai da conta.
+   */
+  function porPernoite(cafeIncluso) {
     var r = db.params.regras;
-    return (Number(r.jantar) || 0) + (Number(r.cafe) || 0);
+    return (Number(r.jantar) || 0) + (cafeIncluso ? 0 : (Number(r.cafe) || 0));
   }
 
   /**
@@ -3959,7 +3962,9 @@ window.SEED = {
     var porNoite = noites ? round2(hospedagem / noites) : 0;
     var total = round2((Number(v.aereo) || 0) + hospedagem + (Number(v.alimentacao) || 0) +
                        (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0));
-    var alimDevida = round2(noites * porPernoite());
+    // Viagem cancelada não gera diária de alimentação.
+    var cancelada = v.status === "Cancelado";
+    var alimDevida = cancelada ? 0 : round2(noites * porPernoite(v.cafeIncluso));
     var difAlim = round2((Number(v.alimentacao) || 0) - alimDevida);
 
     var avisos = [];
@@ -3983,6 +3988,9 @@ window.SEED = {
       area: areaDe(v.colaborador),
       gestor: gestorDe(v.colaborador),
       noites: noites,
+      // A viagem cancelada não aconteceu: não conta pernoite nem entra no calendário.
+      noitesEfetivas: cancelada ? 0 : noites,
+      cancelada: cancelada,
       hospedagem: hospedagem,
       porNoite: porNoite,
       total: total,
@@ -4017,14 +4025,15 @@ window.SEED = {
   var CAMPOS_VIAGEM = ["tipo", "colaborador", "destino", "aeroportoOrigem", "dataIda", "dataVolta",
                        "aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao",
                        "status", "refId", "motivo", "pendencias", "obs", "conferencia",
-                       "hospedagem", "tipoAlteracao"];
+                       "hospedagem", "tipoAlteracao", "cafeIncluso"];
 
   function viagemVazia() {
     return {
       id: 0, tipo: "Viagem", colaborador: "", destino: "São Paulo/SP", aeroportoOrigem: "",
       dataIda: "", dataVolta: "", aereo: 0, hospedagem: 0, diarias: 0, valorDiaria: 0, alimentacao: 0,
       transporte: 0, custoAlteracao: 0, status: "Fechado", refId: null,
-      motivo: "", pendencias: "", obs: "", conferencia: null, tipoAlteracao: ""
+      motivo: "", pendencias: "", obs: "", conferencia: null, tipoAlteracao: "",
+      cafeIncluso: false
     };
   }
 
@@ -4094,6 +4103,28 @@ window.SEED = {
       assinatura: c.assinatura
     };
     return salvarViagem(Object.assign({}, v, { conferencia: nova }));
+  }
+
+  /**
+   * Cancela uma viagem, guardando o motivo. Os custos já lançados podem ser
+   * zerados, trocados por uma multa, ou mantidos como estão.
+   * @param {string} tratamento  "zerar" | "multa" | "manter"
+   */
+  function cancelarViagem(id, motivo, tratamento, multa) {
+    var v = viagemPorId(id);
+    if (!v) return Promise.resolve(null);
+
+    var novo = { status: "Cancelado", motivo: motivo || "" };
+    if (tratamento === "zerar" || tratamento === "multa") {
+      novo.aereo = 0;
+      novo.hospedagem = 0;
+      novo.diarias = 0;
+      novo.valorDiaria = 0;
+      novo.alimentacao = 0;
+      novo.transporte = 0;
+      novo.custoAlteracao = tratamento === "multa" ? (Number(multa) || 0) : 0;
+    }
+    return salvarViagem(Object.assign({}, v, novo));
   }
 
   /** Alterações ligadas a uma viagem. */
@@ -4296,7 +4327,7 @@ window.SEED = {
       pessoas[v.colaborador] = 1;
       pessoasMes[m][v.colaborador] = 1;
       if (v.tipo !== "Alteração") nViagens++;
-      noites += v.noites;
+      noites += v.noitesEfetivas;
     });
 
     corridas().forEach(function (c) {
@@ -4349,7 +4380,7 @@ window.SEED = {
       l.transporte += Number(v.transporte) || 0;
       l.alteracoes += Number(v.custoAlteracao) || 0;
       l.total += v.total;
-      l.noites += v.noites;
+      l.noites += v.noitesEfetivas;
       if (v.tipo !== "Alteração") l.viagens++;
     });
     corridas().forEach(function (c) {
@@ -4456,7 +4487,7 @@ window.SEED = {
     var linhas = {};
 
     viagens().forEach(function (v) {
-      if (!v.dataIda || !v.dataVolta) return;
+      if (!v.dataIda || !v.dataVolta || v.cancelada) return;
       for (var d = 1; d <= nDias; d++) {
         var iso = ano + "-" + pad(mes) + "-" + pad(d);
         if (diasEntre(v.dataIda, iso) < 0 || diasEntre(iso, v.dataVolta) < 0) continue;
@@ -4559,7 +4590,7 @@ window.SEED = {
     calc: calc, viagens: viagens, viagemPorId: viagemPorId, viagemCompleta: viagemCompleta,
     viagemVazia: viagemVazia, salvarViagem: salvarViagem, excluirViagem: excluirViagem,
     duplicarViagem: duplicarViagem, alteracoesDe: alteracoesDe, porPernoite: porPernoite,
-    validarConferencia: validarConferencia,
+    validarConferencia: validarConferencia, cancelarViagem: cancelarViagem,
     TIPOS_ALTERACAO: TIPOS_ALTERACAO, tipoAlteracao: tipoAlteracao,
     proximoId: proximoId,
 
@@ -4606,12 +4637,13 @@ window.SEED = {
     return C.moeda(v);
   }
 
-  function chipStatus(status) {
+  function chipStatus(status, motivo) {
     var classe = status === "Fechado" ? "ok"
                : status === "Pendente" ? "warn"
                : status === "Cancelado" ? "crit"
                : "accent";
-    return '<span class="chip ' + classe + '">' + esc(status) + "</span>";
+    return '<span class="chip ' + classe + '"' + (motivo ? ' title="' + esc(motivo) + '"' : "") + ">" +
+      esc(status) + "</span>";
   }
 
   function chipsConferencia(v) {
@@ -4953,13 +4985,17 @@ window.SEED = {
         '<td class="n">' + dinheiro(v.hospedagem) +
         (v.porNoite ? '<br><span class="t-sub">' + C.moeda(v.porNoite) + "/noite</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(v.alimentacao) +
+        (v.cafeIncluso ? '<br><span class="t-sub" title="Hospedagem com café da manhã: só o jantar é devido">café incluso</span>' : "") +
         (v.difAlim ? '<br><span class="t-sub" style="color:var(--' + (v.difAlim < 0 ? "critical" : "warning") + ')">' +
           (v.difAlim > 0 ? "+" : "") + C.moeda(v.difAlim) + "</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(outros) + "</td>" +
         '<td class="n"><strong>' + C.moeda(v.total) + "</strong></td>" +
-        "<td>" + chipStatus(v.status) + "</td>" +
+        "<td>" + chipStatus(v.status, v.status === "Cancelado" ? v.motivo : "") + "</td>" +
         "<td>" + chipsConferencia(v) + "</td>" +
         '<td class="col-acoes"><div class="actions-cell">' +
+        (v.tipo === "Alteração" || v.cancelada ? "" : botaoIcone("cancelar", v.id,
+           "Cancelar a viagem — informa o motivo e o que aconteceu com os custos",
+           '<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>')) +
         (v.ok ? "" : botaoIcone(v.conferido ? "desvalidar" : "validar", v.id,
            v.conferido ? "Desfazer a conferência" : "Validar a conferência — para de aparecer como alerta",
            v.conferido ? '<path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/>'
@@ -5293,8 +5329,10 @@ window.SEED = {
 
     html += '<div class="card"><div class="card-head"><h2>Regra de alimentação</h2></div>' +
       '<div class="card-body grid" style="gap:12px">' +
-      '<div class="note">Cada noite fora vale <strong>' + C.brlSigla(C.porPernoite()) +
-      "</strong>. Mudar aqui recalcula toda a base — o valor devido, a diferença e a conferência de cada viagem.</div>" +
+      '<div class="note">Cada noite fora vale <strong>' + C.brlSigla(C.porPernoite(false)) +
+      "</strong>. Quando a hospedagem já inclui café da manhã, a viagem pode ser marcada assim no lançamento e " +
+      "passa a valer só o jantar, <strong>" + C.brlSigla(C.db.params.regras.jantar) + "</strong> por noite. " +
+      "Mudar aqui recalcula toda a base — o valor devido, a diferença e a conferência de cada viagem.</div>" +
       '<div class="form-grid">' +
       campo("Jantar por pernoite (R$)", '<input type="text" class="money" name="regra-jantar" value="' + C.brl(r.jantar) + '">', "c6") +
       campo("Café da manhã por manhã em viagem (R$)", '<input type="text" class="money" name="regra-cafe" value="' + C.brl(r.cafe) + '">', "c6") +
@@ -5597,6 +5635,7 @@ window.SEED = {
         break;
       case "alteracao": abrirAlteracao(C.viagemPorId(id)); break;
       case "registrar-alteracao": escolherViagemParaAlterar(); break;
+      case "cancelar": abrirCancelamento(C.viagemPorId(id)); break;
       case "validar":
       case "desvalidar":
         C.validarConferencia(id).then(function () {
@@ -5744,6 +5783,12 @@ window.SEED = {
       '<input type="text" class="money" name="alimentacao" value="' + C.brl(v.alimentacao) + '">' +
       '<span class="hint"><button type="button" class="btn btn-ghost btn-sm" data-acao="usar-regra" style="padding:0">usar a regra</button> ' +
       "<span data-info='regra'></span></span></div>" +
+
+      '<div class="field c3"><label>Café da manhã</label>' +
+      '<label class="chip" style="cursor:pointer;gap:7px;align-self:flex-start;padding:7px 10px">' +
+      '<input type="checkbox" name="cafeIncluso" style="width:auto"' + (v.cafeIncluso ? " checked" : "") +
+      "> Incluso na hospedagem</label>" +
+      '<span class="hint" data-info="cafe"></span></div>' +
       V.campo("Transporte / Auxílio (R$)", '<input type="text" class="money" name="transporte" value="' + C.brl(v.transporte) + '">', "c3") +
 
       (ehAlteracao ?
@@ -5842,6 +5887,54 @@ window.SEED = {
     });
   }
 
+  /** Cancela a viagem: guarda o motivo e decide o que fazer com os custos. */
+  function abrirCancelamento(v) {
+    if (!v) return;
+    var c = C.calc(v);
+
+    var dialogo = abrirModal({
+      titulo: "Cancelar a viagem #" + v.id,
+      estreito: true,
+      corpo: '<form id="form-cancela" method="dialog"><div class="form-grid">' +
+        '<div class="c12"><div class="note">' + esc(v.colaborador) + " · " +
+        esc(C.fmtData(v.dataIda)) + " a " + esc(C.fmtData(v.dataVolta)) + " · " + esc(v.destino) +
+        "<br>Lançado hoje: <strong>" + C.moeda(c.total) + "</strong>.</div></div>" +
+
+        V.campo("Motivo do cancelamento",
+                '<input type="text" name="motivo" required value="' + esc(v.motivo) + '" ' +
+                'placeholder="Reunião adiada pelo cliente">', "c12") +
+
+        '<div class="field c12"><label>O que aconteceu com os custos</label>' +
+        V.selectHTML("tratamento", [
+          { v: "zerar", r: "Nada foi cobrado — zerar os valores" },
+          { v: "multa", r: "Houve multa ou valor não reembolsável" },
+          { v: "manter", r: "Manter os valores como estão" }
+        ], "zerar") + "</div>" +
+
+        '<div class="field c6" data-bloco="multa" hidden><label>Valor cobrado (R$)</label>' +
+        '<input type="text" class="money" name="multa" value="0,00">' +
+        '<span class="hint">Multa da companhia, no-show do hotel, taxa de remarcação.</span></div>' +
+        "</div></form>",
+      rodape: '<span class="grow"></span><button class="btn" data-acao="fechar">Voltar</button>' +
+        '<button class="btn btn-danger" type="submit" form="form-cancela">Cancelar a viagem</button>'
+    });
+
+    var form = dialogo.querySelector("form");
+    form.tratamento.addEventListener("change", function () {
+      form.querySelector('[data-bloco="multa"]').hidden = form.tratamento.value !== "multa";
+    });
+
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var fd = new FormData(form);
+      C.cancelarViagem(v.id, (fd.get("motivo") || "").trim(), fd.get("tratamento"),
+                       C.parseNum(fd.get("multa"))).then(function () {
+        toast("Viagem #" + v.id + " cancelada");
+        dialogo.close();
+      }, falhou);
+    });
+  }
+
   function abrirAlteracao(original) {
     if (!original) return;
     var v = C.viagemVazia();
@@ -5869,6 +5962,8 @@ window.SEED = {
 
     if (alvo) {
       if (alvo.name === "alimentacao") form.dataset.alimTocada = "1";
+      // Marcar o café incluso refaz a conta, mesmo que o valor já tenha sido mexido.
+      if (alvo.name === "cafeIncluso") form.dataset.alimTocada = "";
 
       if (alvo.name === "colaborador") {
         var c = C.colaborador(alvo.value);
@@ -5885,8 +5980,9 @@ window.SEED = {
     var noites = Math.max(0, C.diasEntre(d.dataIda, d.dataVolta));
 
     // Preenchimento automático da alimentação, até o usuário assumir o campo
+    var cafeIncluso = !!(form.querySelector('[name="cafeIncluso"]') || {}).checked;
     if (!form.dataset.alimTocada && noites) {
-      form.querySelector('[name="alimentacao"]').value = C.brl(noites * C.porPernoite());
+      form.querySelector('[name="alimentacao"]').value = C.brl(noites * C.porPernoite(cafeIncluso));
     }
 
     d = dadosDoFormulario(form);
@@ -5901,6 +5997,14 @@ window.SEED = {
       infoHosp.textContent = !hosp ? "Valor cheio do hotel no período"
         : noites ? C.moeda(hosp / noites) + " por noite · " + noites + " noite(s)"
         : "Período sem pernoite";
+    }
+
+    var infoCafe = form.querySelector("[data-info='cafe']");
+    if (infoCafe) {
+      var r = C.db.params.regras;
+      infoCafe.textContent = cafeIncluso
+        ? "Só o jantar é devido: " + C.moeda(r.jantar) + " por noite"
+        : "Jantar " + C.moeda(r.jantar) + " + café " + C.moeda(r.cafe) + " por noite";
     }
 
     var infoRegra = form.querySelector("[data-info='regra']");
@@ -5951,7 +6055,7 @@ window.SEED = {
   function aplicarRegraAlimentacao(form) {
     var d = dadosDoFormulario(form);
     var noites = Math.max(0, C.diasEntre(d.dataIda, d.dataVolta));
-    form.querySelector('[name="alimentacao"]').value = C.brl(noites * C.porPernoite());
+    form.querySelector('[name="alimentacao"]').value = C.brl(noites * C.porPernoite(d.cafeIncluso));
     form.dataset.alimTocada = "1";
     recalcular(form);
   }
@@ -5969,6 +6073,7 @@ window.SEED = {
       dataIda: fd.get("dataIda") || "",
       dataVolta: fd.get("dataVolta") || "",
       status: fd.get("status") || "Fechado",
+      cafeIncluso: !!fd.get("cafeIncluso"),
       motivo: (fd.get("motivo") || "").trim(),
       pendencias: (fd.get("pendencias") || "").trim(),
       obs: (fd.get("obs") || "").trim()
@@ -6248,7 +6353,7 @@ window.SEED = {
         dataVolta: volta,
         aereo: C.parseNum(bruto("aereo")),
         hospedagem: hospedagem,
-        alimentacao: temAlim ? C.parseNum(bruto("alimentacao")) : noites * C.porPernoite(),
+        alimentacao: temAlim ? C.parseNum(bruto("alimentacao")) : noites * C.porPernoite(false),
         transporte: C.parseNum(bruto("transporte")),
         custoAlteracao: 0,
         status: status || "Fechado",
