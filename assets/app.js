@@ -197,10 +197,12 @@
 
     var coluna = ev.target.closest("[data-ordenar]");
     if (coluna) {
+      // Cada tabela ordenável guarda a sua ordem num campo do estado.
+      var alvo = coluna.dataset.ordenarTabela || "custoOrdem";
       var campo = coluna.dataset.ordenar;
-      var atual = estado.custoOrdem || { campo: "total", desc: true };
+      var atual = estado[alvo] || { campo: "", desc: true };
       // Mesmo título: inverte. Título novo: começa do maior para o menor.
-      estado.custoOrdem = { campo: campo, desc: atual.campo === campo ? !atual.desc : true };
+      estado[alvo] = { campo: campo, desc: atual.campo === campo ? !atual.desc : true };
       render();
       return;
     }
@@ -1248,14 +1250,25 @@
         }).join("") + "</ul></div>";
 
       corpo += c.conferido
-        ? '<div class="note ok"><strong>✓ Validado</strong> por ' + esc(c.conferencia.por || "—") +
-          " em " + esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) +
-          (c.conferencia.motivo ? '<br><span class="t-sub">' + esc(c.conferencia.motivo) + "</span>" : "") +
+        ? '<div class="note ' + (c.devida ? "ok" : "warn") + '"><strong>' +
+          (c.devida ? "✓ Despesa devida" : "✗ Despesa não devida") + "</strong> · validado por " +
+          esc(c.conferencia.por || "—") + " em " + esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) +
+          (c.conferencia.justificativa ? "<br><strong>Justificativa:</strong> " + esc(c.conferencia.justificativa) : "") +
+          (c.conferencia.comentario ? '<br><span class="t-sub">' + esc(c.conferencia.comentario) + "</span>" : "") +
           "</div>"
         : '<form id="form-valida-corrida" method="dialog"><div class="form-grid">' +
-          V.campo("Justificativa (opcional)",
-            '<input type="text" name="motivo" placeholder="Deslocamento urbano autorizado pelo gestor">', "c12",
-            "Fica registrada junto com quem validou. Se a corrida ou a viagem mudarem, o aviso volta a aparecer.") +
+          '<div class="field c12"><label>A corrida é devida?</label>' +
+          '<div class="escolha">' +
+          '<label class="opcao"><input type="radio" name="devida" value="sim" checked> ' +
+          "<span><strong>Devida</strong> — gasto legítimo, segue como está</span></label>" +
+          '<label class="opcao"><input type="radio" name="devida" value="nao"> ' +
+          "<span><strong>Não devida</strong> — fora da política ou a cobrar da pessoa</span></label>" +
+          "</div></div>" +
+          V.campo("Justificativa", '<input type="text" name="justificativa" ' +
+            'placeholder="Deslocamento urbano autorizado pelo gestor">', "c12",
+            "Obrigatória quando a corrida não é devida.") +
+          V.campo("Comentários (opcional)", '<input type="text" name="comentario" ' +
+            'placeholder="Falar com o gestor da área no fechamento do mês">', "c12") +
           "</div></form>";
     }
 
@@ -1263,7 +1276,7 @@
     if (c.avisos.length) {
       rodape += c.conferido
         ? '<button class="btn" data-acao="desvalidar-corrida">Desfazer validação</button>'
-        : '<button class="btn btn-primary" type="submit" form="form-valida-corrida">Validar</button>';
+        : '<button class="btn btn-primary" type="submit" form="form-valida-corrida">Registrar validação</button>';
     }
 
     var dialogo = abrirModal({
@@ -1274,10 +1287,29 @@
 
     var form = dialogo.querySelector("#form-valida-corrida");
     if (form) {
+      var justificativa = form.justificativa;
+      function exigeJustificativa() {
+        var devida = form.devida.value === "sim";
+        justificativa.required = !devida;
+        justificativa.closest(".field").querySelector("label").textContent =
+          devida ? "Justificativa (opcional)" : "Justificativa (obrigatória)";
+        justificativa.placeholder = devida
+          ? "Traslado do aeroporto no dia da viagem"
+          : "Corrida particular — a descontar em folha";
+      }
+      form.addEventListener("change", exigeJustificativa);
+      exigeJustificativa();
+
       form.addEventListener("submit", function (ev) {
         ev.preventDefault();
-        C.validarCorrida(c.chave, null, new FormData(form).get("motivo")).then(function () {
-          toast("Corrida validada — sai dos pontos de atenção");
+        var fd = new FormData(form);
+        var devida = fd.get("devida") === "sim";
+        C.validarCorrida(c.chave, {
+          devida: devida,
+          justificativa: fd.get("justificativa"),
+          comentario: fd.get("comentario")
+        }).then(function () {
+          toast(devida ? "Corrida validada como devida" : "Corrida marcada como não devida");
           dialogo.close();
         }, falhou);
       });
@@ -1286,7 +1318,7 @@
     if (desfazer) {
       desfazer.addEventListener("click", function (ev) {
         ev.preventDefault();
-        C.validarCorrida(c.chave).then(function () {
+        C.validarCorrida(c.chave, null).then(function () {
           toast("Validação desfeita");
           dialogo.close();
         }, falhou);

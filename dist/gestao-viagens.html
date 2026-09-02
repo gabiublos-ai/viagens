@@ -562,6 +562,23 @@ body.trancado .tabs { display: none; }
 .chip.como-botao { cursor: pointer; font: inherit; font-size: 11px; }
 .chip.como-botao:hover { filter: brightness(.96); }
 
+/* Variação contra o mês anterior: cair é bom, subir é ruim. */
+.var { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+.var-sobe { color: var(--critical); }
+.var-cai { color: var(--good); }
+
+/* Escolha entre duas opções no bloco de validação */
+.escolha { display: flex; flex-direction: column; gap: 8px; }
+.opcao {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 9px 11px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.opcao:hover { background: var(--surface-2); }
+.opcao input { width: auto; margin: 2px 0 0; flex: none; }
+.opcao:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+
 .motivos { display: flex; flex-direction: column; gap: 1px; max-width: 190px; }
 .motivos > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -4341,7 +4358,10 @@ window.SEED = {
       avisos.push({ curto: "Origem igual ao destino",
         texto: "Partida e chegada no mesmo endereço — normalmente corrida cancelada depois do embarque ou erro do app." });
     }
-    if (c.valor > 150) {
+    // Traslado de aeroporto dentro do período da viagem é caro por natureza —
+    // não vira ponto de atenção só por passar do teto.
+    var trasladoLegitimo = c.aeroporto && c.auditoria.situacao === "ok";
+    if (c.valor > 150 && !trasladoLegitimo) {
       avisos.push({ curto: "Acima de R$ 150",
         texto: "Corrida de " + moeda(c.valor) + ", acima do teto de R$ 150. Vale conferir se havia alternativa ou carona." });
     }
@@ -4393,6 +4413,8 @@ window.SEED = {
       var conf = validadas[c.chave];
       c.conferencia = conf && conf.assinatura === c.assinatura ? conf : null;
       c.conferido = !!(c.conferencia && c.avisos.length);
+      // Lançamentos validados antes desse campo existir contam como devidos.
+      c.devida = c.conferido ? c.conferencia.devida !== false : null;
       c.precisaConferir = c.avisos.length > 0 && !c.conferido;
       // Mantido para quem lia o campo antigo de alerta em texto.
       c.alerta = c.avisos.map(function (a) { return a.curto; }).join(" · ");
@@ -4400,20 +4422,28 @@ window.SEED = {
     return cacheUber;
   }
 
-  /** Marca (ou desmarca) a validação de uma corrida sinalizada. */
-  function validarCorrida(chave, quem, motivo) {
-    var c = null;
-    corridas().forEach(function (x) { if (x.chave === chave) c = x; });
+  /**
+   * Registra a validação de uma corrida sinalizada: se a despesa é devida,
+   * a justificativa (obrigatória quando não é devida) e um comentário livre.
+   * Sem `dados`, desfaz a validação.
+   */
+  function validarCorrida(chave, dados) {
+    var c = corridaPorChave(chave);
     if (!c || !c.avisos.length) return Promise.resolve(null);
 
     if (!db.params.conferenciasUber) db.params.conferenciasUber = {};
-    if (c.conferido) delete db.params.conferenciasUber[chave];
+    if (!dados) delete db.params.conferenciasUber[chave];
     else {
+      var devida = dados.devida !== false;
+      var justificativa = String(dados.justificativa || "").trim().slice(0, 300);
+      if (!devida && !justificativa) return Promise.reject(new Error("Corrida não devida precisa de justificativa."));
       db.params.conferenciasUber[chave] = {
-        por: quem || meta.nome || "",
+        por: dados.por || meta.nome || "",
         em: new Date().toISOString(),
         assinatura: c.assinatura,
-        motivo: String(motivo || "").slice(0, 300)
+        devida: devida,
+        justificativa: justificativa,
+        comentario: String(dados.comentario || "").trim().slice(0, 300)
       };
     }
     return salvarParams();
@@ -4711,6 +4741,8 @@ window.SEED = {
       porCidade: ordena(porCidade),
       alertas: alertas,
       validadas: validadas.length,
+      naoDevidas: validadas.filter(function (c) { return !c.devida; }).length,
+      valorNaoDevidas: round2(validadas.reduce(function (t, c) { return c.devida ? t : t + c.valor; }, 0)),
       porMotivo: porMotivo,
       porArea: ordenaArea(porArea),
       desconhecidos: Object.keys(desconhecidos).map(function (k) { return { nome: k, n: desconhecidos[k] }; }),
@@ -5380,6 +5412,8 @@ window.SEED = {
     if (f.situacao) {
       lista = lista.filter(function (c) {
         if (f.situacao === "atencao") return c.precisaConferir;
+        if (f.situacao === "devida") return c.conferido && c.devida;
+        if (f.situacao === "nao-devida") return c.conferido && !c.devida;
         if (f.situacao === "validada") return c.conferido;
         if (f.situacao === "na") return !c.considerar || c.tipo !== "Fare";
         return !c.avisos.length && c.tipo === "Fare";   // "ok"
@@ -5402,11 +5436,16 @@ window.SEED = {
       kpi("Corridas acima de R$ 150", String(u.acima150), C.brlSigla(u.valorAcima150) + " concentrados") +
       "</div>";
 
-    if (u.alertas.length) {
-      html += '<div class="note warn"><strong>' + u.alertas.length + " corrida" +
-        (u.alertas.length > 1 ? "s pedem" : " pede") + " validação.</strong> " +
-        "Abra o selo ⚠ Atenção na linha para ver o motivo e validar. " +
-        (u.validadas ? u.validadas + " já validada" + (u.validadas > 1 ? "s" : "") + "." : "") + "</div>";
+    if (u.alertas.length || u.naoDevidas) {
+      html += '<div class="note warn">' +
+        (u.alertas.length
+          ? "<strong>" + u.alertas.length + " corrida" + (u.alertas.length > 1 ? "s pedem" : " pede") +
+            " validação.</strong> Abra o selo ⚠ Atenção na linha para ver o motivo, dizer se a despesa é devida e validar. "
+          : "<strong>Nenhuma corrida pendente de validação.</strong> ") +
+        (u.validadas ? u.validadas + " já validada" + (u.validadas > 1 ? "s" : "") + "" : "") +
+        (u.naoDevidas ? ", sendo " + u.naoDevidas + " marcada" + (u.naoDevidas > 1 ? "s" : "") +
+          " como não devida" + (u.naoDevidas > 1 ? "s" : "") + " — " + C.moeda(u.valorNaoDevidas) + " a recuperar." : ".") +
+        "</div>";
     }
 
     if (u.desconhecidos.length) {
@@ -5424,12 +5463,16 @@ window.SEED = {
 
     html += '<div class="card"><div class="card-head"><h2>Evolução mensal</h2></div>' +
       '<div class="card-body flush"><div class="table-wrap"><table><thead><tr><th>Mês</th>' +
-      '<th class="n">Corridas</th><th class="n">Valor</th><th class="n">Ticket</th><th class="n">Aeroporto</th>' +
+      '<th class="n">Corridas</th><th class="n">Valor</th><th class="n">vs. mês anterior</th>' +
+      '<th class="n">Ticket</th><th class="n">Aeroporto</th>' +
       "</tr></thead><tbody>" +
-      mesesU.map(function (m) {
+      mesesU.map(function (m, i) {
         var d = u.porMes[m];
+        var anterior = i ? u.porMes[mesesU[i - 1]] : null;
         return "<tr><td>" + esc(C.mesRotulo(m)) + '</td><td class="n">' + d.n + "</td>" +
-          '<td class="n">' + C.moeda(d.valor) + '</td><td class="n">' + (d.n ? C.moeda(d.valor / d.n) : "—") + "</td>" +
+          '<td class="n">' + C.moeda(d.valor) + "</td>" +
+          '<td class="n">' + variacao(d.valor, anterior ? anterior.valor : null) + "</td>" +
+          '<td class="n">' + (d.n ? C.moeda(d.valor / d.n) : "—") + "</td>" +
           '<td class="n">' + (d.n ? C.brl(d.aeroporto / d.n * 100, 0) + "%" : "—") + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
@@ -5459,11 +5502,20 @@ window.SEED = {
         comentario: "Créditos devolvidos pela Uber." }
     ]).filter(function (l) { return l.n > 0; });
 
+    var ordemAt = estado.atencaoOrdem || { campo: "valor", desc: true };
+    atencoes.sort(function (a, b) {
+      var x = a[ordemAt.campo], y = b[ordemAt.campo];
+      var r = typeof x === "string" ? C.ordenaPt(x, y) : (x - y);
+      return ordemAt.desc ? -r : r;
+    });
+
     html += '<div class="card"><div class="card-head"><h2>Pontos de atenção</h2>' +
       '<span class="grow"></span><span class="t-sub">Uma corrida pode entrar em mais de um motivo</span></div>' +
       '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-      '<th>Motivo</th><th class="n">Ocorrências</th><th class="n">Custo total</th><th>Comentário</th>' +
-      "</tr></thead><tbody>" +
+      thOrdenavel("Motivo", "motivo", false, ordemAt, "atencaoOrdem") +
+      thOrdenavel("Ocorrências", "n", true, ordemAt, "atencaoOrdem") +
+      thOrdenavel("Custo total", "valor", true, ordemAt, "atencaoOrdem") +
+      "<th>Comentário</th></tr></thead><tbody>" +
       (atencoes.length ? atencoes.map(function (l) {
         return "<tr><td>" + esc(l.motivo) +
           (l.validadas ? ' <span class="chip ok">' + l.validadas + " validada" + (l.validadas > 1 ? "s" : "") + "</span>" : "") +
@@ -5510,7 +5562,8 @@ window.SEED = {
       selectHTML("situacao-uber", [
         { v: "", r: "Toda a auditoria" },
         { v: "atencao", r: "⚠ Pontos de atenção" },
-        { v: "validada", r: "✓ Validadas" },
+        { v: "devida", r: "✓ Validadas — devidas" },
+        { v: "nao-devida", r: "✗ Validadas — não devidas" },
         { v: "ok", r: "OK" },
         { v: "na", r: "Encargos da fatura" }
       ], f.situacao) + "</div></div>";
@@ -5560,9 +5613,12 @@ window.SEED = {
    */
   function selo(c) {
     if (c.conferido) {
-      return '<button class="chip ok como-botao" data-acao="ver-corrida" data-id="' + esc(c.chave) + '" title="' +
-        esc("Validado por " + (c.conferencia.por || "—") + (c.conferencia.motivo ? " · " + c.conferencia.motivo : "")) +
-        '">✓ Validado</button>';
+      var detalhe = "Validado por " + (c.conferencia.por || "—") +
+        (c.conferencia.justificativa ? " · " + c.conferencia.justificativa : "") +
+        (c.conferencia.comentario ? " · " + c.conferencia.comentario : "");
+      return '<button class="chip ' + (c.devida ? "ok" : "crit") + ' como-botao" data-acao="ver-corrida" data-id="' +
+        esc(c.chave) + '" title="' + esc(detalhe) + '">' +
+        (c.devida ? "✓ Devida" : "✗ Não devida") + "</button>";
     }
     if (c.avisos.length) {
       return '<button class="chip warn como-botao" data-acao="ver-corrida" data-id="' + esc(c.chave) +
@@ -5579,9 +5635,29 @@ window.SEED = {
     }).join("") + "</div>";
   }
 
+  /** Variação percentual contra o mês anterior — verde quando cai, vermelho quando sobe. */
+  function variacao(atual, anterior) {
+    if (anterior === null || anterior === undefined) return '<span class="t-sub">—</span>';
+    if (!anterior) return '<span class="t-sub">—</span>';
+    var pct = (atual - anterior) / Math.abs(anterior) * 100;
+    if (Math.abs(pct) < 0.5) return '<span class="t-sub">estável</span>';
+    var sobe = pct > 0;
+    return '<span class="var ' + (sobe ? "var-sobe" : "var-cai") + '">' +
+      (sobe ? "▲ +" : "▼ ") + C.brl(pct, 0) + "%</span>";
+  }
+
   /** Centavos só quando o valor é pequeno demais para aparecer sem eles. */
   function moedaFina(v) {
     return v && Math.abs(v) < 1 ? "R$ " + C.brl(v, 2) : C.moeda(v);
+  }
+
+  /** Cabeçalho que ordena a tabela ao ser clicado. */
+  function thOrdenavel(rotulo, campo, numerica, ordem, tabela) {
+    var ativa = ordem.campo === campo;
+    return '<th class="' + (numerica ? "n " : "") + "ord" + (ativa ? " ord-ativa" : "") +
+      '" data-ordenar="' + campo + '"' + (tabela ? ' data-ordenar-tabela="' + tabela + '"' : "") +
+      ' title="Ordenar por ' + esc(rotulo) + '">' +
+      esc(rotulo) + '<span class="ord-seta">' + (ativa ? (ordem.desc ? "▼" : "▲") : "") + "</span></th>";
   }
 
   function encurta(endereco) {
@@ -5649,10 +5725,7 @@ window.SEED = {
       });
 
       function colunaOrdenavel(rotulo, campo, numerica) {
-        var ativa = ordem.campo === campo;
-        return '<th class="' + (numerica ? "n " : "") + 'ord' + (ativa ? " ord-ativa" : "") +
-          '" data-ordenar="' + campo + '" title="Ordenar por ' + esc(rotulo) + '">' +
-          esc(rotulo) + '<span class="ord-seta">' + (ativa ? (ordem.desc ? "▼" : "▲") : "") + "</span></th>";
+        return thOrdenavel(rotulo, campo, numerica, ordem);
       }
 
       html += '<div class="card"><div class="card-head"><h2>Custo por colaborador em ' + esc(ano) + "</h2>" +
@@ -5992,10 +6065,12 @@ window.SEED = {
 
     var coluna = ev.target.closest("[data-ordenar]");
     if (coluna) {
+      // Cada tabela ordenável guarda a sua ordem num campo do estado.
+      var alvo = coluna.dataset.ordenarTabela || "custoOrdem";
       var campo = coluna.dataset.ordenar;
-      var atual = estado.custoOrdem || { campo: "total", desc: true };
+      var atual = estado[alvo] || { campo: "", desc: true };
       // Mesmo título: inverte. Título novo: começa do maior para o menor.
-      estado.custoOrdem = { campo: campo, desc: atual.campo === campo ? !atual.desc : true };
+      estado[alvo] = { campo: campo, desc: atual.campo === campo ? !atual.desc : true };
       render();
       return;
     }
@@ -7043,14 +7118,25 @@ window.SEED = {
         }).join("") + "</ul></div>";
 
       corpo += c.conferido
-        ? '<div class="note ok"><strong>✓ Validado</strong> por ' + esc(c.conferencia.por || "—") +
-          " em " + esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) +
-          (c.conferencia.motivo ? '<br><span class="t-sub">' + esc(c.conferencia.motivo) + "</span>" : "") +
+        ? '<div class="note ' + (c.devida ? "ok" : "warn") + '"><strong>' +
+          (c.devida ? "✓ Despesa devida" : "✗ Despesa não devida") + "</strong> · validado por " +
+          esc(c.conferencia.por || "—") + " em " + esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) +
+          (c.conferencia.justificativa ? "<br><strong>Justificativa:</strong> " + esc(c.conferencia.justificativa) : "") +
+          (c.conferencia.comentario ? '<br><span class="t-sub">' + esc(c.conferencia.comentario) + "</span>" : "") +
           "</div>"
         : '<form id="form-valida-corrida" method="dialog"><div class="form-grid">' +
-          V.campo("Justificativa (opcional)",
-            '<input type="text" name="motivo" placeholder="Deslocamento urbano autorizado pelo gestor">', "c12",
-            "Fica registrada junto com quem validou. Se a corrida ou a viagem mudarem, o aviso volta a aparecer.") +
+          '<div class="field c12"><label>A corrida é devida?</label>' +
+          '<div class="escolha">' +
+          '<label class="opcao"><input type="radio" name="devida" value="sim" checked> ' +
+          "<span><strong>Devida</strong> — gasto legítimo, segue como está</span></label>" +
+          '<label class="opcao"><input type="radio" name="devida" value="nao"> ' +
+          "<span><strong>Não devida</strong> — fora da política ou a cobrar da pessoa</span></label>" +
+          "</div></div>" +
+          V.campo("Justificativa", '<input type="text" name="justificativa" ' +
+            'placeholder="Deslocamento urbano autorizado pelo gestor">', "c12",
+            "Obrigatória quando a corrida não é devida.") +
+          V.campo("Comentários (opcional)", '<input type="text" name="comentario" ' +
+            'placeholder="Falar com o gestor da área no fechamento do mês">', "c12") +
           "</div></form>";
     }
 
@@ -7058,7 +7144,7 @@ window.SEED = {
     if (c.avisos.length) {
       rodape += c.conferido
         ? '<button class="btn" data-acao="desvalidar-corrida">Desfazer validação</button>'
-        : '<button class="btn btn-primary" type="submit" form="form-valida-corrida">Validar</button>';
+        : '<button class="btn btn-primary" type="submit" form="form-valida-corrida">Registrar validação</button>';
     }
 
     var dialogo = abrirModal({
@@ -7069,10 +7155,29 @@ window.SEED = {
 
     var form = dialogo.querySelector("#form-valida-corrida");
     if (form) {
+      var justificativa = form.justificativa;
+      function exigeJustificativa() {
+        var devida = form.devida.value === "sim";
+        justificativa.required = !devida;
+        justificativa.closest(".field").querySelector("label").textContent =
+          devida ? "Justificativa (opcional)" : "Justificativa (obrigatória)";
+        justificativa.placeholder = devida
+          ? "Traslado do aeroporto no dia da viagem"
+          : "Corrida particular — a descontar em folha";
+      }
+      form.addEventListener("change", exigeJustificativa);
+      exigeJustificativa();
+
       form.addEventListener("submit", function (ev) {
         ev.preventDefault();
-        C.validarCorrida(c.chave, null, new FormData(form).get("motivo")).then(function () {
-          toast("Corrida validada — sai dos pontos de atenção");
+        var fd = new FormData(form);
+        var devida = fd.get("devida") === "sim";
+        C.validarCorrida(c.chave, {
+          devida: devida,
+          justificativa: fd.get("justificativa"),
+          comentario: fd.get("comentario")
+        }).then(function () {
+          toast(devida ? "Corrida validada como devida" : "Corrida marcada como não devida");
           dialogo.close();
         }, falhou);
       });
@@ -7081,7 +7186,7 @@ window.SEED = {
     if (desfazer) {
       desfazer.addEventListener("click", function (ev) {
         ev.preventDefault();
-        C.validarCorrida(c.chave).then(function () {
+        C.validarCorrida(c.chave, null).then(function () {
           toast("Validação desfeita");
           dialogo.close();
         }, falhou);

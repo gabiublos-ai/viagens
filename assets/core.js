@@ -699,7 +699,10 @@
       avisos.push({ curto: "Origem igual ao destino",
         texto: "Partida e chegada no mesmo endereço — normalmente corrida cancelada depois do embarque ou erro do app." });
     }
-    if (c.valor > 150) {
+    // Traslado de aeroporto dentro do período da viagem é caro por natureza —
+    // não vira ponto de atenção só por passar do teto.
+    var trasladoLegitimo = c.aeroporto && c.auditoria.situacao === "ok";
+    if (c.valor > 150 && !trasladoLegitimo) {
       avisos.push({ curto: "Acima de R$ 150",
         texto: "Corrida de " + moeda(c.valor) + ", acima do teto de R$ 150. Vale conferir se havia alternativa ou carona." });
     }
@@ -751,6 +754,8 @@
       var conf = validadas[c.chave];
       c.conferencia = conf && conf.assinatura === c.assinatura ? conf : null;
       c.conferido = !!(c.conferencia && c.avisos.length);
+      // Lançamentos validados antes desse campo existir contam como devidos.
+      c.devida = c.conferido ? c.conferencia.devida !== false : null;
       c.precisaConferir = c.avisos.length > 0 && !c.conferido;
       // Mantido para quem lia o campo antigo de alerta em texto.
       c.alerta = c.avisos.map(function (a) { return a.curto; }).join(" · ");
@@ -758,20 +763,28 @@
     return cacheUber;
   }
 
-  /** Marca (ou desmarca) a validação de uma corrida sinalizada. */
-  function validarCorrida(chave, quem, motivo) {
-    var c = null;
-    corridas().forEach(function (x) { if (x.chave === chave) c = x; });
+  /**
+   * Registra a validação de uma corrida sinalizada: se a despesa é devida,
+   * a justificativa (obrigatória quando não é devida) e um comentário livre.
+   * Sem `dados`, desfaz a validação.
+   */
+  function validarCorrida(chave, dados) {
+    var c = corridaPorChave(chave);
     if (!c || !c.avisos.length) return Promise.resolve(null);
 
     if (!db.params.conferenciasUber) db.params.conferenciasUber = {};
-    if (c.conferido) delete db.params.conferenciasUber[chave];
+    if (!dados) delete db.params.conferenciasUber[chave];
     else {
+      var devida = dados.devida !== false;
+      var justificativa = String(dados.justificativa || "").trim().slice(0, 300);
+      if (!devida && !justificativa) return Promise.reject(new Error("Corrida não devida precisa de justificativa."));
       db.params.conferenciasUber[chave] = {
-        por: quem || meta.nome || "",
+        por: dados.por || meta.nome || "",
         em: new Date().toISOString(),
         assinatura: c.assinatura,
-        motivo: String(motivo || "").slice(0, 300)
+        devida: devida,
+        justificativa: justificativa,
+        comentario: String(dados.comentario || "").trim().slice(0, 300)
       };
     }
     return salvarParams();
@@ -1069,6 +1082,8 @@
       porCidade: ordena(porCidade),
       alertas: alertas,
       validadas: validadas.length,
+      naoDevidas: validadas.filter(function (c) { return !c.devida; }).length,
+      valorNaoDevidas: round2(validadas.reduce(function (t, c) { return c.devida ? t : t + c.valor; }, 0)),
       porMotivo: porMotivo,
       porArea: ordenaArea(porArea),
       desconhecidos: Object.keys(desconhecidos).map(function (k) { return { nome: k, n: desconhecidos[k] }; }),

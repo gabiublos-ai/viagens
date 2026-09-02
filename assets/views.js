@@ -526,6 +526,8 @@
     if (f.situacao) {
       lista = lista.filter(function (c) {
         if (f.situacao === "atencao") return c.precisaConferir;
+        if (f.situacao === "devida") return c.conferido && c.devida;
+        if (f.situacao === "nao-devida") return c.conferido && !c.devida;
         if (f.situacao === "validada") return c.conferido;
         if (f.situacao === "na") return !c.considerar || c.tipo !== "Fare";
         return !c.avisos.length && c.tipo === "Fare";   // "ok"
@@ -548,11 +550,16 @@
       kpi("Corridas acima de R$ 150", String(u.acima150), C.brlSigla(u.valorAcima150) + " concentrados") +
       "</div>";
 
-    if (u.alertas.length) {
-      html += '<div class="note warn"><strong>' + u.alertas.length + " corrida" +
-        (u.alertas.length > 1 ? "s pedem" : " pede") + " validação.</strong> " +
-        "Abra o selo ⚠ Atenção na linha para ver o motivo e validar. " +
-        (u.validadas ? u.validadas + " já validada" + (u.validadas > 1 ? "s" : "") + "." : "") + "</div>";
+    if (u.alertas.length || u.naoDevidas) {
+      html += '<div class="note warn">' +
+        (u.alertas.length
+          ? "<strong>" + u.alertas.length + " corrida" + (u.alertas.length > 1 ? "s pedem" : " pede") +
+            " validação.</strong> Abra o selo ⚠ Atenção na linha para ver o motivo, dizer se a despesa é devida e validar. "
+          : "<strong>Nenhuma corrida pendente de validação.</strong> ") +
+        (u.validadas ? u.validadas + " já validada" + (u.validadas > 1 ? "s" : "") + "" : "") +
+        (u.naoDevidas ? ", sendo " + u.naoDevidas + " marcada" + (u.naoDevidas > 1 ? "s" : "") +
+          " como não devida" + (u.naoDevidas > 1 ? "s" : "") + " — " + C.moeda(u.valorNaoDevidas) + " a recuperar." : ".") +
+        "</div>";
     }
 
     if (u.desconhecidos.length) {
@@ -570,12 +577,16 @@
 
     html += '<div class="card"><div class="card-head"><h2>Evolução mensal</h2></div>' +
       '<div class="card-body flush"><div class="table-wrap"><table><thead><tr><th>Mês</th>' +
-      '<th class="n">Corridas</th><th class="n">Valor</th><th class="n">Ticket</th><th class="n">Aeroporto</th>' +
+      '<th class="n">Corridas</th><th class="n">Valor</th><th class="n">vs. mês anterior</th>' +
+      '<th class="n">Ticket</th><th class="n">Aeroporto</th>' +
       "</tr></thead><tbody>" +
-      mesesU.map(function (m) {
+      mesesU.map(function (m, i) {
         var d = u.porMes[m];
+        var anterior = i ? u.porMes[mesesU[i - 1]] : null;
         return "<tr><td>" + esc(C.mesRotulo(m)) + '</td><td class="n">' + d.n + "</td>" +
-          '<td class="n">' + C.moeda(d.valor) + '</td><td class="n">' + (d.n ? C.moeda(d.valor / d.n) : "—") + "</td>" +
+          '<td class="n">' + C.moeda(d.valor) + "</td>" +
+          '<td class="n">' + variacao(d.valor, anterior ? anterior.valor : null) + "</td>" +
+          '<td class="n">' + (d.n ? C.moeda(d.valor / d.n) : "—") + "</td>" +
           '<td class="n">' + (d.n ? C.brl(d.aeroporto / d.n * 100, 0) + "%" : "—") + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
@@ -605,11 +616,20 @@
         comentario: "Créditos devolvidos pela Uber." }
     ]).filter(function (l) { return l.n > 0; });
 
+    var ordemAt = estado.atencaoOrdem || { campo: "valor", desc: true };
+    atencoes.sort(function (a, b) {
+      var x = a[ordemAt.campo], y = b[ordemAt.campo];
+      var r = typeof x === "string" ? C.ordenaPt(x, y) : (x - y);
+      return ordemAt.desc ? -r : r;
+    });
+
     html += '<div class="card"><div class="card-head"><h2>Pontos de atenção</h2>' +
       '<span class="grow"></span><span class="t-sub">Uma corrida pode entrar em mais de um motivo</span></div>' +
       '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-      '<th>Motivo</th><th class="n">Ocorrências</th><th class="n">Custo total</th><th>Comentário</th>' +
-      "</tr></thead><tbody>" +
+      thOrdenavel("Motivo", "motivo", false, ordemAt, "atencaoOrdem") +
+      thOrdenavel("Ocorrências", "n", true, ordemAt, "atencaoOrdem") +
+      thOrdenavel("Custo total", "valor", true, ordemAt, "atencaoOrdem") +
+      "<th>Comentário</th></tr></thead><tbody>" +
       (atencoes.length ? atencoes.map(function (l) {
         return "<tr><td>" + esc(l.motivo) +
           (l.validadas ? ' <span class="chip ok">' + l.validadas + " validada" + (l.validadas > 1 ? "s" : "") + "</span>" : "") +
@@ -656,7 +676,8 @@
       selectHTML("situacao-uber", [
         { v: "", r: "Toda a auditoria" },
         { v: "atencao", r: "⚠ Pontos de atenção" },
-        { v: "validada", r: "✓ Validadas" },
+        { v: "devida", r: "✓ Validadas — devidas" },
+        { v: "nao-devida", r: "✗ Validadas — não devidas" },
         { v: "ok", r: "OK" },
         { v: "na", r: "Encargos da fatura" }
       ], f.situacao) + "</div></div>";
@@ -706,9 +727,12 @@
    */
   function selo(c) {
     if (c.conferido) {
-      return '<button class="chip ok como-botao" data-acao="ver-corrida" data-id="' + esc(c.chave) + '" title="' +
-        esc("Validado por " + (c.conferencia.por || "—") + (c.conferencia.motivo ? " · " + c.conferencia.motivo : "")) +
-        '">✓ Validado</button>';
+      var detalhe = "Validado por " + (c.conferencia.por || "—") +
+        (c.conferencia.justificativa ? " · " + c.conferencia.justificativa : "") +
+        (c.conferencia.comentario ? " · " + c.conferencia.comentario : "");
+      return '<button class="chip ' + (c.devida ? "ok" : "crit") + ' como-botao" data-acao="ver-corrida" data-id="' +
+        esc(c.chave) + '" title="' + esc(detalhe) + '">' +
+        (c.devida ? "✓ Devida" : "✗ Não devida") + "</button>";
     }
     if (c.avisos.length) {
       return '<button class="chip warn como-botao" data-acao="ver-corrida" data-id="' + esc(c.chave) +
@@ -725,9 +749,29 @@
     }).join("") + "</div>";
   }
 
+  /** Variação percentual contra o mês anterior — verde quando cai, vermelho quando sobe. */
+  function variacao(atual, anterior) {
+    if (anterior === null || anterior === undefined) return '<span class="t-sub">—</span>';
+    if (!anterior) return '<span class="t-sub">—</span>';
+    var pct = (atual - anterior) / Math.abs(anterior) * 100;
+    if (Math.abs(pct) < 0.5) return '<span class="t-sub">estável</span>';
+    var sobe = pct > 0;
+    return '<span class="var ' + (sobe ? "var-sobe" : "var-cai") + '">' +
+      (sobe ? "▲ +" : "▼ ") + C.brl(pct, 0) + "%</span>";
+  }
+
   /** Centavos só quando o valor é pequeno demais para aparecer sem eles. */
   function moedaFina(v) {
     return v && Math.abs(v) < 1 ? "R$ " + C.brl(v, 2) : C.moeda(v);
+  }
+
+  /** Cabeçalho que ordena a tabela ao ser clicado. */
+  function thOrdenavel(rotulo, campo, numerica, ordem, tabela) {
+    var ativa = ordem.campo === campo;
+    return '<th class="' + (numerica ? "n " : "") + "ord" + (ativa ? " ord-ativa" : "") +
+      '" data-ordenar="' + campo + '"' + (tabela ? ' data-ordenar-tabela="' + tabela + '"' : "") +
+      ' title="Ordenar por ' + esc(rotulo) + '">' +
+      esc(rotulo) + '<span class="ord-seta">' + (ativa ? (ordem.desc ? "▼" : "▲") : "") + "</span></th>";
   }
 
   function encurta(endereco) {
@@ -795,10 +839,7 @@
       });
 
       function colunaOrdenavel(rotulo, campo, numerica) {
-        var ativa = ordem.campo === campo;
-        return '<th class="' + (numerica ? "n " : "") + 'ord' + (ativa ? " ord-ativa" : "") +
-          '" data-ordenar="' + campo + '" title="Ordenar por ' + esc(rotulo) + '">' +
-          esc(rotulo) + '<span class="ord-seta">' + (ativa ? (ordem.desc ? "▼" : "▲") : "") + "</span></th>";
+        return thOrdenavel(rotulo, campo, numerica, ordem);
       }
 
       html += '<div class="card"><div class="card-head"><h2>Custo por colaborador em ' + esc(ano) + "</h2>" +
