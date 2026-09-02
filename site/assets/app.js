@@ -82,8 +82,8 @@
     document.getElementById("view").innerHTML =
       '<form class="entrada" id="form-entrada">' +
       '<div class="entrada-marca" aria-hidden="true">' +
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
-      '<path d="M17.8 19.2 16 11l3.5-3.5a2.1 2.1 0 0 0-3-3L13 8 4.8 6.2a.5.5 0 0 0-.5.8l3.4 3.9-2 2-2.2-.6a.5.5 0 0 0-.5.8L5 15.5 6.4 18l1.4-1.5.6 2.2a.5.5 0 0 0 .8.2l2-2 3.9 3.4a.5.5 0 0 0 .8-.5Z"/></svg></div>' +
+      '<svg viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" ' +
+      'd="M12 1.2a10.8 10.8 0 1 0 0 21.6 10.8 10.8 0 0 0 0-21.6Zm-2.35 5.9 6.28 3.5a1.6 1.6 0 0 1 0 2.8l-6.28 3.5A1.6 1.6 0 0 1 7.3 15.5v-7a1.6 1.6 0 0 1 2.35-1.4Z"/></svg></div>' +
       "<h1>Gestão de Viagens</h1>" +
       '<p class="entrada-sub">Ace Gaming · apostou.bet.br</p>' +
       '<div class="field"><label for="e-nome">Seu nome</label>' +

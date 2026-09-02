@@ -5,41 +5,48 @@
 :root {
   color-scheme: light;
 
-  --ground:        #f1f4f5;
+  /* Marca Apostou 2.0: verde escuro (#2d342c) e lime (#cdfb86). No tema claro o
+     verde escuro é a cor de ação e o lime é a tinta que vai por cima dele — a
+     dupla assinada da marca. Os neutros carregam um toque de verde. */
+  --ground:        #f1f4ec;
   --surface:       #ffffff;
-  --surface-2:     #e9eff0;
-  --surface-3:     #dde6e7;
+  --surface-2:     #e9eee1;
+  --surface-3:     #dee5d3;
 
-  --text:          #12211f;
-  --text-2:        #55696a;
-  --text-3:        #83969a;
+  --text:          #1d231c;
+  --text-2:        #5a6456;
+  --text-3:        #879181;
 
-  --border:        #d7e1e3;
-  --border-strong: #b9c8cb;
+  --border:        #dce3d2;
+  --border-strong: #bdc7b2;
 
-  --accent:        #0d5c63;
-  --accent-hover:  #0a474d;
-  --accent-ink:    #ffffff;
-  --accent-soft:   #dfeced;
-  --accent-line:   #9cc4c7;
+  --accent:        #2d342c;
+  --accent-hover:  #1c211b;
+  --accent-ink:    #cdfb86;
+  --accent-soft:   #e9f8cc;
+  --accent-line:   #a9c97b;
 
-  --good:          #0ca30c;
-  --warning:       #b07600;
-  --warning-bg:    #fdf3dc;
-  --serious:       #c25a2c;
-  --critical:      #d03b3b;
-  --critical-bg:   #fbe6e6;
-  --good-bg:       #e2f3e2;
+  --good:          #2f7d32;
+  --warning:       #a16a00;
+  --warning-bg:    #fbf1d8;
+  --serious:       #c2571f;
+  --critical:      #c8372f;
+  --critical-bg:   #fbe6e3;
+  --good-bg:       #e4f2dc;
 
-  --s1: #2a78d6;
-  --s2: #eb6834;
-  --s3: #1baf7a;
-  --s4: #eda100;
-  --s5: #e87ba4;
-  --s6: #008300;
+  /* Séries dos gráficos: o azul da marca abre e o lime fecha a ordem. Validadas
+     para banda de luminosidade, croma, separação sob daltonismo e contraste
+     contra o branco do cartão. A ordem é fixa — categoria nenhuma troca de cor
+     quando um filtro muda a lista. */
+  --s1: #2f74cf;
+  --s2: #e0662b;
+  --s3: #12a07d;
+  --s4: #7b5bd6;
+  --s5: #d1568f;
+  --s6: #5c8a0f;
 
-  --grid:          #e6ecee;
-  --shadow:        0 1px 2px rgba(18, 33, 31, .06), 0 8px 24px rgba(18, 33, 31, .08);
+  --grid:          #e8ede1;
+  --shadow:        0 1px 2px rgba(29, 35, 28, .06), 0 8px 24px rgba(29, 35, 28, .09);
 
   --r-sm: 5px;
   --r:    8px;
@@ -52,58 +59,62 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --ground:        #0d1413;
-    --surface:       #151d1d;
-    --surface-2:     #1d2828;
-    --surface-3:     #263332;
-    --text:          #edf3f2;
-    --text-2:        #a3b5b3;
-    --text-3:        #7d908e;
-    --border:        #2a3837;
-    --border-strong: #3b4c4b;
-    --accent:        #4fb3ba;
-    --accent-hover:  #6ac6cc;
-    --accent-ink:    #062023;
-    --accent-soft:   #16302f;
-    --accent-line:   #2f5f61;
-    --good:          #34b334;
-    --good-bg:       #12301a;
+    /* No escuro a dupla se inverte: o lime vira a cor de ação sobre o verde
+       quase preto do fundo. As séries são degraus próprios para esse fundo. */
+    --ground:        #101410;
+    --surface:       #1a1f18;
+    --surface-2:     #232a20;
+    --surface-3:     #2d3529;
+    --text:          #eef2e8;
+    --text-2:        #a9b3a2;
+    --text-3:        #838d7d;
+    --border:        #2c3428;
+    --border-strong: #3e4838;
+    --accent:        #cdfb86;
+    --accent-hover:  #dcffa6;
+    --accent-ink:    #1a2015;
+    --accent-soft:   #29331d;
+    --accent-line:   #5c7439;
+    --good:          #5cbf5c;
+    --good-bg:       #16301a;
     --warning:       #e0a92c;
     --warning-bg:    #2f2717;
     --serious:       #ec835a;
     --critical:      #e66767;
     --critical-bg:   #331b1b;
-    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
-    --grid:          #223030;
+    --s1: #4f8ada; --s2: #e07040; --s3: #17a184; --s4: #8168e0; --s5: #dc6090; --s6: #6ea019;
+    --grid:          #242c21;
     --shadow:        0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.45);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --ground:        #0d1413;
-  --surface:       #151d1d;
-  --surface-2:     #1d2828;
-  --surface-3:     #263332;
-  --text:          #edf3f2;
-  --text-2:        #a3b5b3;
-  --text-3:        #7d908e;
-  --border:        #2a3837;
-  --border-strong: #3b4c4b;
-  --accent:        #4fb3ba;
-  --accent-hover:  #6ac6cc;
-  --accent-ink:    #062023;
-  --accent-soft:   #16302f;
-  --accent-line:   #2f5f61;
-  --good:          #34b334;
-  --good-bg:       #12301a;
+  /* No escuro a dupla se inverte: o lime vira a cor de ação sobre o verde
+     quase preto do fundo. As séries são degraus próprios para esse fundo. */
+  --ground:        #101410;
+  --surface:       #1a1f18;
+  --surface-2:     #232a20;
+  --surface-3:     #2d3529;
+  --text:          #eef2e8;
+  --text-2:        #a9b3a2;
+  --text-3:        #838d7d;
+  --border:        #2c3428;
+  --border-strong: #3e4838;
+  --accent:        #cdfb86;
+  --accent-hover:  #dcffa6;
+  --accent-ink:    #1a2015;
+  --accent-soft:   #29331d;
+  --accent-line:   #5c7439;
+  --good:          #5cbf5c;
+  --good-bg:       #16301a;
   --warning:       #e0a92c;
   --warning-bg:    #2f2717;
   --serious:       #ec835a;
   --critical:      #e66767;
   --critical-bg:   #331b1b;
-  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
-  --grid:          #223030;
+  --s1: #4f8ada; --s2: #e07040; --s3: #17a184; --s4: #8168e0; --s5: #dc6090; --s6: #6ea019;
+  --grid:          #242c21;
   --shadow:        0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.45);
 }
 
