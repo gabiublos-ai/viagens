@@ -4191,6 +4191,14 @@ window.SEED = {
     });
     base.id = Number(dados.id) || 0;
 
+    // Lançamento antigo, feito por diárias × valor, ainda sem o campo de total:
+    // materializa a hospedagem antes de gravar. Sem isso, um salvamento que não
+    // passa pelo formulário (validar conferência, cancelar mantendo custos)
+    // enviaria o campo vazio e o hotel viraria zero.
+    if (base.hospedagem === undefined || base.hospedagem === null || base.hospedagem === "") {
+      base.hospedagem = round2((Number(base.diarias) || 0) * (Number(base.valorDiaria) || 0));
+    }
+
     if (armazem.modo === "servidor") {
       return armazem.salvarViagem(base).then(aplica).then(function (estado) {
         return viagemPorId(base.id || (estado && estado.viagemSalva) || maiorId());

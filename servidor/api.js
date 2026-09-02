@@ -191,7 +191,13 @@ function texto(v, limite = 500) {
 function limpaViagem(bruta) {
   const v = {};
   for (const campo of CAMPOS_VIAGEM) {
-    if (["aereo", "hospedagem", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao"].includes(campo)) {
+    if (campo === "hospedagem") {
+      // Campo ausente não é zero: lançamento antigo guarda a hospedagem em
+      // diárias × valor e só o `null` mantém esse cálculo de pé. Gravar zero
+      // aqui apagaria o custo do hotel de quem foi salvo sem passar o campo.
+      const bruto = bruta[campo];
+      v[campo] = bruto === undefined || bruto === null || bruto === "" ? null : numero(bruto);
+    } else if (["aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao"].includes(campo)) {
       v[campo] = numero(bruta[campo]);
     } else if (campo === "cafeIncluso") {
       v[campo] = bruta[campo] === true || bruta[campo] === "true" || bruta[campo] === 1;
