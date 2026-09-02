@@ -979,7 +979,7 @@
     });
     var comData = lista.filter(function (c) { return c.data; });
     var total = 0, aeroporto = 0, maiorValor = 0, acima150 = 0, valorAcima150 = 0, nCorridas = 0;
-    var porMes = {}, porServico = {}, porCidade = {}, porArea = {};
+    var porMes = {}, porServico = {}, porCidade = {}, porArea = {}, porPessoa = {};
     var gorjetas = 0, multas = 0, ajustes = 0;
     var nGorjetas = 0, nMultas = 0, nAjustes = 0;
 
@@ -996,11 +996,15 @@
       if (c.tipo === "Late Payment Fee") { multas += c.valor; nMultas++; }
       if (c.tipo === "Adjustment") { ajustes += c.valor; nAjustes++; }
       if (c.mesRef) {
-        porMes[c.mesRef] = porMes[c.mesRef] || { n: 0, valor: 0, aeroporto: 0 };
+        porMes[c.mesRef] = porMes[c.mesRef] || { n: 0, valor: 0, aeroporto: 0, indevidas: 0, nIndevidas: 0 };
         porMes[c.mesRef].valor += c.valor;
         if (corrida) {
           porMes[c.mesRef].n++;
           if (c.aeroporto) porMes[c.mesRef].aeroporto++;
+        }
+        if (c.conferido && !c.devida) {
+          porMes[c.mesRef].indevidas += c.valor;
+          porMes[c.mesRef].nIndevidas++;
         }
       }
       if (c.servico) {
@@ -1011,6 +1015,11 @@
       if (c.cidade) {
         porCidade[c.cidade] = porCidade[c.cidade] || { n: 0, valor: 0 };
         porCidade[c.cidade].n++; porCidade[c.cidade].valor += c.valor;
+      }
+      if (c.colaborador) {
+        porPessoa[c.colaborador] = porPessoa[c.colaborador] || { n: 0, valor: 0, area: c.area };
+        porPessoa[c.colaborador].valor += c.valor;
+        if (corrida) porPessoa[c.colaborador].n++;
       }
       var area = c.colaborador ? (c.area || "Sem área") : "Encargos da fatura";
       porArea[area] = porArea[area] || { n: 0, valor: 0, aeroporto: 0, pessoas: {}, atencao: 0 };
@@ -1091,6 +1100,9 @@
         .sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); }),
       porMotivo: porMotivo,
       porArea: ordenaArea(porArea),
+      porPessoa: Object.keys(porPessoa).map(function (k) {
+        return { nome: k, area: porPessoa[k].area, n: porPessoa[k].n, valor: round2(porPessoa[k].valor) };
+      }).sort(function (a, b) { return b.valor - a.valor; }),
       desconhecidos: Object.keys(desconhecidos).map(function (k) { return { nome: k, n: desconhecidos[k] }; }),
       periodo: comData.length
         ? { de: comData.map(function (c) { return c.data; }).sort()[0],

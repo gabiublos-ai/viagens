@@ -556,6 +556,55 @@ body.trancado .tabs { display: none; }
 .chip.como-botao { cursor: pointer; font: inherit; font-size: 11px; }
 .chip.como-botao:hover { filter: brightness(.96); }
 
+/* Cartão dividido em dois blocos lado a lado, com uma divisória entre eles. */
+.dois-blocos { display: grid; grid-template-columns: 1fr 1fr; }
+.dois-blocos > .bloco + .bloco { border-left: 1px solid var(--border); }
+.bloco { min-width: 0; }
+.bloco-head {
+  display: flex; align-items: center; gap: 9px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.bloco-head h3 { font-size: 13px; font-weight: 650; }
+
+@media (max-width: 900px) {
+  .dois-blocos { grid-template-columns: 1fr; }
+  .dois-blocos > .bloco + .bloco { border-left: 0; border-top: 1px solid var(--border); }
+}
+
+/* Corridas indevidas: uma linha por corrida que abre com o detalhe. */
+.lista-indevidas { display: flex; flex-direction: column; }
+.lista-indevidas details { border-bottom: 1px solid var(--grid); }
+.lista-indevidas summary {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; cursor: pointer; list-style: none;
+}
+.lista-indevidas summary::-webkit-details-marker { display: none; }
+.lista-indevidas summary::before {
+  content: "▸"; color: var(--text-3); font-size: 11px; flex: none;
+  transition: transform .12s ease;
+}
+.lista-indevidas details[open] summary::before { transform: rotate(90deg); }
+.lista-indevidas summary:hover { background: var(--surface-2); }
+.ind-nome { flex: 1; min-width: 0; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ind-valor { color: var(--critical); font-weight: 650; flex: none; }
+.ind-detalhe {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 2px 16px 14px 30px; font-size: 12.5px;
+}
+.ind-detalhe .eyebrow { margin-right: 6px; }
+.ind-total {
+  display: flex; justify-content: space-between;
+  padding: 10px 16px; font-weight: 650;
+  border-top: 1px solid var(--border-strong); background: var(--surface-2);
+}
+.link-inline {
+  background: none; border: 0; padding: 0; font: inherit;
+  color: var(--accent); cursor: pointer; text-decoration: underline;
+}
+
+/* Valor indevido no mês */
+td.indevido { color: var(--critical); font-weight: 650; }
+
 /* Variação contra o mês anterior: cair é bom, subir é ruim. */
 .var { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
 .var-sobe { color: var(--critical); }
@@ -4628,7 +4677,7 @@ window.SEED = {
     });
     var comData = lista.filter(function (c) { return c.data; });
     var total = 0, aeroporto = 0, maiorValor = 0, acima150 = 0, valorAcima150 = 0, nCorridas = 0;
-    var porMes = {}, porServico = {}, porCidade = {}, porArea = {};
+    var porMes = {}, porServico = {}, porCidade = {}, porArea = {}, porPessoa = {};
     var gorjetas = 0, multas = 0, ajustes = 0;
     var nGorjetas = 0, nMultas = 0, nAjustes = 0;
 
@@ -4645,11 +4694,15 @@ window.SEED = {
       if (c.tipo === "Late Payment Fee") { multas += c.valor; nMultas++; }
       if (c.tipo === "Adjustment") { ajustes += c.valor; nAjustes++; }
       if (c.mesRef) {
-        porMes[c.mesRef] = porMes[c.mesRef] || { n: 0, valor: 0, aeroporto: 0 };
+        porMes[c.mesRef] = porMes[c.mesRef] || { n: 0, valor: 0, aeroporto: 0, indevidas: 0, nIndevidas: 0 };
         porMes[c.mesRef].valor += c.valor;
         if (corrida) {
           porMes[c.mesRef].n++;
           if (c.aeroporto) porMes[c.mesRef].aeroporto++;
+        }
+        if (c.conferido && !c.devida) {
+          porMes[c.mesRef].indevidas += c.valor;
+          porMes[c.mesRef].nIndevidas++;
         }
       }
       if (c.servico) {
@@ -4660,6 +4713,11 @@ window.SEED = {
       if (c.cidade) {
         porCidade[c.cidade] = porCidade[c.cidade] || { n: 0, valor: 0 };
         porCidade[c.cidade].n++; porCidade[c.cidade].valor += c.valor;
+      }
+      if (c.colaborador) {
+        porPessoa[c.colaborador] = porPessoa[c.colaborador] || { n: 0, valor: 0, area: c.area };
+        porPessoa[c.colaborador].valor += c.valor;
+        if (corrida) porPessoa[c.colaborador].n++;
       }
       var area = c.colaborador ? (c.area || "Sem área") : "Encargos da fatura";
       porArea[area] = porArea[area] || { n: 0, valor: 0, aeroporto: 0, pessoas: {}, atencao: 0 };
@@ -4740,6 +4798,9 @@ window.SEED = {
         .sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); }),
       porMotivo: porMotivo,
       porArea: ordenaArea(porArea),
+      porPessoa: Object.keys(porPessoa).map(function (k) {
+        return { nome: k, area: porPessoa[k].area, n: porPessoa[k].n, valor: round2(porPessoa[k].valor) };
+      }).sort(function (a, b) { return b.valor - a.valor; }),
       desconhecidos: Object.keys(desconhecidos).map(function (k) { return { nome: k, n: desconhecidos[k] }; }),
       periodo: comData.length
         ? { de: comData.map(function (c) { return c.data; }).sort()[0],
@@ -5459,7 +5520,8 @@ window.SEED = {
     html += '<div class="card"><div class="card-head"><h2>Evolução mensal</h2></div>' +
       '<div class="card-body flush"><div class="table-wrap"><table><thead><tr><th>Mês</th>' +
       '<th class="n">Corridas</th><th class="n">Valor</th>' +
-      '<th class="n">Ticket</th><th class="n">Aeroporto</th><th class="n">vs M-1</th>' +
+      '<th class="n">Ticket</th><th class="n">Aeroporto</th>' +
+      '<th class="n">Indevidas</th><th class="n">vs M-1</th>' +
       "</tr></thead><tbody>" +
       mesesU.map(function (m, i) {
         var d = u.porMes[m];
@@ -5468,6 +5530,9 @@ window.SEED = {
           '<td class="n">' + C.moeda(d.valor) + "</td>" +
           '<td class="n">' + (d.n ? C.moeda(d.valor / d.n) : "—") + "</td>" +
           '<td class="n">' + (d.n ? C.brl(d.aeroporto / d.n * 100, 0) + "%" : "—") + "</td>" +
+          '<td class="n' + (d.indevidas ? " indevido" : " zero") + '" title="' +
+            (d.nIndevidas ? esc(d.nIndevidas + " corrida" + (d.nIndevidas > 1 ? "s" : "") + " marcada" + (d.nIndevidas > 1 ? "s" : "") + " como não devida" + (d.nIndevidas > 1 ? "s" : "")) : "") +
+            '">' + (d.indevidas ? C.moeda(d.indevidas) : "—") + "</td>" +
           '<td class="n">' + variacao(d.valor, anterior ? anterior.valor : null) + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
@@ -5481,11 +5546,46 @@ window.SEED = {
 
     html += '</div><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(400px,1fr))">';
 
-    html += '<div class="card"><div class="card-head"><h2>Por cidade</h2></div>' +
+    html += '<div class="card"><div class="card-head"><h2>Por cidade</h2>' +
+      '<span class="grow"></span><span class="t-sub">10 maiores</span></div>' +
       '<div class="card-body">' + barrasHorizontais(u.porCidade.slice(0, 10).map(function (c) {
         return { nome: c.nome, sub: c.n + " corridas", valor: c.valor };
       })) + "</div></div>";
 
+    html += '<div class="card"><div class="card-head"><h2>Por funcionário</h2>' +
+      '<span class="grow"></span><span class="t-sub">10 maiores de ' + esc(u.porPessoa.length) + "</span></div>" +
+      '<div class="card-body">' + barrasHorizontais(u.porPessoa.slice(0, 10).map(function (c) {
+        return { nome: c.nome, sub: c.n + (c.n === 1 ? " corrida" : " corridas"), valor: c.valor };
+      })) + "</div></div>";
+
+    html += "</div>";
+
+    // ---- uso por área ----
+    html += '<div class="card"><div class="card-head"><h2>Uso do Uber por área</h2>' +
+      '<span class="grow"></span><span class="t-sub">' + esc(ano) + "</span></div>" +
+      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr><th>Área</th>' +
+      '<th class="n">Pessoas</th><th class="n">Corridas</th><th class="n">Valor</th>' +
+      '<th class="n">Ticket</th><th class="n">% do total</th>' +
+      '<th class="n">Atenção</th></tr></thead><tbody>' +
+      u.porArea.map(function (a) {
+        return "<tr><td>" + esc(a.nome) + "</td>" +
+          '<td class="n' + (a.pessoas ? "" : " zero") + '">' + (a.pessoas || "—") + "</td>" +
+          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n || "—") + "</td>" +
+          '<td class="n"><strong>' + C.moeda(a.valor) + "</strong></td>" +
+          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n ? C.moeda(a.ticket) : "—") + "</td>" +
+          '<td class="n">' + (u.total ? C.brl(a.valor / u.total * 100, 0) : "0") + "%</td>" +
+          '<td class="n' + (a.atencao ? "" : " zero") + '">' + (a.atencao || "—") + "</td></tr>";
+      }).join("") +
+      '</tbody><tfoot><tr><td><strong>TOTAL</strong></td>' +
+      '<td class="n"><strong>' + u.porArea.reduce(function (s2, a) { return s2 + a.pessoas; }, 0) + "</strong></td>" +
+      '<td class="n"><strong>' + u.n + "</strong></td>" +
+      '<td class="n"><strong>' + C.moeda(u.total) + "</strong></td>" +
+      '<td class="n"><strong>' + C.moeda(u.ticket) + "</strong></td>" +
+      '<td class="n"><strong>100%</strong></td>' +
+      '<td class="n"><strong>' + (u.alertas.length || "—") + "</strong></td>" +
+      "</tr></tfoot></table></div></div></div>";
+
+    // ---- pontos de atenção: o que está em aberto e o que já foi julgado indevido ----
     var atencoes = u.porMotivo.concat([
       { motivo: "Corridas urbanas", n: u.urbanas, valor: u.valorUrbanas,
         comentario: "Deslocamento dentro da cidade, sem trecho de aeroporto." },
@@ -5504,9 +5604,12 @@ window.SEED = {
       return ordemAt.desc ? -r : r;
     });
 
-    html += '<div class="card"><div class="card-head"><h2>Pontos de atenção</h2>' +
-      '<span class="grow"></span><span class="t-sub">Só o que está em aberto — o que foi validado como devido sai da conta</span></div>' +
-      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
+    html += '<div class="card"><div class="card-head"><h2>Pontos de atenção</h2></div>' +
+      '<div class="dois-blocos">' +
+
+      '<section class="bloco"><div class="bloco-head"><h3>Em aberto, por motivo</h3>' +
+      '<span class="grow"></span><span class="t-sub">o que foi validado como devido sai da conta</span></div>' +
+      '<div class="table-wrap"><table><thead><tr>' +
       thOrdenavel("Motivo", "motivo", false, ordemAt, "atencaoOrdem") +
       thOrdenavel("Ocorrências", "n", true, ordemAt, "atencaoOrdem") +
       thOrdenavel("Custo total", "valor", true, ordemAt, "atencaoOrdem") +
@@ -5516,73 +5619,34 @@ window.SEED = {
           '</td><td class="n">' + l.n + '</td><td class="n">' + moedaFina(l.valor) + "</td>" +
           '<td class="t-sub">' + esc(l.comentario || "") + "</td></tr>";
       }).join("") : '<tr><td colspan="4" class="t-sub" style="padding:16px">Nada em aberto — tudo que a auditoria apontou já foi validado.</td></tr>') +
-      "</tbody></table></div></div></div>";
+      "</tbody></table></div></section>" +
 
-    html += "</div>";
-
-    // ---- 2. uso por área ----
-    html += '<div class="card"><div class="card-head"><h2>Uso do Uber por área</h2>' +
-      '<span class="grow"></span><span class="t-sub">' + esc(ano) + "</span></div>" +
-      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr><th>Área</th>' +
-      '<th class="n">Pessoas</th><th class="n">Corridas</th><th class="n">Valor</th>' +
-      '<th class="n">Ticket</th><th class="n">Aeroporto</th><th class="n">% do total</th>' +
-      '<th class="n">Atenção</th></tr></thead><tbody>' +
-      u.porArea.map(function (a) {
-        return "<tr><td>" + esc(a.nome) + '</td>' +
-          '<td class="n' + (a.pessoas ? "" : " zero") + '">' + (a.pessoas || "—") + "</td>" +
-          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n || "—") + "</td>" +
-          '<td class="n"><strong>' + C.moeda(a.valor) + "</strong></td>" +
-          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n ? C.moeda(a.ticket) : "—") + "</td>" +
-          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n ? C.brl(a.aeroporto / a.n * 100, 0) + "%" : "—") + "</td>" +
-          '<td class="n">' + (u.total ? C.brl(a.valor / u.total * 100, 0) : "0") + "%</td>" +
-          '<td class="n' + (a.atencao ? "" : " zero") + '">' + (a.atencao || "—") + "</td></tr>";
-      }).join("") +
-      '</tbody><tfoot><tr><td><strong>TOTAL</strong></td>' +
-      '<td class="n"><strong>' + u.porArea.reduce(function (s2, a) { return s2 + a.pessoas; }, 0) + "</strong></td>" +
-      '<td class="n"><strong>' + u.n + "</strong></td>" +
-      '<td class="n"><strong>' + C.moeda(u.total) + "</strong></td>" +
-      '<td class="n"><strong>' + C.moeda(u.ticket) + "</strong></td>" +
-      '<td class="n"><strong>' + C.brl(u.pctAeroporto * 100, 0) + "%</strong></td>" +
-      '<td class="n"><strong>100%</strong></td>' +
-      '<td class="n"><strong>' + (u.alertas.length || "—") + "</strong></td>" +
-      "</tr></tfoot></table></div></div></div>";
-
-    // ---- corridas marcadas como não devidas ----
-    html += '<div class="card"><div class="card-head"><h2>Corridas indevidas</h2>' +
+      '<section class="bloco"><div class="bloco-head"><h3>Corridas indevidas</h3>' +
       '<span class="chip' + (u.indevidas.length ? " crit" : "") + '">' + u.indevidas.length + "</span>" +
       '<span class="grow"></span>' +
       (u.indevidas.length ? '<span class="t-sub">' + C.moeda(u.valorNaoDevidas) + " a recuperar</span>" : "") +
       "</div>" +
       (u.indevidas.length
-        ? '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-          "<th>Colaborador</th><th>Data</th><th>Trajeto</th>" +
-          '<th class="n">Valor</th><th>Motivo</th><th>Justificativa</th><th>Validado por</th>' +
-          '<th class="col-acoes"></th></tr></thead><tbody>' +
-          u.indevidas.map(function (c) {
-            return "<tr>" +
-              "<td>" + abreCorrida(c, c.colaborador ? pessoa(c.colaborador, c.area)
-                : '<span class="t-sub">' + esc(c.nomeRelatorio || "—") + "</span>") + "</td>" +
-              '<td class="nowrap"><span class="num">' + (c.data ? C.fmtData(c.data) : "—") + "</span>" +
-              (c.hora ? '<br><span class="t-sub">' + esc(c.hora) + "</span>" : "") + "</td>" +
-              '<td style="max-width:260px">' + abreCorrida(c, '<span class="t-sub">' +
-                esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>") + "</td>" +
-              '<td class="n"><strong>' + C.moeda(c.valor) + "</strong></td>" +
-              "<td>" + motivos(c) + "</td>" +
-              '<td class="t-sub" style="max-width:240px">' + esc(c.conferencia.justificativa || "—") +
-              (c.conferencia.comentario ? "<br>" + esc(c.conferencia.comentario) : "") + "</td>" +
-              '<td class="t-sub nowrap">' + esc(c.conferencia.por || "—") +
-              '<br><span class="t-sub">' + esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) + "</span></td>" +
-              '<td class="col-acoes"><div class="actions-cell">' +
-              botaoIcone("ver-corrida", c.chave, "Ver a corrida completa",
-                '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>') +
-              "</div></td></tr>";
+        ? '<div class="lista-indevidas">' + u.indevidas.map(function (c) {
+            return "<details><summary>" +
+              '<span class="ind-nome">' + esc(c.colaborador || c.nomeRelatorio || "—") +
+              '<span class="t-sub"> · ' + esc(c.area || "") + "</span></span>" +
+              '<span class="num ind-valor">' + C.moeda(c.valor) + "</span></summary>" +
+              '<div class="ind-detalhe">' +
+              '<div><span class="eyebrow">Data</span> <span class="num">' +
+              (c.data ? esc(C.fmtData(c.data)) : "—") + (c.hora ? " · " + esc(c.hora) : "") + "</span></div>" +
+              '<div><span class="eyebrow">Trajeto</span> ' + esc(c.origem || "—") + " → " + esc(c.destino || "—") + "</div>" +
+              '<div><span class="eyebrow">Justificativa</span> ' + esc(c.conferencia.justificativa || "—") + "</div>" +
+              (c.conferencia.comentario ? '<div><span class="eyebrow">Comentário</span> ' + esc(c.conferencia.comentario) + "</div>" : "") +
+              '<div class="t-sub">Validado por ' + esc(c.conferencia.por || "—") + " em " +
+              esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) + " · " +
+              '<button class="link-inline" data-acao="ver-corrida" data-id="' + esc(c.chave) + '">ver a corrida completa</button></div>' +
+              "</div></details>";
           }).join("") +
-          '</tbody><tfoot><tr><td colspan="3"><strong>TOTAL</strong></td>' +
-          '<td class="n"><strong>' + C.moeda(u.valorNaoDevidas) + "</strong></td>" +
-          '<td colspan="4"></td></tr></tfoot></table></div></div>'
-        : '<div class="card-body">' + vazio("Nenhuma corrida marcada como indevida",
+          '<div class="ind-total"><span>TOTAL</span><span class="num">' + C.moeda(u.valorNaoDevidas) + "</span></div></div>"
+        : '<div style="padding:16px">' + vazio("Nenhuma corrida marcada como indevida",
             "Ao validar um ponto de atenção, marque a corrida como não devida para ela aparecer aqui.") + "</div>") +
-      "</div>";
+      "</section></div></div>";
 
     // Tabela de corridas
     html += '<div class="card"><div class="card-head"><h2>Corridas</h2>' +
