@@ -970,6 +970,9 @@
    * Contagem de "corridas" considera só transações do tipo Fare — gorjeta, multa e
    * estorno entram no valor, mas não são uma corrida a mais (mesma convenção da planilha).
    */
+  /** Uma corrida validada como devida está resolvida: sai dos pontos de atenção. */
+  function emAberto(c) { return !(c.conferido && c.devida); }
+
   function resumoUber(ano) {
     var lista = corridas().filter(function (c) {
       return c.considerar && (!ano || !c.mesRef || anoDe(c.mesRef) === String(ano));
@@ -1040,14 +1043,14 @@
 
     // Cada motivo apontado pela auditoria, com quantas vezes apareceu e quanto
     // custou. Uma corrida com dois motivos entra nos dois — a soma das linhas
-    // não é o total da base, e a tela diz isso.
+    // não é o total da base, e a tela diz isso. O que já foi validado como
+    // despesa devida sai da conta: o motivo foi analisado e resolvido.
     var motivos = {};
-    lista.forEach(function (c) {
+    lista.filter(emAberto).forEach(function (c) {
       c.avisos.forEach(function (a) {
-        motivos[a.curto] = motivos[a.curto] || { motivo: a.curto, n: 0, valor: 0, validadas: 0, comentario: COMENTARIO_MOTIVO[a.curto] || "" };
+        motivos[a.curto] = motivos[a.curto] || { motivo: a.curto, n: 0, valor: 0, comentario: COMENTARIO_MOTIVO[a.curto] || "" };
         motivos[a.curto].n++;
         motivos[a.curto].valor += c.valor;
-        if (c.conferido) motivos[a.curto].validadas++;
       });
     });
     var porMotivo = Object.keys(motivos).map(function (k) {
@@ -1073,9 +1076,9 @@
       nGorjetas: nGorjetas,
       nMultas: nMultas,
       nAjustes: nAjustes,
-      urbanas: lista.filter(function (c) { return c.tipo === "Fare" && !c.aeroporto; }).length,
+      urbanas: lista.filter(function (c) { return c.tipo === "Fare" && !c.aeroporto && emAberto(c); }).length,
       valorUrbanas: round2(lista.reduce(function (t, c) {
-        return c.tipo === "Fare" && !c.aeroporto ? t + c.valor : t;
+        return c.tipo === "Fare" && !c.aeroporto && emAberto(c) ? t + c.valor : t;
       }, 0)),
       porMes: porMes,
       porServico: ordena(porServico),
@@ -1084,6 +1087,8 @@
       validadas: validadas.length,
       naoDevidas: validadas.filter(function (c) { return !c.devida; }).length,
       valorNaoDevidas: round2(validadas.reduce(function (t, c) { return c.devida ? t : t + c.valor; }, 0)),
+      indevidas: lista.filter(function (c) { return c.conferido && !c.devida; })
+        .sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); }),
       porMotivo: porMotivo,
       porArea: ordenaArea(porArea),
       desconhecidos: Object.keys(desconhecidos).map(function (k) { return { nome: k, n: desconhecidos[k] }; }),

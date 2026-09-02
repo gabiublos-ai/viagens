@@ -577,17 +577,17 @@
 
     html += '<div class="card"><div class="card-head"><h2>Evolução mensal</h2></div>' +
       '<div class="card-body flush"><div class="table-wrap"><table><thead><tr><th>Mês</th>' +
-      '<th class="n">Corridas</th><th class="n">Valor</th><th class="n">vs. mês anterior</th>' +
-      '<th class="n">Ticket</th><th class="n">Aeroporto</th>' +
+      '<th class="n">Corridas</th><th class="n">Valor</th>' +
+      '<th class="n">Ticket</th><th class="n">Aeroporto</th><th class="n">vs M-1</th>' +
       "</tr></thead><tbody>" +
       mesesU.map(function (m, i) {
         var d = u.porMes[m];
         var anterior = i ? u.porMes[mesesU[i - 1]] : null;
         return "<tr><td>" + esc(C.mesRotulo(m)) + '</td><td class="n">' + d.n + "</td>" +
           '<td class="n">' + C.moeda(d.valor) + "</td>" +
-          '<td class="n">' + variacao(d.valor, anterior ? anterior.valor : null) + "</td>" +
           '<td class="n">' + (d.n ? C.moeda(d.valor / d.n) : "—") + "</td>" +
-          '<td class="n">' + (d.n ? C.brl(d.aeroporto / d.n * 100, 0) + "%" : "—") + "</td></tr>";
+          '<td class="n">' + (d.n ? C.brl(d.aeroporto / d.n * 100, 0) + "%" : "—") + "</td>" +
+          '<td class="n">' + variacao(d.valor, anterior ? anterior.valor : null) + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
     html += '<div class="card"><div class="card-head"><h2>Por categoria de serviço</h2></div>' +
@@ -624,7 +624,7 @@
     });
 
     html += '<div class="card"><div class="card-head"><h2>Pontos de atenção</h2>' +
-      '<span class="grow"></span><span class="t-sub">Uma corrida pode entrar em mais de um motivo</span></div>' +
+      '<span class="grow"></span><span class="t-sub">Só o que está em aberto — o que foi validado como devido sai da conta</span></div>' +
       '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
       thOrdenavel("Motivo", "motivo", false, ordemAt, "atencaoOrdem") +
       thOrdenavel("Ocorrências", "n", true, ordemAt, "atencaoOrdem") +
@@ -632,10 +632,9 @@
       "<th>Comentário</th></tr></thead><tbody>" +
       (atencoes.length ? atencoes.map(function (l) {
         return "<tr><td>" + esc(l.motivo) +
-          (l.validadas ? ' <span class="chip ok">' + l.validadas + " validada" + (l.validadas > 1 ? "s" : "") + "</span>" : "") +
           '</td><td class="n">' + l.n + '</td><td class="n">' + moedaFina(l.valor) + "</td>" +
           '<td class="t-sub">' + esc(l.comentario || "") + "</td></tr>";
-      }).join("") : '<tr><td colspan="4" class="t-sub" style="padding:16px">Nada apontado no período.</td></tr>') +
+      }).join("") : '<tr><td colspan="4" class="t-sub" style="padding:16px">Nada em aberto — tudo que a auditoria apontou já foi validado.</td></tr>') +
       "</tbody></table></div></div></div>";
 
     html += "</div>";
@@ -666,6 +665,43 @@
       '<td class="n"><strong>100%</strong></td>' +
       '<td class="n"><strong>' + (u.alertas.length || "—") + "</strong></td>" +
       "</tr></tfoot></table></div></div></div>";
+
+    // ---- corridas marcadas como não devidas ----
+    html += '<div class="card"><div class="card-head"><h2>Corridas indevidas</h2>' +
+      '<span class="chip' + (u.indevidas.length ? " crit" : "") + '">' + u.indevidas.length + "</span>" +
+      '<span class="grow"></span>' +
+      (u.indevidas.length ? '<span class="t-sub">' + C.moeda(u.valorNaoDevidas) + " a recuperar</span>" : "") +
+      "</div>" +
+      (u.indevidas.length
+        ? '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
+          "<th>Colaborador</th><th>Data</th><th>Trajeto</th>" +
+          '<th class="n">Valor</th><th>Motivo</th><th>Justificativa</th><th>Validado por</th>' +
+          '<th class="col-acoes"></th></tr></thead><tbody>' +
+          u.indevidas.map(function (c) {
+            return "<tr>" +
+              "<td>" + abreCorrida(c, c.colaborador ? pessoa(c.colaborador, c.area)
+                : '<span class="t-sub">' + esc(c.nomeRelatorio || "—") + "</span>") + "</td>" +
+              '<td class="nowrap"><span class="num">' + (c.data ? C.fmtData(c.data) : "—") + "</span>" +
+              (c.hora ? '<br><span class="t-sub">' + esc(c.hora) + "</span>" : "") + "</td>" +
+              '<td style="max-width:260px">' + abreCorrida(c, '<span class="t-sub">' +
+                esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>") + "</td>" +
+              '<td class="n"><strong>' + C.moeda(c.valor) + "</strong></td>" +
+              "<td>" + motivos(c) + "</td>" +
+              '<td class="t-sub" style="max-width:240px">' + esc(c.conferencia.justificativa || "—") +
+              (c.conferencia.comentario ? "<br>" + esc(c.conferencia.comentario) : "") + "</td>" +
+              '<td class="t-sub nowrap">' + esc(c.conferencia.por || "—") +
+              '<br><span class="t-sub">' + esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) + "</span></td>" +
+              '<td class="col-acoes"><div class="actions-cell">' +
+              botaoIcone("ver-corrida", c.chave, "Ver a corrida completa",
+                '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>') +
+              "</div></td></tr>";
+          }).join("") +
+          '</tbody><tfoot><tr><td colspan="3"><strong>TOTAL</strong></td>' +
+          '<td class="n"><strong>' + C.moeda(u.valorNaoDevidas) + "</strong></td>" +
+          '<td colspan="4"></td></tr></tfoot></table></div></div>'
+        : '<div class="card-body">' + vazio("Nenhuma corrida marcada como indevida",
+            "Ao validar um ponto de atenção, marque a corrida como não devida para ela aparecer aqui.") + "</div>") +
+      "</div>";
 
     // Tabela de corridas
     html += '<div class="card"><div class="card-head"><h2>Corridas</h2>' +

@@ -4629,6 +4629,9 @@ window.SEED = {
    * Contagem de "corridas" considera só transações do tipo Fare — gorjeta, multa e
    * estorno entram no valor, mas não são uma corrida a mais (mesma convenção da planilha).
    */
+  /** Uma corrida validada como devida está resolvida: sai dos pontos de atenção. */
+  function emAberto(c) { return !(c.conferido && c.devida); }
+
   function resumoUber(ano) {
     var lista = corridas().filter(function (c) {
       return c.considerar && (!ano || !c.mesRef || anoDe(c.mesRef) === String(ano));
@@ -4699,14 +4702,14 @@ window.SEED = {
 
     // Cada motivo apontado pela auditoria, com quantas vezes apareceu e quanto
     // custou. Uma corrida com dois motivos entra nos dois — a soma das linhas
-    // não é o total da base, e a tela diz isso.
+    // não é o total da base, e a tela diz isso. O que já foi validado como
+    // despesa devida sai da conta: o motivo foi analisado e resolvido.
     var motivos = {};
-    lista.forEach(function (c) {
+    lista.filter(emAberto).forEach(function (c) {
       c.avisos.forEach(function (a) {
-        motivos[a.curto] = motivos[a.curto] || { motivo: a.curto, n: 0, valor: 0, validadas: 0, comentario: COMENTARIO_MOTIVO[a.curto] || "" };
+        motivos[a.curto] = motivos[a.curto] || { motivo: a.curto, n: 0, valor: 0, comentario: COMENTARIO_MOTIVO[a.curto] || "" };
         motivos[a.curto].n++;
         motivos[a.curto].valor += c.valor;
-        if (c.conferido) motivos[a.curto].validadas++;
       });
     });
     var porMotivo = Object.keys(motivos).map(function (k) {
@@ -4732,9 +4735,9 @@ window.SEED = {
       nGorjetas: nGorjetas,
       nMultas: nMultas,
       nAjustes: nAjustes,
-      urbanas: lista.filter(function (c) { return c.tipo === "Fare" && !c.aeroporto; }).length,
+      urbanas: lista.filter(function (c) { return c.tipo === "Fare" && !c.aeroporto && emAberto(c); }).length,
       valorUrbanas: round2(lista.reduce(function (t, c) {
-        return c.tipo === "Fare" && !c.aeroporto ? t + c.valor : t;
+        return c.tipo === "Fare" && !c.aeroporto && emAberto(c) ? t + c.valor : t;
       }, 0)),
       porMes: porMes,
       porServico: ordena(porServico),
@@ -4743,6 +4746,8 @@ window.SEED = {
       validadas: validadas.length,
       naoDevidas: validadas.filter(function (c) { return !c.devida; }).length,
       valorNaoDevidas: round2(validadas.reduce(function (t, c) { return c.devida ? t : t + c.valor; }, 0)),
+      indevidas: lista.filter(function (c) { return c.conferido && !c.devida; })
+        .sort(function (a, b) { return (b.data || "").localeCompare(a.data || ""); }),
       porMotivo: porMotivo,
       porArea: ordenaArea(porArea),
       desconhecidos: Object.keys(desconhecidos).map(function (k) { return { nome: k, n: desconhecidos[k] }; }),
@@ -5463,17 +5468,17 @@ window.SEED = {
 
     html += '<div class="card"><div class="card-head"><h2>Evolução mensal</h2></div>' +
       '<div class="card-body flush"><div class="table-wrap"><table><thead><tr><th>Mês</th>' +
-      '<th class="n">Corridas</th><th class="n">Valor</th><th class="n">vs. mês anterior</th>' +
-      '<th class="n">Ticket</th><th class="n">Aeroporto</th>' +
+      '<th class="n">Corridas</th><th class="n">Valor</th>' +
+      '<th class="n">Ticket</th><th class="n">Aeroporto</th><th class="n">vs M-1</th>' +
       "</tr></thead><tbody>" +
       mesesU.map(function (m, i) {
         var d = u.porMes[m];
         var anterior = i ? u.porMes[mesesU[i - 1]] : null;
         return "<tr><td>" + esc(C.mesRotulo(m)) + '</td><td class="n">' + d.n + "</td>" +
           '<td class="n">' + C.moeda(d.valor) + "</td>" +
-          '<td class="n">' + variacao(d.valor, anterior ? anterior.valor : null) + "</td>" +
           '<td class="n">' + (d.n ? C.moeda(d.valor / d.n) : "—") + "</td>" +
-          '<td class="n">' + (d.n ? C.brl(d.aeroporto / d.n * 100, 0) + "%" : "—") + "</td></tr>";
+          '<td class="n">' + (d.n ? C.brl(d.aeroporto / d.n * 100, 0) + "%" : "—") + "</td>" +
+          '<td class="n">' + variacao(d.valor, anterior ? anterior.valor : null) + "</td></tr>";
       }).join("") + "</tbody></table></div></div></div>";
 
     html += '<div class="card"><div class="card-head"><h2>Por categoria de serviço</h2></div>' +
@@ -5510,7 +5515,7 @@ window.SEED = {
     });
 
     html += '<div class="card"><div class="card-head"><h2>Pontos de atenção</h2>' +
-      '<span class="grow"></span><span class="t-sub">Uma corrida pode entrar em mais de um motivo</span></div>' +
+      '<span class="grow"></span><span class="t-sub">Só o que está em aberto — o que foi validado como devido sai da conta</span></div>' +
       '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
       thOrdenavel("Motivo", "motivo", false, ordemAt, "atencaoOrdem") +
       thOrdenavel("Ocorrências", "n", true, ordemAt, "atencaoOrdem") +
@@ -5518,10 +5523,9 @@ window.SEED = {
       "<th>Comentário</th></tr></thead><tbody>" +
       (atencoes.length ? atencoes.map(function (l) {
         return "<tr><td>" + esc(l.motivo) +
-          (l.validadas ? ' <span class="chip ok">' + l.validadas + " validada" + (l.validadas > 1 ? "s" : "") + "</span>" : "") +
           '</td><td class="n">' + l.n + '</td><td class="n">' + moedaFina(l.valor) + "</td>" +
           '<td class="t-sub">' + esc(l.comentario || "") + "</td></tr>";
-      }).join("") : '<tr><td colspan="4" class="t-sub" style="padding:16px">Nada apontado no período.</td></tr>') +
+      }).join("") : '<tr><td colspan="4" class="t-sub" style="padding:16px">Nada em aberto — tudo que a auditoria apontou já foi validado.</td></tr>') +
       "</tbody></table></div></div></div>";
 
     html += "</div>";
@@ -5552,6 +5556,43 @@ window.SEED = {
       '<td class="n"><strong>100%</strong></td>' +
       '<td class="n"><strong>' + (u.alertas.length || "—") + "</strong></td>" +
       "</tr></tfoot></table></div></div></div>";
+
+    // ---- corridas marcadas como não devidas ----
+    html += '<div class="card"><div class="card-head"><h2>Corridas indevidas</h2>' +
+      '<span class="chip' + (u.indevidas.length ? " crit" : "") + '">' + u.indevidas.length + "</span>" +
+      '<span class="grow"></span>' +
+      (u.indevidas.length ? '<span class="t-sub">' + C.moeda(u.valorNaoDevidas) + " a recuperar</span>" : "") +
+      "</div>" +
+      (u.indevidas.length
+        ? '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
+          "<th>Colaborador</th><th>Data</th><th>Trajeto</th>" +
+          '<th class="n">Valor</th><th>Motivo</th><th>Justificativa</th><th>Validado por</th>' +
+          '<th class="col-acoes"></th></tr></thead><tbody>' +
+          u.indevidas.map(function (c) {
+            return "<tr>" +
+              "<td>" + abreCorrida(c, c.colaborador ? pessoa(c.colaborador, c.area)
+                : '<span class="t-sub">' + esc(c.nomeRelatorio || "—") + "</span>") + "</td>" +
+              '<td class="nowrap"><span class="num">' + (c.data ? C.fmtData(c.data) : "—") + "</span>" +
+              (c.hora ? '<br><span class="t-sub">' + esc(c.hora) + "</span>" : "") + "</td>" +
+              '<td style="max-width:260px">' + abreCorrida(c, '<span class="t-sub">' +
+                esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>") + "</td>" +
+              '<td class="n"><strong>' + C.moeda(c.valor) + "</strong></td>" +
+              "<td>" + motivos(c) + "</td>" +
+              '<td class="t-sub" style="max-width:240px">' + esc(c.conferencia.justificativa || "—") +
+              (c.conferencia.comentario ? "<br>" + esc(c.conferencia.comentario) : "") + "</td>" +
+              '<td class="t-sub nowrap">' + esc(c.conferencia.por || "—") +
+              '<br><span class="t-sub">' + esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) + "</span></td>" +
+              '<td class="col-acoes"><div class="actions-cell">' +
+              botaoIcone("ver-corrida", c.chave, "Ver a corrida completa",
+                '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>') +
+              "</div></td></tr>";
+          }).join("") +
+          '</tbody><tfoot><tr><td colspan="3"><strong>TOTAL</strong></td>' +
+          '<td class="n"><strong>' + C.moeda(u.valorNaoDevidas) + "</strong></td>" +
+          '<td colspan="4"></td></tr></tfoot></table></div></div>'
+        : '<div class="card-body">' + vazio("Nenhuma corrida marcada como indevida",
+            "Ao validar um ponto de atenção, marque a corrida como não devida para ela aparecer aqui.") + "</div>") +
+      "</div>";
 
     // Tabela de corridas
     html += '<div class="card"><div class="card-head"><h2>Corridas</h2>' +
