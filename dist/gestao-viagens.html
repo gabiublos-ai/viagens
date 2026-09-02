@@ -591,6 +591,21 @@ tbody tr:hover td.fix1, tbody tr:hover td.fix2, tbody tr:hover td.fix3 { backgro
 tr.row-alt td.fix1, tr.row-alt td.fix2, tr.row-alt td.fix3 {
   background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
 }
+/* Na tabela de corridas só o colaborador fica congelado à esquerda. */
+th.fix-uber, td.fix-uber {
+  position: sticky; left: 0; z-index: 2;
+  min-width: 200px; max-width: 200px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+thead th.fix-uber { background: var(--surface-2); z-index: 3; }
+tbody tr:hover td.fix-uber { background: var(--surface-2); }
+td.fix-uber .person > span:not(.avatar) { max-width: 146px; overflow: hidden; }
+
+@media (max-width: 720px) {
+  th.fix-uber, td.fix-uber { position: static; min-width: 0; max-width: none; }
+}
+
 /* A alteração aparece encostada na reserva original: recuo no ID e sem
    divisória entre as duas linhas, para lerem como um bloco só. */
 tr.row-presa td.fix1 { padding-left: 14px; }
@@ -4283,6 +4298,16 @@ window.SEED = {
     return [p[0], p[1], p[2], p[3], p[9], p[10]].join("|").slice(0, 120);
   }
 
+  /** O que fazer diante de cada motivo — aparece em "Pontos de atenção". */
+  var COMENTARIO_MOTIVO = {
+    "Nome fora do De-Para": "Cadastrar o vínculo em Ajustes para o custo cair na pessoa certa.",
+    "Sem viagem registrada": "Lançar a viagem ou confirmar que é deslocamento urbano.",
+    "Fora do período": "Conferir as datas da viagem ou ampliar a tolerância da auditoria.",
+    "Sem data": "Encargo da fatura sem data no relatório — conferir na fatura do Uber.",
+    "Origem igual ao destino": "Normalmente corrida cancelada após o embarque — cabe contestação.",
+    "Acima de R$ 150": "Revisar necessidade, alternativa de transfer e possibilidade de carona."
+  };
+
   /**
    * Tudo que pede atenção numa corrida, numa lista só. A tela mostra uma
    * legenda única ("Atenção") e detalha os motivos aqui embaixo.
@@ -4580,8 +4605,9 @@ window.SEED = {
     });
     var comData = lista.filter(function (c) { return c.data; });
     var total = 0, aeroporto = 0, maiorValor = 0, acima150 = 0, valorAcima150 = 0, nCorridas = 0;
-    var porMes = {}, porServico = {}, porCidade = {};
+    var porMes = {}, porServico = {}, porCidade = {}, porArea = {};
     var gorjetas = 0, multas = 0, ajustes = 0;
+    var nGorjetas = 0, nMultas = 0, nAjustes = 0;
 
     lista.forEach(function (c) {
       var corrida = c.tipo === "Fare";
@@ -4592,9 +4618,9 @@ window.SEED = {
         if (c.valor > maiorValor) maiorValor = c.valor;
         if (c.valor > 150) { acima150++; valorAcima150 += c.valor; }
       }
-      if (c.tipo === "Tip") gorjetas += c.valor;
-      if (c.tipo === "Late Payment Fee") multas += c.valor;
-      if (c.tipo === "Adjustment") ajustes += c.valor;
+      if (c.tipo === "Tip") { gorjetas += c.valor; nGorjetas++; }
+      if (c.tipo === "Late Payment Fee") { multas += c.valor; nMultas++; }
+      if (c.tipo === "Adjustment") { ajustes += c.valor; nAjustes++; }
       if (c.mesRef) {
         porMes[c.mesRef] = porMes[c.mesRef] || { n: 0, valor: 0, aeroporto: 0 };
         porMes[c.mesRef].valor += c.valor;
@@ -4612,7 +4638,25 @@ window.SEED = {
         porCidade[c.cidade] = porCidade[c.cidade] || { n: 0, valor: 0 };
         porCidade[c.cidade].n++; porCidade[c.cidade].valor += c.valor;
       }
+      var area = c.colaborador ? (c.area || "Sem área") : "Encargos da fatura";
+      porArea[area] = porArea[area] || { n: 0, valor: 0, aeroporto: 0, pessoas: {}, atencao: 0 };
+      porArea[area].valor += c.valor;
+      if (corrida) {
+        porArea[area].n++;
+        if (c.aeroporto) porArea[area].aeroporto++;
+        if (c.colaborador) porArea[area].pessoas[c.colaborador] = 1;
+        if (c.precisaConferir) porArea[area].atencao++;
+      }
     });
+
+    function ordenaArea(obj) {
+      return Object.keys(obj).map(function (k) {
+        var a = obj[k];
+        return { nome: k, n: a.n, valor: round2(a.valor), aeroporto: a.aeroporto,
+                 pessoas: Object.keys(a.pessoas).length, atencao: a.atencao,
+                 ticket: a.n ? round2(a.valor / a.n) : 0 };
+      }).sort(function (a, b) { return b.valor - a.valor; });
+    }
 
     function ordena(obj) {
       return Object.keys(obj).map(function (k) {
@@ -4622,6 +4666,23 @@ window.SEED = {
 
     var alertas = corridas().filter(function (c) { return c.precisaConferir; });
     var validadas = corridas().filter(function (c) { return c.conferido; });
+
+    // Cada motivo apontado pela auditoria, com quantas vezes apareceu e quanto
+    // custou. Uma corrida com dois motivos entra nos dois — a soma das linhas
+    // não é o total da base, e a tela diz isso.
+    var motivos = {};
+    lista.forEach(function (c) {
+      c.avisos.forEach(function (a) {
+        motivos[a.curto] = motivos[a.curto] || { motivo: a.curto, n: 0, valor: 0, validadas: 0, comentario: COMENTARIO_MOTIVO[a.curto] || "" };
+        motivos[a.curto].n++;
+        motivos[a.curto].valor += c.valor;
+        if (c.conferido) motivos[a.curto].validadas++;
+      });
+    });
+    var porMotivo = Object.keys(motivos).map(function (k) {
+      motivos[k].valor = round2(motivos[k].valor);
+      return motivos[k];
+    }).sort(function (a, b) { return b.valor - a.valor || b.n - a.n; });
     var desconhecidos = {};
     corridas().forEach(function (c) { if (c.desconhecido) desconhecidos[c.nomeRelatorio] = (desconhecidos[c.nomeRelatorio] || 0) + 1; });
 
@@ -4638,12 +4699,20 @@ window.SEED = {
       gorjetas: round2(gorjetas),
       multas: round2(multas),
       ajustes: round2(ajustes),
+      nGorjetas: nGorjetas,
+      nMultas: nMultas,
+      nAjustes: nAjustes,
       urbanas: lista.filter(function (c) { return c.tipo === "Fare" && !c.aeroporto; }).length,
+      valorUrbanas: round2(lista.reduce(function (t, c) {
+        return c.tipo === "Fare" && !c.aeroporto ? t + c.valor : t;
+      }, 0)),
       porMes: porMes,
       porServico: ordena(porServico),
       porCidade: ordena(porCidade),
       alertas: alertas,
       validadas: validadas.length,
+      porMotivo: porMotivo,
+      porArea: ordenaArea(porArea),
       desconhecidos: Object.keys(desconhecidos).map(function (k) { return { nome: k, n: desconhecidos[k] }; }),
       periodo: comData.length
         ? { de: comData.map(function (c) { return c.data; }).sort()[0],
@@ -5349,19 +5418,6 @@ window.SEED = {
         }).join(" ") + "</div>";
     }
 
-    html += '<div class="card"><div class="card-head"><h2>Importar relatório do Uber Business</h2>' +
-      '<span class="grow"></span><span class="t-sub">' + todas.length + " linhas na base</span></div>" +
-      '<div class="card-body grid" style="gap:10px">' +
-      '<div class="note">Exporte o CSV de transações no Uber Business, abra no <strong>Bloco de Notas</strong> ' +
-      "(não no Excel — ele converte datas e valores errado), copie só as linhas de transação e cole abaixo. " +
-      "Linhas repetidas são ignoradas automaticamente.</div>" +
-      '<textarea name="colar-uber" rows="4" placeholder="05/24/2026;7:10AM;Nome;Sobrenome;--;Travel | UberX;Sao Paulo;origem;destino;Fare;66,31;66,31"></textarea>' +
-      '<div class="row"><button class="btn btn-primary" data-acao="importar-uber">Importar linhas coladas</button>' +
-      '<button class="btn" data-acao="exportar-uber">Exportar CSV</button>' +
-      '<span class="grow"></span>' +
-      '<button class="btn btn-ghost btn-sm btn-danger" data-acao="limpar-uber">Limpar base do Uber</button></div>' +
-      "</div></div>";
-
     // Evolução mensal + serviços
     var mesesU = Object.keys(u.porMes).sort();
     html += '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(400px,1fr))">';
@@ -5392,16 +5448,58 @@ window.SEED = {
         return { nome: c.nome, sub: c.n + " corridas", valor: c.valor };
       })) + "</div></div>";
 
-    html += '<div class="card"><div class="card-head"><h2>Pontos de atenção</h2></div>' +
-      '<div class="card-body flush"><div class="table-wrap"><table><tbody>' +
-      linhaAtencao("Corridas acima de R$ 150", u.acima150 + " · " + C.brlSigla(u.valorAcima150), "Revisar necessidade e possibilidade de compartilhamento") +
-      linhaAtencao("Corridas urbanas (sem trecho de aeroporto)", String(u.urbanas), "Deslocamentos dentro da cidade") +
-      linhaAtencao("Multa por atraso de pagamento", C.brlSigla(u.multas), "Custo 100% evitável — ajustar o vencimento da fatura") +
-      linhaAtencao("Gorjetas", C.brlSigla(u.gorjetas), "Definir se a política corporativa cobre gorjeta") +
-      linhaAtencao("Ajustes e estornos", C.brlSigla(u.ajustes), "Créditos devolvidos pela Uber") +
+    var atencoes = u.porMotivo.concat([
+      { motivo: "Corridas urbanas", n: u.urbanas, valor: u.valorUrbanas,
+        comentario: "Deslocamento dentro da cidade, sem trecho de aeroporto." },
+      { motivo: "Multa por atraso de pagamento", n: u.nMultas, valor: u.multas,
+        comentario: "Custo 100% evitável — ajustar o vencimento da fatura." },
+      { motivo: "Gorjetas", n: u.nGorjetas, valor: u.gorjetas,
+        comentario: "Definir se a política corporativa cobre gorjeta." },
+      { motivo: "Ajustes e estornos", n: u.nAjustes, valor: u.ajustes,
+        comentario: "Créditos devolvidos pela Uber." }
+    ]).filter(function (l) { return l.n > 0; });
+
+    html += '<div class="card"><div class="card-head"><h2>Pontos de atenção</h2>' +
+      '<span class="grow"></span><span class="t-sub">Uma corrida pode entrar em mais de um motivo</span></div>' +
+      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
+      '<th>Motivo</th><th class="n">Ocorrências</th><th class="n">Custo total</th><th>Comentário</th>' +
+      "</tr></thead><tbody>" +
+      (atencoes.length ? atencoes.map(function (l) {
+        return "<tr><td>" + esc(l.motivo) +
+          (l.validadas ? ' <span class="chip ok">' + l.validadas + " validada" + (l.validadas > 1 ? "s" : "") + "</span>" : "") +
+          '</td><td class="n">' + l.n + '</td><td class="n">' + moedaFina(l.valor) + "</td>" +
+          '<td class="t-sub">' + esc(l.comentario || "") + "</td></tr>";
+      }).join("") : '<tr><td colspan="4" class="t-sub" style="padding:16px">Nada apontado no período.</td></tr>') +
       "</tbody></table></div></div></div>";
 
     html += "</div>";
+
+    // ---- 2. uso por área ----
+    html += '<div class="card"><div class="card-head"><h2>Uso do Uber por área</h2>' +
+      '<span class="grow"></span><span class="t-sub">' + esc(ano) + "</span></div>" +
+      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr><th>Área</th>' +
+      '<th class="n">Pessoas</th><th class="n">Corridas</th><th class="n">Valor</th>' +
+      '<th class="n">Ticket</th><th class="n">Aeroporto</th><th class="n">% do total</th>' +
+      '<th class="n">Atenção</th></tr></thead><tbody>' +
+      u.porArea.map(function (a) {
+        return "<tr><td>" + esc(a.nome) + '</td>' +
+          '<td class="n' + (a.pessoas ? "" : " zero") + '">' + (a.pessoas || "—") + "</td>" +
+          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n || "—") + "</td>" +
+          '<td class="n"><strong>' + C.moeda(a.valor) + "</strong></td>" +
+          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n ? C.moeda(a.ticket) : "—") + "</td>" +
+          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n ? C.brl(a.aeroporto / a.n * 100, 0) + "%" : "—") + "</td>" +
+          '<td class="n">' + (u.total ? C.brl(a.valor / u.total * 100, 0) : "0") + "%</td>" +
+          '<td class="n' + (a.atencao ? "" : " zero") + '">' + (a.atencao || "—") + "</td></tr>";
+      }).join("") +
+      '</tbody><tfoot><tr><td><strong>TOTAL</strong></td>' +
+      '<td class="n"><strong>' + u.porArea.reduce(function (s2, a) { return s2 + a.pessoas; }, 0) + "</strong></td>" +
+      '<td class="n"><strong>' + u.n + "</strong></td>" +
+      '<td class="n"><strong>' + C.moeda(u.total) + "</strong></td>" +
+      '<td class="n"><strong>' + C.moeda(u.ticket) + "</strong></td>" +
+      '<td class="n"><strong>' + C.brl(u.pctAeroporto * 100, 0) + "%</strong></td>" +
+      '<td class="n"><strong>100%</strong></td>' +
+      '<td class="n"><strong>' + (u.alertas.length || "—") + "</strong></td>" +
+      "</tr></tfoot></table></div></div></div>";
 
     // Tabela de corridas
     html += '<div class="card"><div class="card-head"><h2>Corridas</h2>' +
@@ -5422,16 +5520,16 @@ window.SEED = {
       return html;
     }
 
-    html += '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-      "<th>Data</th><th>Colaborador</th><th>Serviço</th><th>Trajeto</th>" +
-      '<th class="n">Valor</th><th>Auditoria</th><th>Motivo</th><th class="col-acoes"></th></tr></thead><tbody>' +
+    html += '<div class="card-body flush"><div class="table-wrap rolagem"><table class="compacta"><thead><tr>' +
+      '<th class="fix-uber">Colaborador</th><th>Data</th><th>Hora</th><th>Serviço</th><th>Trajeto</th>' +
+      '<th class="n">Valor</th><th>Auditoria</th><th>Atenção</th><th class="col-acoes"></th></tr></thead><tbody>' +
       lista.slice(0, 400).map(function (c) {
         return "<tr>" +
-          '<td class="nowrap"><span class="num">' + (c.data ? C.fmtData(c.data) : "—") + "</span>" +
-          (c.hora ? '<br><span class="t-sub">' + esc(c.hora) + "</span>"
-                  : (c.mesRef ? '<br><span class="t-sub">' + esc(C.mesRotulo(c.mesRef)) + "</span>" : "")) + "</td>" +
-          '<td>' + abreCorrida(c, c.colaborador ? pessoa(c.colaborador, c.area)
+          '<td class="fix-uber">' + abreCorrida(c, c.colaborador ? pessoa(c.colaborador, c.area)
             : '<span class="chip crit">⚠ sem De-Para</span><br><span class="t-sub">' + esc(c.nomeRelatorio || "—") + "</span>") + "</td>" +
+          '<td class="nowrap"><span class="num">' + (c.data ? C.fmtData(c.data) : "—") + "</span>" +
+          (!c.data && c.mesRef ? '<br><span class="t-sub">' + esc(C.mesRotulo(c.mesRef)) + "</span>" : "") + "</td>" +
+          '<td class="nowrap t-sub">' + esc(c.hora || "—") + "</td>" +
           "<td>" + esc(c.servico || "—") + '<br><span class="t-sub">' + esc(c.cidade || "") + "</span></td>" +
           '<td style="max-width:280px">' + abreCorrida(c, '<span class="t-sub">' + esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>" +
             (c.aeroporto ? ' <span class="chip accent">aeroporto</span>' : "")) + "</td>" +
@@ -5481,9 +5579,9 @@ window.SEED = {
     }).join("") + "</div>";
   }
 
-  function linhaAtencao(rotulo, valor, comentario) {
-    return "<tr><td>" + esc(rotulo) + '</td><td class="n">' + esc(valor) +
-      '</td><td class="t-sub">' + esc(comentario) + "</td></tr>";
+  /** Centavos só quando o valor é pequeno demais para aparecer sem eles. */
+  function moedaFina(v) {
+    return v && Math.abs(v) < 1 ? "R$ " + C.brl(v, 2) : C.moeda(v);
   }
 
   function encurta(endereco) {
@@ -5625,6 +5723,19 @@ window.SEED = {
           "</div></td></tr>";
       }).join("") : '<tr><td colspan="3" class="t-sub" style="padding:16px">Nenhum vínculo cadastrado.</td></tr>') +
       "</tbody></table></div></div></div>";
+
+    html += '<div class="card"><div class="card-head"><h2>Importar relatório do Uber Business</h2>' +
+      '<span class="grow"></span><span class="t-sub">' + C.corridas().length + " linhas na base</span></div>" +
+      '<div class="card-body grid" style="gap:10px">' +
+      '<div class="note">Exporte o CSV de transações no Uber Business, abra no <strong>Bloco de Notas</strong> ' +
+      "(não no Excel — ele converte datas e valores errado), copie só as linhas de transação e cole abaixo. " +
+      "Linha repetida é ignorada, então dá para colar só o mês novo sem reexportar o período inteiro.</div>" +
+      '<textarea name="colar-uber" rows="4" placeholder="05/24/2026;7:10AM;Nome;Sobrenome;--;Travel | UberX;Sao Paulo;origem;destino;Fare;66,31;66,31"></textarea>' +
+      '<div class="row"><button class="btn btn-primary" data-acao="importar-uber">Importar linhas coladas</button>' +
+      '<button class="btn" data-acao="exportar-uber">Exportar CSV</button>' +
+      '<span class="grow"></span>' +
+      '<button class="btn btn-ghost btn-sm btn-danger" data-acao="limpar-uber">Limpar base do Uber</button></div>' +
+      "</div></div>";
 
     html += '<div class="card"><div class="card-head"><h2>Backup e exportação</h2></div>' +
       '<div class="card-body grid" style="gap:12px">' +

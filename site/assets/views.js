@@ -564,19 +564,6 @@
         }).join(" ") + "</div>";
     }
 
-    html += '<div class="card"><div class="card-head"><h2>Importar relatório do Uber Business</h2>' +
-      '<span class="grow"></span><span class="t-sub">' + todas.length + " linhas na base</span></div>" +
-      '<div class="card-body grid" style="gap:10px">' +
-      '<div class="note">Exporte o CSV de transações no Uber Business, abra no <strong>Bloco de Notas</strong> ' +
-      "(não no Excel — ele converte datas e valores errado), copie só as linhas de transação e cole abaixo. " +
-      "Linhas repetidas são ignoradas automaticamente.</div>" +
-      '<textarea name="colar-uber" rows="4" placeholder="05/24/2026;7:10AM;Nome;Sobrenome;--;Travel | UberX;Sao Paulo;origem;destino;Fare;66,31;66,31"></textarea>' +
-      '<div class="row"><button class="btn btn-primary" data-acao="importar-uber">Importar linhas coladas</button>' +
-      '<button class="btn" data-acao="exportar-uber">Exportar CSV</button>' +
-      '<span class="grow"></span>' +
-      '<button class="btn btn-ghost btn-sm btn-danger" data-acao="limpar-uber">Limpar base do Uber</button></div>' +
-      "</div></div>";
-
     // Evolução mensal + serviços
     var mesesU = Object.keys(u.porMes).sort();
     html += '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(400px,1fr))">';
@@ -607,16 +594,58 @@
         return { nome: c.nome, sub: c.n + " corridas", valor: c.valor };
       })) + "</div></div>";
 
-    html += '<div class="card"><div class="card-head"><h2>Pontos de atenção</h2></div>' +
-      '<div class="card-body flush"><div class="table-wrap"><table><tbody>' +
-      linhaAtencao("Corridas acima de R$ 150", u.acima150 + " · " + C.brlSigla(u.valorAcima150), "Revisar necessidade e possibilidade de compartilhamento") +
-      linhaAtencao("Corridas urbanas (sem trecho de aeroporto)", String(u.urbanas), "Deslocamentos dentro da cidade") +
-      linhaAtencao("Multa por atraso de pagamento", C.brlSigla(u.multas), "Custo 100% evitável — ajustar o vencimento da fatura") +
-      linhaAtencao("Gorjetas", C.brlSigla(u.gorjetas), "Definir se a política corporativa cobre gorjeta") +
-      linhaAtencao("Ajustes e estornos", C.brlSigla(u.ajustes), "Créditos devolvidos pela Uber") +
+    var atencoes = u.porMotivo.concat([
+      { motivo: "Corridas urbanas", n: u.urbanas, valor: u.valorUrbanas,
+        comentario: "Deslocamento dentro da cidade, sem trecho de aeroporto." },
+      { motivo: "Multa por atraso de pagamento", n: u.nMultas, valor: u.multas,
+        comentario: "Custo 100% evitável — ajustar o vencimento da fatura." },
+      { motivo: "Gorjetas", n: u.nGorjetas, valor: u.gorjetas,
+        comentario: "Definir se a política corporativa cobre gorjeta." },
+      { motivo: "Ajustes e estornos", n: u.nAjustes, valor: u.ajustes,
+        comentario: "Créditos devolvidos pela Uber." }
+    ]).filter(function (l) { return l.n > 0; });
+
+    html += '<div class="card"><div class="card-head"><h2>Pontos de atenção</h2>' +
+      '<span class="grow"></span><span class="t-sub">Uma corrida pode entrar em mais de um motivo</span></div>' +
+      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
+      '<th>Motivo</th><th class="n">Ocorrências</th><th class="n">Custo total</th><th>Comentário</th>' +
+      "</tr></thead><tbody>" +
+      (atencoes.length ? atencoes.map(function (l) {
+        return "<tr><td>" + esc(l.motivo) +
+          (l.validadas ? ' <span class="chip ok">' + l.validadas + " validada" + (l.validadas > 1 ? "s" : "") + "</span>" : "") +
+          '</td><td class="n">' + l.n + '</td><td class="n">' + moedaFina(l.valor) + "</td>" +
+          '<td class="t-sub">' + esc(l.comentario || "") + "</td></tr>";
+      }).join("") : '<tr><td colspan="4" class="t-sub" style="padding:16px">Nada apontado no período.</td></tr>') +
       "</tbody></table></div></div></div>";
 
     html += "</div>";
+
+    // ---- 2. uso por área ----
+    html += '<div class="card"><div class="card-head"><h2>Uso do Uber por área</h2>' +
+      '<span class="grow"></span><span class="t-sub">' + esc(ano) + "</span></div>" +
+      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr><th>Área</th>' +
+      '<th class="n">Pessoas</th><th class="n">Corridas</th><th class="n">Valor</th>' +
+      '<th class="n">Ticket</th><th class="n">Aeroporto</th><th class="n">% do total</th>' +
+      '<th class="n">Atenção</th></tr></thead><tbody>' +
+      u.porArea.map(function (a) {
+        return "<tr><td>" + esc(a.nome) + '</td>' +
+          '<td class="n' + (a.pessoas ? "" : " zero") + '">' + (a.pessoas || "—") + "</td>" +
+          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n || "—") + "</td>" +
+          '<td class="n"><strong>' + C.moeda(a.valor) + "</strong></td>" +
+          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n ? C.moeda(a.ticket) : "—") + "</td>" +
+          '<td class="n' + (a.n ? "" : " zero") + '">' + (a.n ? C.brl(a.aeroporto / a.n * 100, 0) + "%" : "—") + "</td>" +
+          '<td class="n">' + (u.total ? C.brl(a.valor / u.total * 100, 0) : "0") + "%</td>" +
+          '<td class="n' + (a.atencao ? "" : " zero") + '">' + (a.atencao || "—") + "</td></tr>";
+      }).join("") +
+      '</tbody><tfoot><tr><td><strong>TOTAL</strong></td>' +
+      '<td class="n"><strong>' + u.porArea.reduce(function (s2, a) { return s2 + a.pessoas; }, 0) + "</strong></td>" +
+      '<td class="n"><strong>' + u.n + "</strong></td>" +
+      '<td class="n"><strong>' + C.moeda(u.total) + "</strong></td>" +
+      '<td class="n"><strong>' + C.moeda(u.ticket) + "</strong></td>" +
+      '<td class="n"><strong>' + C.brl(u.pctAeroporto * 100, 0) + "%</strong></td>" +
+      '<td class="n"><strong>100%</strong></td>' +
+      '<td class="n"><strong>' + (u.alertas.length || "—") + "</strong></td>" +
+      "</tr></tfoot></table></div></div></div>";
 
     // Tabela de corridas
     html += '<div class="card"><div class="card-head"><h2>Corridas</h2>' +
@@ -637,16 +666,16 @@
       return html;
     }
 
-    html += '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-      "<th>Data</th><th>Colaborador</th><th>Serviço</th><th>Trajeto</th>" +
-      '<th class="n">Valor</th><th>Auditoria</th><th>Motivo</th><th class="col-acoes"></th></tr></thead><tbody>' +
+    html += '<div class="card-body flush"><div class="table-wrap rolagem"><table class="compacta"><thead><tr>' +
+      '<th class="fix-uber">Colaborador</th><th>Data</th><th>Hora</th><th>Serviço</th><th>Trajeto</th>' +
+      '<th class="n">Valor</th><th>Auditoria</th><th>Atenção</th><th class="col-acoes"></th></tr></thead><tbody>' +
       lista.slice(0, 400).map(function (c) {
         return "<tr>" +
-          '<td class="nowrap"><span class="num">' + (c.data ? C.fmtData(c.data) : "—") + "</span>" +
-          (c.hora ? '<br><span class="t-sub">' + esc(c.hora) + "</span>"
-                  : (c.mesRef ? '<br><span class="t-sub">' + esc(C.mesRotulo(c.mesRef)) + "</span>" : "")) + "</td>" +
-          '<td>' + abreCorrida(c, c.colaborador ? pessoa(c.colaborador, c.area)
+          '<td class="fix-uber">' + abreCorrida(c, c.colaborador ? pessoa(c.colaborador, c.area)
             : '<span class="chip crit">⚠ sem De-Para</span><br><span class="t-sub">' + esc(c.nomeRelatorio || "—") + "</span>") + "</td>" +
+          '<td class="nowrap"><span class="num">' + (c.data ? C.fmtData(c.data) : "—") + "</span>" +
+          (!c.data && c.mesRef ? '<br><span class="t-sub">' + esc(C.mesRotulo(c.mesRef)) + "</span>" : "") + "</td>" +
+          '<td class="nowrap t-sub">' + esc(c.hora || "—") + "</td>" +
           "<td>" + esc(c.servico || "—") + '<br><span class="t-sub">' + esc(c.cidade || "") + "</span></td>" +
           '<td style="max-width:280px">' + abreCorrida(c, '<span class="t-sub">' + esc(encurta(c.origem)) + " → " + esc(encurta(c.destino)) + "</span>" +
             (c.aeroporto ? ' <span class="chip accent">aeroporto</span>' : "")) + "</td>" +
@@ -696,9 +725,9 @@
     }).join("") + "</div>";
   }
 
-  function linhaAtencao(rotulo, valor, comentario) {
-    return "<tr><td>" + esc(rotulo) + '</td><td class="n">' + esc(valor) +
-      '</td><td class="t-sub">' + esc(comentario) + "</td></tr>";
+  /** Centavos só quando o valor é pequeno demais para aparecer sem eles. */
+  function moedaFina(v) {
+    return v && Math.abs(v) < 1 ? "R$ " + C.brl(v, 2) : C.moeda(v);
   }
 
   function encurta(endereco) {
@@ -840,6 +869,19 @@
           "</div></td></tr>";
       }).join("") : '<tr><td colspan="3" class="t-sub" style="padding:16px">Nenhum vínculo cadastrado.</td></tr>') +
       "</tbody></table></div></div></div>";
+
+    html += '<div class="card"><div class="card-head"><h2>Importar relatório do Uber Business</h2>' +
+      '<span class="grow"></span><span class="t-sub">' + C.corridas().length + " linhas na base</span></div>" +
+      '<div class="card-body grid" style="gap:10px">' +
+      '<div class="note">Exporte o CSV de transações no Uber Business, abra no <strong>Bloco de Notas</strong> ' +
+      "(não no Excel — ele converte datas e valores errado), copie só as linhas de transação e cole abaixo. " +
+      "Linha repetida é ignorada, então dá para colar só o mês novo sem reexportar o período inteiro.</div>" +
+      '<textarea name="colar-uber" rows="4" placeholder="05/24/2026;7:10AM;Nome;Sobrenome;--;Travel | UberX;Sao Paulo;origem;destino;Fare;66,31;66,31"></textarea>' +
+      '<div class="row"><button class="btn btn-primary" data-acao="importar-uber">Importar linhas coladas</button>' +
+      '<button class="btn" data-acao="exportar-uber">Exportar CSV</button>' +
+      '<span class="grow"></span>' +
+      '<button class="btn btn-ghost btn-sm btn-danger" data-acao="limpar-uber">Limpar base do Uber</button></div>' +
+      "</div></div>";
 
     html += '<div class="card"><div class="card-head"><h2>Backup e exportação</h2></div>' +
       '<div class="card-body grid" style="gap:12px">' +

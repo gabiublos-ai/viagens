@@ -656,6 +656,16 @@
     return [p[0], p[1], p[2], p[3], p[9], p[10]].join("|").slice(0, 120);
   }
 
+  /** O que fazer diante de cada motivo — aparece em "Pontos de atenção". */
+  var COMENTARIO_MOTIVO = {
+    "Nome fora do De-Para": "Cadastrar o vínculo em Ajustes para o custo cair na pessoa certa.",
+    "Sem viagem registrada": "Lançar a viagem ou confirmar que é deslocamento urbano.",
+    "Fora do período": "Conferir as datas da viagem ou ampliar a tolerância da auditoria.",
+    "Sem data": "Encargo da fatura sem data no relatório — conferir na fatura do Uber.",
+    "Origem igual ao destino": "Normalmente corrida cancelada após o embarque — cabe contestação.",
+    "Acima de R$ 150": "Revisar necessidade, alternativa de transfer e possibilidade de carona."
+  };
+
   /**
    * Tudo que pede atenção numa corrida, numa lista só. A tela mostra uma
    * legenda única ("Atenção") e detalha os motivos aqui embaixo.
@@ -953,8 +963,9 @@
     });
     var comData = lista.filter(function (c) { return c.data; });
     var total = 0, aeroporto = 0, maiorValor = 0, acima150 = 0, valorAcima150 = 0, nCorridas = 0;
-    var porMes = {}, porServico = {}, porCidade = {};
+    var porMes = {}, porServico = {}, porCidade = {}, porArea = {};
     var gorjetas = 0, multas = 0, ajustes = 0;
+    var nGorjetas = 0, nMultas = 0, nAjustes = 0;
 
     lista.forEach(function (c) {
       var corrida = c.tipo === "Fare";
@@ -965,9 +976,9 @@
         if (c.valor > maiorValor) maiorValor = c.valor;
         if (c.valor > 150) { acima150++; valorAcima150 += c.valor; }
       }
-      if (c.tipo === "Tip") gorjetas += c.valor;
-      if (c.tipo === "Late Payment Fee") multas += c.valor;
-      if (c.tipo === "Adjustment") ajustes += c.valor;
+      if (c.tipo === "Tip") { gorjetas += c.valor; nGorjetas++; }
+      if (c.tipo === "Late Payment Fee") { multas += c.valor; nMultas++; }
+      if (c.tipo === "Adjustment") { ajustes += c.valor; nAjustes++; }
       if (c.mesRef) {
         porMes[c.mesRef] = porMes[c.mesRef] || { n: 0, valor: 0, aeroporto: 0 };
         porMes[c.mesRef].valor += c.valor;
@@ -985,7 +996,25 @@
         porCidade[c.cidade] = porCidade[c.cidade] || { n: 0, valor: 0 };
         porCidade[c.cidade].n++; porCidade[c.cidade].valor += c.valor;
       }
+      var area = c.colaborador ? (c.area || "Sem área") : "Encargos da fatura";
+      porArea[area] = porArea[area] || { n: 0, valor: 0, aeroporto: 0, pessoas: {}, atencao: 0 };
+      porArea[area].valor += c.valor;
+      if (corrida) {
+        porArea[area].n++;
+        if (c.aeroporto) porArea[area].aeroporto++;
+        if (c.colaborador) porArea[area].pessoas[c.colaborador] = 1;
+        if (c.precisaConferir) porArea[area].atencao++;
+      }
     });
+
+    function ordenaArea(obj) {
+      return Object.keys(obj).map(function (k) {
+        var a = obj[k];
+        return { nome: k, n: a.n, valor: round2(a.valor), aeroporto: a.aeroporto,
+                 pessoas: Object.keys(a.pessoas).length, atencao: a.atencao,
+                 ticket: a.n ? round2(a.valor / a.n) : 0 };
+      }).sort(function (a, b) { return b.valor - a.valor; });
+    }
 
     function ordena(obj) {
       return Object.keys(obj).map(function (k) {
@@ -995,6 +1024,23 @@
 
     var alertas = corridas().filter(function (c) { return c.precisaConferir; });
     var validadas = corridas().filter(function (c) { return c.conferido; });
+
+    // Cada motivo apontado pela auditoria, com quantas vezes apareceu e quanto
+    // custou. Uma corrida com dois motivos entra nos dois — a soma das linhas
+    // não é o total da base, e a tela diz isso.
+    var motivos = {};
+    lista.forEach(function (c) {
+      c.avisos.forEach(function (a) {
+        motivos[a.curto] = motivos[a.curto] || { motivo: a.curto, n: 0, valor: 0, validadas: 0, comentario: COMENTARIO_MOTIVO[a.curto] || "" };
+        motivos[a.curto].n++;
+        motivos[a.curto].valor += c.valor;
+        if (c.conferido) motivos[a.curto].validadas++;
+      });
+    });
+    var porMotivo = Object.keys(motivos).map(function (k) {
+      motivos[k].valor = round2(motivos[k].valor);
+      return motivos[k];
+    }).sort(function (a, b) { return b.valor - a.valor || b.n - a.n; });
     var desconhecidos = {};
     corridas().forEach(function (c) { if (c.desconhecido) desconhecidos[c.nomeRelatorio] = (desconhecidos[c.nomeRelatorio] || 0) + 1; });
 
@@ -1011,12 +1057,20 @@
       gorjetas: round2(gorjetas),
       multas: round2(multas),
       ajustes: round2(ajustes),
+      nGorjetas: nGorjetas,
+      nMultas: nMultas,
+      nAjustes: nAjustes,
       urbanas: lista.filter(function (c) { return c.tipo === "Fare" && !c.aeroporto; }).length,
+      valorUrbanas: round2(lista.reduce(function (t, c) {
+        return c.tipo === "Fare" && !c.aeroporto ? t + c.valor : t;
+      }, 0)),
       porMes: porMes,
       porServico: ordena(porServico),
       porCidade: ordena(porCidade),
       alertas: alertas,
       validadas: validadas.length,
+      porMotivo: porMotivo,
+      porArea: ordenaArea(porArea),
       desconhecidos: Object.keys(desconhecidos).map(function (k) { return { nome: k, n: desconhecidos[k] }; }),
       periodo: comData.length
         ? { de: comData.map(function (c) { return c.data; }).sort()[0],
