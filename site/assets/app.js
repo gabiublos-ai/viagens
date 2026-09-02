@@ -248,6 +248,7 @@
         C.db.params.dePara.splice(Number(id), 1);
         C.salvarParams().then(function () { toast("Vínculo removido"); }, falhou);
         break;
+      case "ver-colaborador": abrirResumoColaborador(botao.dataset.nome); break;
       case "novo-colaborador": abrirColaborador(null); break;
       case "editar-colaborador": abrirColaborador(C.colaborador(botao.dataset.nome)); break;
       case "salvar-regras": salvarRegras(); break;
@@ -1324,6 +1325,90 @@
         }, falhou);
       });
     }
+  }
+
+  /** Tudo que uma pessoa gastou: cadastro, números do ano e as viagens dela. */
+  function abrirResumoColaborador(nome) {
+    var c = C.colaborador(nome);
+    if (!c) return;
+    var esc = V.esc;
+
+    var viagens = C.viagens().filter(function (v) { return v.colaborador === c.nome; })
+      .sort(function (a, b) { return (b.dataIda || "").localeCompare(a.dataIda || ""); });
+    var corridas = C.corridas().filter(function (x) { return x.colaborador === c.nome && x.tipo === "Fare"; });
+    var uber = corridas.reduce(function (t, x) { return t + x.valor; }, 0);
+
+    var somas = ["aereo", "hospedagem", "alimentacao", "transporte", "custoAlteracao"].reduce(function (o, k) {
+      o[k] = viagens.reduce(function (t, v) { return t + (k === "hospedagem" ? v.hospedagem : (Number(v[k]) || 0)); }, 0);
+      return o;
+    }, {});
+    var totalViagens = viagens.reduce(function (t, v) { return t + v.total; }, 0);
+    var noites = viagens.reduce(function (t, v) { return t + v.noitesEfetivas; }, 0);
+    var nViagens = viagens.filter(function (v) { return v.tipo !== "Alteração"; }).length;
+    var pendentes = viagens.filter(function (v) { return v.precisaConferir; }).length;
+
+    function ficha(rotulo, valor) {
+      return '<div class="det"><span class="eyebrow">' + esc(rotulo) + "</span>" +
+        '<span class="det-valor">' + valor + "</span></div>";
+    }
+
+    var corpo = '<div class="det-grid">' +
+      ficha("Área", esc(c.area || "—")) +
+      ficha("Cargo", esc(c.cargo || "—") + (c.nivel ? '<br><span class="t-sub">' + esc(c.nivel) + "</span>" : "")) +
+      ficha("Gestor direto", esc(c.gestor || "—")) +
+      ficha("Base", esc(c.cidade || "—") + (c.uf ? "/" + esc(c.uf) : "") +
+        (c.aeroportoBase ? '<br><span class="route">' + esc(c.aeroportoBase) + "</span>" : "")) +
+      ficha("Contrato", esc(c.contrato || "—") + (c.modelo ? " · " + esc(c.modelo) : "")) +
+      ficha("E-mail", esc(c.email || "—")) +
+      "</div>";
+
+    corpo += '<div class="kpis" style="margin-top:16px">' +
+      V.kpi("Viagens", String(nViagens), noites + (noites === 1 ? " pernoite" : " pernoites"), true) +
+      V.kpi("Custo em viagens", C.moeda(totalViagens),
+            nViagens ? "Média de " + C.moeda(totalViagens / nViagens) + " por viagem" : "—", true) +
+      V.kpi("Uber", C.moeda(uber), corridas.length + (corridas.length === 1 ? " corrida" : " corridas"), true) +
+      V.kpi("Total", C.moeda(totalViagens + uber),
+            pendentes ? pendentes + " lançamento(s) a conferir" : "Tudo conferido", true) +
+      "</div>";
+
+    corpo += !viagens.length
+      ? '<div style="margin-top:16px">' + V.vazio("Nenhuma viagem lançada", "Esta pessoa ainda não viajou pela empresa.") + "</div>"
+      : '<div class="table-wrap" style="margin-top:16px;max-height:44vh"><table class="compacta"><thead><tr>' +
+        '<th>ID</th><th>Trecho e período</th><th class="n">Aéreo</th><th class="n">Hospedagem</th>' +
+        '<th class="n">Alimentação</th><th class="n">Outros</th><th class="n">Total</th><th>Status</th>' +
+        "</tr></thead><tbody>" +
+        viagens.map(function (v) {
+          var outros = (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0);
+          return '<tr><td class="num t-sub nowrap">' + (v.tipo === "Alteração" ? "↳ " : "") + v.id + "</td>" +
+            "<td>" + esc(v.aeroportoOrigem ? v.aeroportoOrigem.split(" ")[0] + " ✈ " : "") + esc(v.destino || "—") +
+            '<span class="t-sub periodo"><span class="num">' + C.fmtDataCurta(v.dataIda) + " → " +
+            C.fmtDataCurta(v.dataVolta) + "</span> · " + v.noites + (v.noites === 1 ? " noite" : " noites") + "</span></td>" +
+            '<td class="n">' + (v.aereo ? C.moeda(v.aereo) : "—") + "</td>" +
+            '<td class="n">' + (v.hospedagem ? C.moeda(v.hospedagem) : "—") + "</td>" +
+            '<td class="n">' + (v.alimentacao ? C.moeda(v.alimentacao) : "—") + "</td>" +
+            '<td class="n">' + (outros ? C.moeda(outros) : "—") + "</td>" +
+            '<td class="n"><strong>' + C.moeda(v.total) + "</strong></td>" +
+            "<td>" + V.chipStatus(v.status, v.status === "Cancelado" ? v.motivo : "") + "</td></tr>";
+        }).join("") +
+        '</tbody><tfoot><tr><td></td><td><strong>' + nViagens + " viagem(ns) · " + noites + " pernoites</strong></td>" +
+        '<td class="n"><strong>' + C.moeda(somas.aereo) + "</strong></td>" +
+        '<td class="n"><strong>' + C.moeda(somas.hospedagem) + "</strong></td>" +
+        '<td class="n"><strong>' + C.moeda(somas.alimentacao) + "</strong></td>" +
+        '<td class="n"><strong>' + C.moeda(somas.transporte + somas.custoAlteracao) + "</strong></td>" +
+        '<td class="n"><strong>' + C.moeda(totalViagens) + "</strong></td><td></td></tr></tfoot></table></div>";
+
+    var dialogo = abrirModal({
+      titulo: c.nome,
+      corpo: corpo,
+      rodape: '<span class="grow"></span>' +
+        '<button class="btn" data-acao="nova-viagem-para" data-nome="' + esc(c.nome) + '">Lançar viagem</button>' +
+        '<button class="btn" data-acao="editar-colaborador" data-nome="' + esc(c.nome) + '">Editar cadastro</button>' +
+        '<button class="btn btn-primary" data-acao="fechar">Fechar</button>'
+    });
+
+    // Os dois atalhos do rodapé abrem outra janela: o resumo sai da frente.
+    dialogo.querySelectorAll('[data-acao="nova-viagem-para"], [data-acao="editar-colaborador"]')
+      .forEach(function (botao) { botao.addEventListener("click", function () { dialogo.close(); }); });
   }
 
   function importarUber() {

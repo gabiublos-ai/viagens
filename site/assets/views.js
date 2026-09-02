@@ -835,21 +835,50 @@
       });
     }
 
+    // Ordenação da lista: por nome (A–Z) ou pelos números do ano, do maior
+    // para o menor. Quem não viajou vale zero e vai para o fim.
+    var ordemEq = estado.equipeOrdem || { campo: "nome", desc: false };
+    lista = lista.slice().sort(function (a, b) {
+      var ga = gasto[a.nome], gb = gasto[b.nome];
+      var x, y;
+      switch (ordemEq.campo) {
+        case "viagens": x = ga ? ga.viagens : 0; y = gb ? gb.viagens : 0; break;
+        case "noites": x = ga ? ga.noites : 0; y = gb ? gb.noites : 0; break;
+        case "total": x = ga ? ga.total : 0; y = gb ? gb.total : 0; break;
+        case "cargo": x = a.cargo || ""; y = b.cargo || ""; break;
+        case "gestor": x = a.gestor || ""; y = b.gestor || ""; break;
+        case "base": x = (a.cidade || "") + (a.uf || ""); y = (b.cidade || "") + (b.uf || ""); break;
+        default: x = a.nome; y = b.nome;
+      }
+      var r = typeof x === "string" ? C.ordenaPt(x, y) : (x - y);
+      if (!r && ordemEq.campo !== "nome") r = C.ordenaPt(a.nome, b.nome) * (ordemEq.desc ? -1 : 1);
+      return ordemEq.desc ? -r : r;
+    });
+
+    function colunaEquipe(rotulo, campo, numerica) {
+      return thOrdenavel(rotulo, campo, numerica, ordemEq, "equipeOrdem");
+    }
+
     var html = '<div class="card"><div class="card-head"><h2>Equipe</h2>' +
-      '<span class="chip">' + lista.length + ' pessoas</span><span class="grow"></span>' +
+      '<span class="chip">' + lista.length + ' pessoas</span>' +
+      '<span class="t-sub">clique no título da coluna para ordenar</span><span class="grow"></span>' +
       '<div class="toolbar">' +
       '<input type="search" class="search" name="busca-equipe" placeholder="Buscar nome, cargo, cidade…" value="' + esc(f.busca || "") + '">' +
       selectHTML("area-equipe", [{ v: "", r: "Todas as áreas" }].concat(C.areas()), f.area) +
       '<button class="btn btn-primary btn-sm" data-acao="novo-colaborador">+ Colaborador</button></div></div>' +
-      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
-      "<th>Colaborador</th><th>Cargo</th><th>Gestor direto</th><th>Base</th>" +
-      '<th class="n">Viagens ' + esc(ano) + '</th><th class="n">Pernoites</th><th class="n">Custo ' + esc(ano) + '</th><th class="col-acoes"></th>' +
+      '<div class="card-body flush"><div class="table-wrap rolagem"><table><thead><tr>' +
+      colunaEquipe("Colaborador", "nome") + colunaEquipe("Cargo", "cargo") +
+      colunaEquipe("Gestor direto", "gestor") + colunaEquipe("Base", "base") +
+      colunaEquipe("Viagens " + ano, "viagens", true) + colunaEquipe("Pernoites", "noites", true) +
+      colunaEquipe("Custo " + ano, "total", true) +
+      '<th class="col-acoes"></th>' +
       "</tr></thead><tbody>";
 
     lista.forEach(function (c) {
       var g = gasto[c.nome];
       html += '<tr data-nome="' + esc(c.nome) + '">' +
-        "<td>" + pessoa(c.nome, c.area) + "</td>" +
+        '<td><button class="link-cel" data-acao="ver-colaborador" data-nome="' + esc(c.nome) +
+        '" title="Ver as viagens de ' + esc(c.nome) + '">' + pessoa(c.nome, c.area) + "</button></td>" +
         "<td>" + esc(c.cargo || "—") + '<br><span class="t-sub">' + esc(c.contrato || "") + " · " + esc(c.modelo || "") + "</span></td>" +
         "<td>" + esc(c.gestor || "—") + "</td>" +
         "<td>" + esc(c.cidade || "—") + (c.uf ? "/" + esc(c.uf) : "") +
@@ -884,7 +913,7 @@
       html += '<div class="card"><div class="card-head"><h2>Custo por colaborador em ' + esc(ano) + "</h2>" +
         '<span class="t-sub">clique no título da coluna para ordenar</span>' +
         '<span class="grow"></span><button class="btn btn-sm" data-acao="exportar-colaborador">Exportar CSV</button></div>' +
-        '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
+        '<div class="card-body flush"><div class="table-wrap rolagem"><table><thead><tr>' +
         colunaOrdenavel("Colaborador", "nome") + colunaOrdenavel("Área", "area") +
         colunaOrdenavel("Aéreo", "aereo", true) + colunaOrdenavel("Hospedagem", "hospedagem", true) +
         colunaOrdenavel("Alimentação", "alimentacao", true) + colunaOrdenavel("Transporte", "transporte", true) +
@@ -1012,6 +1041,7 @@
 
   window.Views = {
     esc: esc, campo: campo, selectHTML: selectHTML, pessoa: pessoa, vazio: vazio,
+    kpi: kpi, chipStatus: chipStatus,
     painel: painel, viagens: viagensView, calendario: calendarioView,
     uber: uberView, equipe: equipeView, ajustes: ajustesView
   };
