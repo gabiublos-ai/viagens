@@ -406,6 +406,9 @@ td.fix2 .person > span:not(.avatar) { max-width: 166px; overflow: hidden; }
 
 .chart { width: 100%; display: block; overflow: visible; }
 .chart text { font-family: var(--sans); fill: var(--text-2); }
+.chart text.delta { fill: var(--text-3); font-family: var(--mono); }
+.chart text.delta-sobe { fill: var(--critical); }
+.chart text.delta-cai { fill: var(--good); }
 .chart .axis-line { stroke: var(--border); stroke-width: 1; }
 .chart .grid-line { stroke: var(--grid); stroke-width: 1; }
 .chart .bar { transition: opacity .12s ease; }

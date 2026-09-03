@@ -414,6 +414,9 @@ td.fix2 .person > span:not(.avatar) { max-width: 166px; overflow: hidden; }
 
 .chart { width: 100%; display: block; overflow: visible; }
 .chart text { font-family: var(--sans); fill: var(--text-2); }
+.chart text.delta { fill: var(--text-3); font-family: var(--mono); }
+.chart text.delta-sobe { fill: var(--critical); }
+.chart text.delta-cai { fill: var(--good); }
 .chart .axis-line { stroke: var(--border); stroke-width: 1; }
 .chart .grid-line { stroke: var(--grid); stroke-width: 1; }
 .chart .bar { transition: opacity .12s ease; }
@@ -5072,7 +5075,7 @@ window.SEED = {
    * Fatias com 2px de folga entre si, extremidade arredondada só no topo da pilha.
    */
   function barrasEmpilhadas(rotulos, series, alturaBarra) {
-    var L = 52, R = 8, T = 10, B = 26;
+    var L = 52, R = 8, T = 22, B = 26;
     var W = 1000, H = (alturaBarra || 190) + T + B;
     var plotW = W - L - R, plotH = H - T - B;
 
@@ -5095,9 +5098,22 @@ window.SEED = {
       svg += '<text x="' + (L - 8) + '" y="' + (y + 4) + '" text-anchor="end" font-size="11">' + esc(C.brlCurto(g)) + "</text>";
     }
 
+    // Variação contra o mês anterior, escrita em cima da pilha. Só a partir
+    // do segundo mês com movimento — o primeiro não tem com o que comparar.
+    var anterior = null;
     rotulos.forEach(function (rot, i) {
       var cx = L + largura * i + largura / 2;
       var y = T + plotH;
+      var total = totais[i];
+      if (total > 0 && anterior) {
+        var pct = (total - anterior) / anterior * 100;
+        var sobe = pct > 0;
+        var topoBarra = T + plotH - (total / topo) * plotH;
+        svg += '<text class="delta ' + (Math.abs(pct) < 0.5 ? "" : sobe ? "delta-sobe" : "delta-cai") +
+          '" x="' + cx + '" y="' + (topoBarra - 6) + '" text-anchor="middle" font-size="10.5" font-weight="650">' +
+          (Math.abs(pct) < 0.5 ? "=" : (sobe ? "▲ +" : "▼ ") + C.brl(pct, 0) + "%") + "</text>";
+      }
+      if (total > 0) anterior = total;
       series.forEach(function (se) {
         var v = se.valores[i] || 0;
         if (v <= 0) return;
@@ -5132,7 +5148,9 @@ window.SEED = {
       return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center">' +
         '<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(i.nome) +
         (i.sub ? ' <span class="t-sub">' + esc(i.sub) + "</span>" : "") + "</span>" +
-        '<span class="num" style="font-size:12.5px">' + C.moeda(i.valor) + "</span>" +
+        '<span class="num" style="font-size:12.5px">' +
+        (i.extra ? '<span class="t-sub" title="Custo médio por viagem, sem Uber" style="margin-right:12px">' + esc(i.extra) + "</span>" : "") +
+        C.moeda(i.valor) + "</span>" +
         '<span style="grid-column:1/-1;height:7px;background:var(--surface-2);border-radius:3px;overflow:hidden">' +
         '<span style="display:block;height:100%;width:' + pct + '%;background:var(--s1);border-radius:3px"></span></span>' +
         "</div>";
@@ -5158,7 +5176,6 @@ window.SEED = {
       return { nome: cat, cor: CORES[i % CORES.length], valores: r.meses.map(function (m) { return r.porCategoria[cat][m]; }) };
     }).filter(function (s) { return s.valores.some(function (v) { return v > 0; }); });
 
-    var mediaPessoa = r.pessoas ? r.totalAno / r.pessoas : 0;
     var mediaViagem = r.nViagens ? r.totalViagens / r.nViagens : 0;
     var avisos = C.viagens().filter(function (v) { return C.anoDe(v.mesRef) === String(ano) && v.precisaConferir; });
 
@@ -5171,8 +5188,6 @@ window.SEED = {
           "Média de " + C.brlSigla(mediaViagem) + " por viagem") +
       kpi("Uber corporativo", C.moeda(r.totalUber),
           (r.totalAno ? C.brl(r.totalUber / r.totalAno * 100, 0) : "0") + "% do custo total · " + uber.n + " corridas") +
-      kpi("Colaboradores com despesa", String(r.pessoas),
-          "Média de " + C.brlSigla(mediaPessoa) + " por pessoa") +
       "</div>";
 
     if (avisos.length) {
@@ -5238,12 +5253,25 @@ window.SEED = {
 
     html += '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">';
 
-    html += '<div class="card"><div class="card-head"><h2>Custo por área</h2></div>' +
-      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr><th>Área</th>' +
-      mesesAtivos.map(function (m) { return '<th class="n">' + esc(C.mesRotulo(m)) + "</th>"; }).join("") +
-      '<th class="n">Total</th></tr></thead><tbody>' +
+    var ordemArea = estado.areaOrdem || { campo: "total", desc: true };
+    function totalArea(a) { return mesesAtivos.reduce(function (s, m) { return s + r.porArea[a][m]; }, 0); }
+    areasComGasto.sort(function (a, b) {
+      var x, y;
+      if (ordemArea.campo === "area") { x = a; y = b; }
+      else if (ordemArea.campo === "total") { x = totalArea(a); y = totalArea(b); }
+      else { x = r.porArea[a][ordemArea.campo] || 0; y = r.porArea[b][ordemArea.campo] || 0; }
+      var res = typeof x === "string" ? C.ordenaPt(x, y) : (x - y);
+      return ordemArea.desc ? -res : res;
+    });
+
+    html += '<div class="card"><div class="card-head"><h2>Custo por área</h2>' +
+      '<span class="t-sub">clique no título da coluna para ordenar</span></div>' +
+      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
+      thOrdenavel("Área", "area", false, ordemArea, "areaOrdem") +
+      mesesAtivos.map(function (m) { return thOrdenavel(C.mesRotulo(m), m, true, ordemArea, "areaOrdem"); }).join("") +
+      thOrdenavel("Total", "total", true, ordemArea, "areaOrdem") + "</tr></thead><tbody>" +
       areasComGasto.map(function (a) {
-        var t = mesesAtivos.reduce(function (s, m) { return s + r.porArea[a][m]; }, 0);
+        var t = totalArea(a);
         return "<tr><td>" + esc(a) + "</td>" +
           mesesAtivos.map(function (m) {
             var v = r.porArea[a][m];
@@ -5262,7 +5290,9 @@ window.SEED = {
     html += '<div class="card"><div class="card-head"><h2>Top 10 colaboradores</h2>' +
       '<span class="grow"></span><button class="btn btn-sm" data-ir="equipe">Ver todos</button></div>' +
       '<div class="card-body">' + barrasHorizontais(pessoas.slice(0, 10).map(function (p) {
-        return { nome: p.nome, sub: p.viagens + (p.viagens === 1 ? " viagem" : " viagens"), valor: p.total };
+        var media = p.viagens ? (p.total - p.uber) / p.viagens : 0;
+        return { nome: p.nome, sub: p.viagens + (p.viagens === 1 ? " viagem" : " viagens"),
+                 extra: p.viagens ? C.moeda(media) + "/viagem" : "", valor: p.total };
       })) + "</div></div>";
 
     html += "</div>";
