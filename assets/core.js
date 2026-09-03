@@ -880,12 +880,15 @@
     var meses = [];
     for (var m = 1; m <= 12; m++) meses.push(pad(m) + "/" + ano);
 
-    var porCategoria = {}, porArea = {}, pessoasMes = {}, totalMes = {};
+    var porCategoria = {}, porArea = {}, pessoasMes = {}, totalMes = {}, viagensMes = {}, custoViagensMes = {};
     CATEGORIAS.forEach(function (c) { porCategoria[c] = {}; meses.forEach(function (m) { porCategoria[c][m] = 0; }); });
     areas().forEach(function (a) { porArea[a] = {}; meses.forEach(function (m) { porArea[a][m] = 0; }); });
-    meses.forEach(function (m) { totalMes[m] = 0; pessoasMes[m] = {}; });
+    meses.forEach(function (m) { totalMes[m] = 0; pessoasMes[m] = {}; viagensMes[m] = 0; custoViagensMes[m] = 0; });
 
-    var pessoas = {}, nViagens = 0, noites = 0;
+    // `pessoas` = quem teve qualquer despesa (viagem ou Uber) — vale para o KPI.
+    // `pessoasMes` e `pessoasViagem` contam só quem viajou: é o que a tabela
+    // de composição mostra, e a média ali é por viagem, não por pessoa.
+    var pessoas = {}, pessoasViagem = {}, nViagens = 0, noites = 0;
 
     viagens().forEach(function (v) {
       var m = v.mesRef;
@@ -900,8 +903,10 @@
       else if (v.total) { porArea[v.area] = porArea[v.area] || {}; porArea[v.area][m] = (porArea[v.area][m] || 0) + v.total; }
       // Conta quem viajou, mesmo que ainda não tenha custo lançado.
       pessoas[v.colaborador] = 1;
+      pessoasViagem[v.colaborador] = 1;
       pessoasMes[m][v.colaborador] = 1;
-      if (v.tipo !== "Alteração") nViagens++;
+      custoViagensMes[m] += v.total;
+      if (v.tipo !== "Alteração") { nViagens++; viagensMes[m]++; }
       noites += v.noitesEfetivas;
     });
 
@@ -910,7 +915,7 @@
       porCategoria["Uber Corporativo"][c.mesRef] += c.valor;
       totalMes[c.mesRef] += c.valor;
       if (porArea[c.area]) porArea[c.area][c.mesRef] += c.valor;
-      if (c.colaborador) { pessoas[c.colaborador] = 1; pessoasMes[c.mesRef][c.colaborador] = 1; }
+      if (c.colaborador) pessoas[c.colaborador] = 1;
     });
 
     var totalAno = 0;
@@ -930,7 +935,10 @@
       totalUber: round2(totalUber),
       totalViagens: round2(totalAno - totalUber),
       pessoas: Object.keys(pessoas).length,
+      pessoasViagem: Object.keys(pessoasViagem).length,
       pessoasMes: pessoasMes,
+      viagensMes: viagensMes,
+      custoViagensMes: custoViagensMes,
       nViagens: nViagens,
       noites: noites
     };

@@ -234,15 +234,18 @@
       "</tbody><tfoot><tr><td><strong>TOTAL</strong></td>" +
       mesesAtivos.map(function (m) { return '<td class="n"><strong>' + C.moeda(r.totalMes[m]) + "</strong></td>"; }).join("") +
       '<td class="n"><strong>' + C.moeda(r.totalAno) + '</strong></td><td class="n"><strong>100%</strong></td></tr>' +
-      '<tr><td class="t-sub">Colaboradores no mês</td>' +
+      '<tr><td class="t-sub">Colaboradores que viajaram</td>' +
       mesesAtivos.map(function (m) { return '<td class="n t-sub">' + Object.keys(r.pessoasMes[m]).length + "</td>"; }).join("") +
-      '<td class="n t-sub">' + r.pessoas + '</td><td></td></tr>' +
-      '<tr><td class="t-sub">Média por pessoa</td>' +
+      '<td class="n t-sub">' + r.pessoasViagem + '</td><td></td></tr>' +
+      '<tr><td class="t-sub">Viagens</td>' +
+      mesesAtivos.map(function (m) { return '<td class="n t-sub">' + (r.viagensMes[m] || "—") + "</td>"; }).join("") +
+      '<td class="n t-sub">' + r.nViagens + '</td><td></td></tr>' +
+      '<tr><td class="t-sub" title="Custo das viagens do mês, sem Uber, dividido pelo número de viagens">Média por viagem (sem Uber)</td>' +
       mesesAtivos.map(function (m) {
-        var n = Object.keys(r.pessoasMes[m]).length;
-        return '<td class="n t-sub">' + (n ? C.moeda(r.totalMes[m] / n) : "—") + "</td>";
+        var n = r.viagensMes[m];
+        return '<td class="n t-sub">' + (n ? C.moeda(r.custoViagensMes[m] / n) : "—") + "</td>";
       }).join("") +
-      '<td class="n t-sub">' + (r.pessoas ? C.moeda(r.totalAno / r.pessoas) : "—") +
+      '<td class="n t-sub">' + (r.nViagens ? C.moeda(r.totalViagens / r.nViagens) : "—") +
       "</td><td></td></tr></tfoot></table></div></div></div>";
 
     // Área × mês
