@@ -16,7 +16,7 @@ R$ 11.158,29 de Uber, 25 colaboradores com despesa, 181 corridas, ticket médio 
 ## Como usar
 
 **Site com login por pessoa (equipe inteira na mesma base).** É o modo de produção: um endereço
-na internet, cada um entra com o seu nome e a sua senha, e todo mundo vê e lança na mesma base,
+na internet, cada um entra com o seu e-mail corporativo e a sua senha, e todo mundo vê e lança na mesma base,
 com sincronização automática. Tudo que é incluído, alterado ou excluído fica registrado com nome
 e horário. Passo a passo em [DEPLOY.md](DEPLOY.md) — no Netlify são alguns cliques, sem
 terminal; também há a receita para Cloudflare Workers e para rodar numa máquina sua.
@@ -32,8 +32,9 @@ para editar.
 
 ## Acessos e registro de alterações
 
-Cada pessoa tem o seu login. Quem administra cria o acesso em **Ajustes → Acessos**, informando
-nome, e-mail (opcional) e o que a pessoa pode fazer:
+Cada pessoa tem o seu login, e a entrada é pelo **e-mail corporativo `@acegaming.com.br`** —
+endereço de outro domínio não é aceito no cadastro nem na tela de entrada. Quem administra cria o
+acesso em **Ajustes → Acessos**, informando nome, e-mail e o que a pessoa pode fazer:
 
 | Papel | Pode |
 |---|---|

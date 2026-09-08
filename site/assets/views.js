@@ -999,7 +999,7 @@
         esc(u.nome) + "</button>" +
         (u.id === eu.id ? ' <span class="chip">você</span>' : "") +
         (u.trocarSenha ? ' <span class="chip warn" title="Vai definir a senha no próximo acesso">senha provisória</span>' : "") +
-        '<div class="t-sub">' + esc(u.email || "entra pelo nome") + "</div></td>" +
+        '<div class="t-sub">' + esc(u.email || "—") + "</div></td>" +
         "<td>" + esc(ROTULO_PAPEL[u.papel] || u.papel) + "</td>" +
         "<td>" + (u.ativo ? '<span class="chip ok">ativo</span>' : '<span class="chip">desativado</span>') + "</td>" +
         '<td class="num t-sub">' + quando(u.ultimoAcesso, true) + "</td>" +
@@ -1010,7 +1010,8 @@
       '<span class="chip">' + lista.length + "</span><span class=\"grow\"></span>" +
       '<button class="btn btn-sm btn-primary" data-acao="novo-acesso">+ Novo acesso</button></div>' +
       '<div class="card-body flush">' +
-      '<div class="note" style="margin:12px 14px 0">Cada pessoa entra com o seu nome (ou e-mail) e a sua própria senha, ' +
+      '<div class="note" style="margin:12px 14px 0">Cada pessoa entra com o seu e-mail corporativo ' +
+      "<strong>@acegaming.com.br</strong> e a sua própria senha, " +
       "e tudo que ela incluir ou alterar fica registrado no nome dela. " +
       "<strong>Administra</strong> pode criar e remover acessos; <strong>lança e edita</strong> faz todo o resto. " +
       "Ao criar um acesso você define uma senha provisória — a pessoa escolhe a definitiva na primeira entrada.</div>" +
@@ -1161,7 +1162,7 @@
       "o valor aprovado no início continua visível e dá para medir quanto as remarcações custaram no ano.</p>" +
       "<p><strong>Uber:</strong> aba Uber, cole o relatório e importe. Nome novo aparece como " +
       "<em>⚠ incluir no De-Para</em>, com um botão para vincular na hora.</p>" +
-      "<p><strong>Acessos:</strong> cada pessoa entra com o seu nome e a sua senha. " +
+      "<p><strong>Acessos:</strong> cada pessoa entra com o seu e-mail corporativo e a sua senha. " +
       "Quem administra cria o acesso aqui mesmo e entrega uma senha provisória; a pessoa escolhe a definitiva " +
       "na primeira entrada. Tudo que é incluído, alterado ou excluído fica no <em>Registro de alterações</em>, " +
       "com nome e horário — e cada viagem mostra quem lançou e quem mexeu por último.</p>" +

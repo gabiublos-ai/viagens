@@ -54,9 +54,11 @@ Depois, no Netlify:
 
 ### 3. Criar os acessos da equipe
 
-Abra o site, entre com o seu nome e a senha mestre, e vá em
+Abra o site, entre com o seu e-mail e a senha mestre, e vá em
 **Ajustes → Acessos → + Novo acesso**. Para cada pessoa informe o nome, o
-e-mail e o que ela pode fazer (*administra* ou *lança e edita*). O sistema
+e-mail corporativo `@acegaming.com.br` — é por ele que ela entra, e endereço de
+outro domínio não é aceito — e o que ela pode fazer (*administra* ou *lança e
+edita*). O sistema
 mostra uma senha provisória — copie e entregue por um canal privado. Na
 primeira entrada a pessoa escolhe a senha dela, e a provisória deixa de valer.
 

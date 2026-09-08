@@ -93,9 +93,9 @@
       'd="M12 1.2a10.8 10.8 0 1 0 0 21.6 10.8 10.8 0 0 0 0-21.6Zm-2.35 5.9 6.28 3.5a1.6 1.6 0 0 1 0 2.8l-6.28 3.5A1.6 1.6 0 0 1 7.3 15.5v-7a1.6 1.6 0 0 1 2.35-1.4Z"/></svg></div>' +
       "<h1>Gestão de Viagens</h1>" +
       '<p class="entrada-sub">Ace Gaming · apostou.bet.br</p>' +
-      '<div class="field"><label for="e-nome">Seu nome ou e-mail</label>' +
-      '<input type="text" id="e-nome" name="usuario" autocomplete="username" placeholder="Como foi cadastrado no acesso" ' +
-      'value="' + esc(localStorage.getItem("gvc.nome") || "") + '" required></div>' +
+      '<div class="field"><label for="e-nome">E-mail corporativo</label>' +
+      '<input type="email" id="e-nome" name="usuario" autocomplete="username" placeholder="nome.sobrenome@acegaming.com.br" ' +
+      'value="' + esc(ultimoEmail()) + '" required></div>' +
       '<div class="field"><label for="e-senha">Sua senha</label>' +
       '<input type="password" id="e-senha" name="senha" autocomplete="current-password" required></div>' +
       '<button class="btn btn-primary" type="submit">Entrar</button>' +
@@ -123,7 +123,17 @@
         form.querySelector('[name="senha"]').select();
       });
     });
-    form.querySelector((localStorage.getItem("gvc.nome") ? '[name="senha"]' : '[name="usuario"]')).focus();
+    form.querySelector(ultimoEmail() ? '[name="senha"]' : '[name="usuario"]').focus();
+  }
+
+  /**
+   * Quem entrou por último nesta máquina, para não redigitar o e-mail. Guarda
+   * de versão: antes o campo era o nome, e um nome no lugar do e-mail só
+   * atrapalharia.
+   */
+  function ultimoEmail() {
+    var guardado = localStorage.getItem("gvc.nome") || "";
+    return guardado.indexOf("@") > 0 ? guardado : "";
   }
 
   /**
@@ -1712,9 +1722,12 @@
       titulo: novo ? "Novo acesso" : "Acesso de " + d.nome,
       corpo: '<form id="form-acesso" method="dialog"><div class="form-grid">' +
         V.campo("Nome", '<input type="text" name="nome" value="' + esc(d.nome) + '" required>', "c12",
-                "É por ele, ou pelo e-mail, que a pessoa entra — e é o nome que aparece no registro de alterações.") +
-        V.campo("E-mail corporativo", '<input type="email" name="email" value="' + esc(d.email || "") + '">', "c12",
-                "Opcional. Serve como segunda forma de entrar.") +
+                "É o nome que aparece no registro de alterações.") +
+        V.campo("E-mail corporativo",
+                '<input type="email" name="email" value="' + esc(d.email || "") + '" required ' +
+                'placeholder="nome.sobrenome@acegaming.com.br" pattern=".+@acegaming\\.com\\.br" ' +
+                'title="O acesso é pelo e-mail corporativo, terminado em @acegaming.com.br">', "c12",
+                "É por ele que a pessoa entra. Só endereços @acegaming.com.br são aceitos.") +
         V.campo("Pode", V.selectHTML("papel", [
           { v: "editor", r: "Lançar e editar viagens, Uber e cadastros" },
           { v: "admin", r: "Tudo, inclusive criar e remover acessos" }

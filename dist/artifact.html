@@ -6076,7 +6076,7 @@ window.SEED = {
         esc(u.nome) + "</button>" +
         (u.id === eu.id ? ' <span class="chip">você</span>' : "") +
         (u.trocarSenha ? ' <span class="chip warn" title="Vai definir a senha no próximo acesso">senha provisória</span>' : "") +
-        '<div class="t-sub">' + esc(u.email || "entra pelo nome") + "</div></td>" +
+        '<div class="t-sub">' + esc(u.email || "—") + "</div></td>" +
         "<td>" + esc(ROTULO_PAPEL[u.papel] || u.papel) + "</td>" +
         "<td>" + (u.ativo ? '<span class="chip ok">ativo</span>' : '<span class="chip">desativado</span>') + "</td>" +
         '<td class="num t-sub">' + quando(u.ultimoAcesso, true) + "</td>" +
@@ -6087,7 +6087,8 @@ window.SEED = {
       '<span class="chip">' + lista.length + "</span><span class=\"grow\"></span>" +
       '<button class="btn btn-sm btn-primary" data-acao="novo-acesso">+ Novo acesso</button></div>' +
       '<div class="card-body flush">' +
-      '<div class="note" style="margin:12px 14px 0">Cada pessoa entra com o seu nome (ou e-mail) e a sua própria senha, ' +
+      '<div class="note" style="margin:12px 14px 0">Cada pessoa entra com o seu e-mail corporativo ' +
+      "<strong>@acegaming.com.br</strong> e a sua própria senha, " +
       "e tudo que ela incluir ou alterar fica registrado no nome dela. " +
       "<strong>Administra</strong> pode criar e remover acessos; <strong>lança e edita</strong> faz todo o resto. " +
       "Ao criar um acesso você define uma senha provisória — a pessoa escolhe a definitiva na primeira entrada.</div>" +
@@ -6238,7 +6239,7 @@ window.SEED = {
       "o valor aprovado no início continua visível e dá para medir quanto as remarcações custaram no ano.</p>" +
       "<p><strong>Uber:</strong> aba Uber, cole o relatório e importe. Nome novo aparece como " +
       "<em>⚠ incluir no De-Para</em>, com um botão para vincular na hora.</p>" +
-      "<p><strong>Acessos:</strong> cada pessoa entra com o seu nome e a sua senha. " +
+      "<p><strong>Acessos:</strong> cada pessoa entra com o seu e-mail corporativo e a sua senha. " +
       "Quem administra cria o acesso aqui mesmo e entrega uma senha provisória; a pessoa escolhe a definitiva " +
       "na primeira entrada. Tudo que é incluído, alterado ou excluído fica no <em>Registro de alterações</em>, " +
       "com nome e horário — e cada viagem mostra quem lançou e quem mexeu por último.</p>" +
@@ -6358,9 +6359,9 @@ window.SEED = {
       'd="M12 1.2a10.8 10.8 0 1 0 0 21.6 10.8 10.8 0 0 0 0-21.6Zm-2.35 5.9 6.28 3.5a1.6 1.6 0 0 1 0 2.8l-6.28 3.5A1.6 1.6 0 0 1 7.3 15.5v-7a1.6 1.6 0 0 1 2.35-1.4Z"/></svg></div>' +
       "<h1>Gestão de Viagens</h1>" +
       '<p class="entrada-sub">Ace Gaming · apostou.bet.br</p>' +
-      '<div class="field"><label for="e-nome">Seu nome ou e-mail</label>' +
-      '<input type="text" id="e-nome" name="usuario" autocomplete="username" placeholder="Como foi cadastrado no acesso" ' +
-      'value="' + esc(localStorage.getItem("gvc.nome") || "") + '" required></div>' +
+      '<div class="field"><label for="e-nome">E-mail corporativo</label>' +
+      '<input type="email" id="e-nome" name="usuario" autocomplete="username" placeholder="nome.sobrenome@acegaming.com.br" ' +
+      'value="' + esc(ultimoEmail()) + '" required></div>' +
       '<div class="field"><label for="e-senha">Sua senha</label>' +
       '<input type="password" id="e-senha" name="senha" autocomplete="current-password" required></div>' +
       '<button class="btn btn-primary" type="submit">Entrar</button>' +
@@ -6388,7 +6389,17 @@ window.SEED = {
         form.querySelector('[name="senha"]').select();
       });
     });
-    form.querySelector((localStorage.getItem("gvc.nome") ? '[name="senha"]' : '[name="usuario"]')).focus();
+    form.querySelector(ultimoEmail() ? '[name="senha"]' : '[name="usuario"]').focus();
+  }
+
+  /**
+   * Quem entrou por último nesta máquina, para não redigitar o e-mail. Guarda
+   * de versão: antes o campo era o nome, e um nome no lugar do e-mail só
+   * atrapalharia.
+   */
+  function ultimoEmail() {
+    var guardado = localStorage.getItem("gvc.nome") || "";
+    return guardado.indexOf("@") > 0 ? guardado : "";
   }
 
   /**
@@ -7977,9 +7988,12 @@ window.SEED = {
       titulo: novo ? "Novo acesso" : "Acesso de " + d.nome,
       corpo: '<form id="form-acesso" method="dialog"><div class="form-grid">' +
         V.campo("Nome", '<input type="text" name="nome" value="' + esc(d.nome) + '" required>', "c12",
-                "É por ele, ou pelo e-mail, que a pessoa entra — e é o nome que aparece no registro de alterações.") +
-        V.campo("E-mail corporativo", '<input type="email" name="email" value="' + esc(d.email || "") + '">', "c12",
-                "Opcional. Serve como segunda forma de entrar.") +
+                "É o nome que aparece no registro de alterações.") +
+        V.campo("E-mail corporativo",
+                '<input type="email" name="email" value="' + esc(d.email || "") + '" required ' +
+                'placeholder="nome.sobrenome@acegaming.com.br" pattern=".+@acegaming\\.com\\.br" ' +
+                'title="O acesso é pelo e-mail corporativo, terminado em @acegaming.com.br">', "c12",
+                "É por ele que a pessoa entra. Só endereços @acegaming.com.br são aceitos.") +
         V.campo("Pode", V.selectHTML("papel", [
           { v: "editor", r: "Lançar e editar viagens, Uber e cadastros" },
           { v: "admin", r: "Tudo, inclusive criar e remover acessos" }

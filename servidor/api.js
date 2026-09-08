@@ -35,6 +35,7 @@ const TENTATIVAS_MAX = 8;          // por janela, por IP
 const JANELA_TENTATIVAS = 10 * 60 * 1000;
 const LIMITE_HISTORICO = 1200;     // entradas guardadas no registro de alterações
 const PAPEIS = ["admin", "editor"];
+const DOMINIO_EMAIL = "@acegaming.com.br";   // só o e-mail corporativo entra
 const SENHA_MINIMA = 8;
 
 // ---------- utilidades de resposta ----------
@@ -246,8 +247,10 @@ function estruturaValida(dados) {
 
 // ---------- usuários ----------
 
-/* Cada pessoa tem o seu acesso. O `id` nunca muda: é por ele que a sessão e o
- * histórico apontam para alguém, então trocar nome ou e-mail não quebra nada.
+/* Cada pessoa tem o seu acesso, e entra pelo e-mail corporativo — só endereços
+ * do domínio da empresa (`DOMINIO_EMAIL`) valem. O `id` nunca muda: é por ele
+ * que a sessão e o histórico apontam para alguém, então trocar nome ou e-mail
+ * não quebra nada.
  *
  * O papel diz o que a pessoa pode fazer:
  *   admin   — tudo, inclusive criar e remover acessos
@@ -269,11 +272,16 @@ function proximoIdUsuario(usuarios) {
   return "u" + (max + 1);
 }
 
-/** Nome ou e-mail servem para entrar; a comparação ignora acento e maiúscula. */
+/** Só o e-mail corporativo identifica quem entra; a comparação ignora maiúscula. */
 function achaUsuario(usuarios, entrada) {
   const chave = normal(entrada);
   if (!chave) return null;
-  return usuarios.find((u) => normal(u.email) === chave || normal(u.nome) === chave) || null;
+  return usuarios.find((u) => u.email && normal(u.email) === chave) || null;
+}
+
+function emailCorporativo(email) {
+  const e = normal(email);
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) && e.endsWith(DOMINIO_EMAIL);
 }
 
 /** O que vai para o navegador: tudo menos a senha. */
@@ -285,7 +293,7 @@ function semSenha(u) {
 function limpaUsuario(bruto) {
   return {
     nome: texto(bruto.nome, 80).trim(),
-    email: texto(bruto.email, 120).trim(),
+    email: texto(bruto.email, 120).trim().toLowerCase(),
     papel: PAPEIS.includes(bruto.papel) ? bruto.papel : "editor",
     ativo: bruto.ativo !== false
   };
@@ -461,7 +469,7 @@ export function criarApi(cfg) {
         registraFalha(ip);
         return erro(401, usuario && !usuario.ativo
           ? "Este acesso está desativado. Fale com quem administra o sistema."
-          : "Usuário ou senha incorretos.");
+          : "E-mail ou senha incorretos.");
       }
 
       const token = await criaSessao(sessao.id, sessao.nome, cfg.segredo);
@@ -478,7 +486,7 @@ export function criarApi(cfg) {
 
     // ---- daqui para baixo, só com sessão ----
     const token = await leSessao(leCookie(request, "sessao"), cfg.segredo);
-    if (!token) return erro(401, "Entre com o seu usuário e senha.");
+    if (!token) return erro(401, "Entre com o seu e-mail corporativo e senha.");
 
     const estado = await estadoAtual();
     const dados = estado.dados;
@@ -565,19 +573,16 @@ export function criarApi(cfg) {
       if (!admin) return soAdmin();
       const limpo = limpaUsuario(corpo.usuario || {});
       if (!limpo.nome) return erro(400, "Informe o nome de quem vai ter acesso.");
-      if (limpo.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(limpo.email)) {
-        return erro(400, "E-mail inválido.");
+      if (!emailCorporativo(limpo.email)) {
+        return erro(400, `O acesso é pelo e-mail corporativo: informe um endereço terminado em ${DOMINIO_EMAIL}.`);
       }
       const id = texto(corpo.usuario && corpo.usuario.id, 40);
       const alvo = id ? estado.usuarios.find((u) => u.id === id) : null;
       if (id && !alvo) return erro(404, "Acesso não encontrado.");
 
-      // Nome e e-mail servem para entrar, então não podem repetir.
-      const repetido = estado.usuarios.find((u) => u.id !== id && (
-        normal(u.nome) === normal(limpo.nome) ||
-        (limpo.email && normal(u.email) === normal(limpo.email))
-      ));
-      if (repetido) return erro(409, `Já existe um acesso com esse nome ou e-mail (${repetido.nome}).`);
+      // O e-mail é a identidade de quem entra: não pode repetir.
+      const repetido = estado.usuarios.find((u) => u.id !== id && normal(u.email) === normal(limpo.email));
+      if (repetido) return erro(409, `Este e-mail já tem acesso (${repetido.nome}).`);
 
       let registro;
       if (alvo) {
