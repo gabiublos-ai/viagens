@@ -1,12 +1,12 @@
 # Publicar o site
 
 O app roda de quatro jeitos. O primeiro é o que você pediu: um endereço na
-internet, protegido por senha, com todo mundo lançando na mesma base.
+internet, com login por pessoa e todo mundo lançando na mesma base.
 
 | | Onde os dados ficam | Quem acessa |
 |---|---|---|
-| **Netlify** | **Netlify Blobs** | **quem tem o endereço e a senha** |
-| Cloudflare Workers | banco D1 | quem tem o endereço e a senha |
+| **Netlify** | **Netlify Blobs** | **quem tem um acesso criado no sistema** |
+| Cloudflare Workers | banco D1 | quem tem um acesso criado no sistema |
 | `servidor/local.js` | num arquivo JSON na máquina que roda | quem alcança a máquina |
 | `dist/gestao-viagens.html` | no navegador de quem abriu | quem tem o arquivo |
 
@@ -29,16 +29,21 @@ Em cerca de um minuto o site sobe num endereço como
 Site details → Change site name** dá para trocar por algo como
 `viagens-acegaming`.
 
-Nesse primeiro momento o app ainda não entra: falta a senha.
+Nesse primeiro momento o app ainda não entra: falta a senha mestre.
 
-### 2. Definir a senha de acesso
+### 2. Definir a senha mestre
+
+Cada pessoa da equipe vai ter o seu próprio login, criado dentro do sistema.
+Antes disso é preciso uma **senha mestre**: é ela que abre a porta na primeira
+vez e que serve de emergência se ninguém mais conseguir entrar. Ela fica só na
+configuração do site e não circula pela equipe.
 
 Abra **`/senha.html`** no seu site — por exemplo
-`https://viagens-acegaming.netlify.app/senha.html`.
+`https://acegamingviagens.netlify.app/senha.html`.
 
-Digite a senha que a equipe vai usar e clique em **Gerar**. A senha é
-transformada ali mesmo, no seu navegador, e não é enviada a lugar nenhum. A
-página devolve dois valores: `SENHA_HASH` e `SESSAO_SEGREDO`.
+Digite a senha mestre e clique em **Gerar**. A senha é transformada ali mesmo,
+no seu navegador, e não é enviada a lugar nenhum. A página devolve dois
+valores: `SENHA_HASH` e `SESSAO_SEGREDO`.
 
 Depois, no Netlify:
 
@@ -47,14 +52,28 @@ Depois, no Netlify:
    os nomes precisam ser exatamente esses.
 3. **Deploys → Trigger deploy → Deploy site**.
 
-Pronto. Abra o endereço do site: aparece a tela de senha, e quem entrar vê e
-lança na mesma base.
+### 3. Criar os acessos da equipe
 
-### Trocar a senha depois
+Abra o site, entre com o seu nome e a senha mestre, e vá em
+**Ajustes → Acessos → + Novo acesso**. Para cada pessoa informe o nome, o
+e-mail e o que ela pode fazer (*administra* ou *lança e edita*). O sistema
+mostra uma senha provisória — copie e entregue por um canal privado. Na
+primeira entrada a pessoa escolhe a senha dela, e a provisória deixa de valer.
+
+Crie o seu próprio acesso como **administra** e passe a usá-lo no dia a dia,
+deixando a senha mestre guardada. A partir daí tudo que for incluído, alterado
+ou excluído aparece em **Ajustes → Registro de alterações**, com nome e
+horário.
+
+### Trocar a senha mestre depois
 
 Gere valores novos em `/senha.html`, atualize `SENHA_HASH` nas variáveis e
-publique de novo. Trocar também o `SESSAO_SEGREDO` derruba na hora todas as
-sessões abertas — útil se alguém sair da empresa.
+publique de novo. Isso não mexe nos acessos individuais nem derruba ninguém.
+
+Trocar também o `SESSAO_SEGREDO` derruba na hora todas as sessões abertas.
+Para tirar o acesso de uma pessoa só, o caminho é outro e não precisa de
+deploy: **Ajustes → Acessos**, desativar ou remover — a sessão dela cai na
+requisição seguinte.
 
 ### Publicar uma versão nova do app
 
@@ -96,8 +115,8 @@ O comando acima imprime um `database_id`. Copie e cole em `wrangler.toml`, na
 linha `database_id = "PREENCHA_COM_O_ID_DO_SEU_BANCO"`.
 
 ```sh
-# 3. escolher a senha de acesso
-node servidor/senha.js "a senha que a equipe vai usar"
+# 3. escolher a senha mestre (os acessos da equipe são criados dentro do app)
+node servidor/senha.js "a senha mestre"
 ```
 
 Isso imprime dois valores, `SENHA_HASH` e `SESSAO_SEGREDO`. A senha em si não
@@ -115,17 +134,21 @@ npx wrangler deploy
 
 No fim aparece o endereço, algo como
 `https://gestao-viagens.SEU-USUARIO.workers.dev`. É esse link que você
-distribui. Quem abrir vê a tela de senha; quem entrar, vê e lança na mesma base.
+distribui. Quem abrir vê a tela de login; cada pessoa entra com o seu acesso e
+todas lançam na mesma base. Entre com a senha mestre e crie os acessos em
+**Ajustes → Acessos**.
 
-### Trocar a senha depois
+### Trocar a senha mestre depois
 
 ```sh
-node servidor/senha.js "a nova senha"
+node servidor/senha.js "a nova senha mestre"
 npx wrangler secret put SENHA_HASH
 ```
 
-As sessões abertas continuam valendo até 30 dias. Para derrubar todo mundo na
-hora, troque também o `SESSAO_SEGREDO`.
+Isso não mexe nos acessos individuais. As sessões abertas continuam valendo até
+30 dias; para derrubar todo mundo na hora, troque também o `SESSAO_SEGREDO`.
+Para tirar o acesso de uma pessoa só, desative-a em **Ajustes → Acessos** — vale
+na requisição seguinte, sem deploy.
 
 ### Publicar uma versão nova do app
 
@@ -145,7 +168,7 @@ Routes → Add custom domain**.
 
 ## Rodar numa máquina sua (ou num VPS)
 
-Mesmo app, mesma senha, guardando o estado num arquivo JSON:
+Mesmo app, mesmos acessos, guardando o estado num arquivo JSON:
 
 ```sh
 node servidor/senha.js "sua senha"     # gere os dois valores

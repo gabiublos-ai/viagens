@@ -976,7 +976,104 @@
     return "Última alteração: " + formatada + (m.atualizadoPor ? " · por " + m.atualizadoPor : "");
   }
 
-  function ajustesView() {
+  // ---------- acessos e registro de alterações ----------
+
+  var ROTULO_PAPEL = { admin: "Administra", editor: "Lança e edita" };
+
+  function quando(iso, comHora) {
+    if (!iso) return "—";
+    var d = new Date(iso);
+    if (isNaN(d)) return "—";
+    return d.toLocaleDateString("pt-BR") +
+      (comHora ? " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "");
+  }
+
+  /** Quem tem acesso ao sistema. Só quem administra enxerga e mexe. */
+  function acessosCard() {
+    var lista = C.usuarios;
+    var eu = C.meta;
+
+    var linhas = lista.map(function (u) {
+      return "<tr" + (u.ativo ? "" : ' class="inativo"') + ">" +
+        '<td><button class="link-cel" data-acao="editar-acesso" data-id="' + esc(u.id) + '">' +
+        esc(u.nome) + "</button>" +
+        (u.id === eu.id ? ' <span class="chip">você</span>' : "") +
+        (u.trocarSenha ? ' <span class="chip warn" title="Vai definir a senha no próximo acesso">senha provisória</span>' : "") +
+        '<div class="t-sub">' + esc(u.email || "entra pelo nome") + "</div></td>" +
+        "<td>" + esc(ROTULO_PAPEL[u.papel] || u.papel) + "</td>" +
+        "<td>" + (u.ativo ? '<span class="chip ok">ativo</span>' : '<span class="chip">desativado</span>') + "</td>" +
+        '<td class="num t-sub">' + quando(u.ultimoAcesso, true) + "</td>" +
+        "</tr>";
+    }).join("");
+
+    return '<div class="card" style="grid-column:1/-1"><div class="card-head"><h2>Acessos</h2>' +
+      '<span class="chip">' + lista.length + "</span><span class=\"grow\"></span>" +
+      '<button class="btn btn-sm btn-primary" data-acao="novo-acesso">+ Novo acesso</button></div>' +
+      '<div class="card-body flush">' +
+      '<div class="note" style="margin:12px 14px 0">Cada pessoa entra com o seu nome (ou e-mail) e a sua própria senha, ' +
+      "e tudo que ela incluir ou alterar fica registrado no nome dela. " +
+      "<strong>Administra</strong> pode criar e remover acessos; <strong>lança e edita</strong> faz todo o resto. " +
+      "Ao criar um acesso você define uma senha provisória — a pessoa escolhe a definitiva na primeira entrada.</div>" +
+      '<div class="table-wrap" style="max-height:360px"><table><thead><tr>' +
+      "<th>Pessoa</th><th>Pode</th><th>Situação</th><th class=\"num\">Último acesso</th>" +
+      "</tr></thead><tbody>" +
+      (linhas || '<tr><td colspan="4" class="t-sub" style="padding:16px">Nenhum acesso individual criado ainda — ' +
+        "por enquanto só a senha mestre entra.</td></tr>") +
+      "</tbody></table></div></div></div>";
+  }
+
+  /**
+   * Registro de alterações. A lista vem do servidor por rota própria, então a
+   * view desenha o que já chegou e o app repinta quando a busca termina.
+   */
+  function historicoCard(estado) {
+    var reg = estado.registro || { carregando: true, itens: [], total: 0 };
+    var filtro = estado.registroFiltros || { pessoa: "", acao: "" };
+
+    var pessoas = {};
+    reg.itens.forEach(function (h) { if (h.por) pessoas[h.por] = 1; });
+
+    var itens = reg.itens.filter(function (h) {
+      if (filtro.pessoa && h.por !== filtro.pessoa) return false;
+      if (filtro.acao && h.acao !== filtro.acao) return false;
+      return true;
+    });
+
+    var corpo;
+    if (reg.carregando) {
+      corpo = '<tr><td colspan="4" class="t-sub" style="padding:16px">Carregando…</td></tr>';
+    } else if (!itens.length) {
+      corpo = '<tr><td colspan="4" class="t-sub" style="padding:16px">' +
+        (reg.itens.length ? "Nada com esse filtro." : "Nenhuma alteração registrada ainda.") + "</td></tr>";
+    } else {
+      corpo = itens.map(function (h) {
+        return "<tr><td class=\"num t-sub\" style=\"white-space:nowrap\">" + quando(h.em, true) + "</td>" +
+          "<td>" + esc(h.por || "—") +
+          (h.mestre ? ' <span class="chip warn" title="Entrou pela senha mestre">mestre</span>' : "") + "</td>" +
+          '<td><span class="acao acao-' + esc(h.acao) + '">' + esc(h.acao) + "</span> " +
+          esc(h.entidade) + ' <strong>' + esc(h.alvo) + "</strong></td>" +
+          '<td class="t-sub">' + esc(h.resumo || "—") + "</td></tr>";
+      }).join("");
+    }
+
+    return '<div class="card" style="grid-column:1/-1"><div class="card-head">' +
+      "<h2>Registro de alterações</h2>" +
+      '<span class="chip">' + (reg.total || 0) + "</span><span class=\"grow\"></span>" +
+      '<select name="registro-pessoa" aria-label="Filtrar por pessoa"><option value="">Todas as pessoas</option>' +
+      Object.keys(pessoas).sort().map(function (n) {
+        return '<option value="' + esc(n) + '"' + (filtro.pessoa === n ? " selected" : "") + ">" + esc(n) + "</option>";
+      }).join("") + "</select>" +
+      '<select name="registro-acao" aria-label="Filtrar por tipo"><option value="">Tudo</option>' +
+      ["incluiu", "alterou", "excluiu", "importou", "restaurou"].map(function (a) {
+        return '<option value="' + a + '"' + (filtro.acao === a ? " selected" : "") + ">" + a + "</option>";
+      }).join("") + "</select>" +
+      '<button class="btn btn-sm" data-acao="atualizar-registro">Atualizar</button></div>' +
+      '<div class="card-body flush"><div class="table-wrap rolagem" style="max-height:420px"><table class="compacta"><thead><tr>' +
+      '<th class="num">Quando</th><th>Quem</th><th>O que</th><th>Detalhe</th>' +
+      "</tr></thead><tbody>" + corpo + "</tbody></table></div></div></div>";
+  }
+
+  function ajustesView(estado) {
     var r = C.db.params.regras;
     var html = '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(330px,1fr))">';
 
@@ -1025,8 +1122,9 @@
     html += '<div class="card"><div class="card-head"><h2>Backup e exportação</h2></div>' +
       '<div class="card-body grid" style="gap:12px">' +
       (C.modo === "servidor"
-        ? '<div class="note">Os dados ficam no servidor: todo mundo que entra com a senha vê e lança na mesma base. ' +
-          "Um backup guarda uma foto do momento — útil antes de uma mudança grande.</div>"
+        ? '<div class="note">Os dados ficam no servidor: todo mundo que tem acesso vê e lança na mesma base, ' +
+          "cada um com o seu login. Um backup guarda uma foto do momento — útil antes de uma mudança grande. " +
+          "Ele leva os lançamentos, não os acessos nem as senhas.</div>"
         : '<div class="note">Os dados ficam salvos neste navegador. Faça um backup antes de trocar de máquina ou limpar o histórico.</div>') +
       '<div class="row">' +
       '<button class="btn btn-primary" data-acao="backup-baixar">Baixar backup (.json)</button>' +
@@ -1046,6 +1144,11 @@
       (C.modo === "servidor" ? ", para todo mundo." : " aqui.") + "</span></div>" +
       "</div></div>";
 
+    if (C.modo === "servidor") {
+      if (C.ehAdmin()) html += acessosCard();
+      html += historicoCard(estado);
+    }
+
     html += '<div class="card"><div class="card-head"><h2>Como usar</h2></div>' +
       '<div class="card-body grid" style="gap:10px;font-size:13px;color:var(--text-2)">' +
       "<p><strong>Lançar viagem:</strong> botão <em>Nova viagem</em>, no topo. Escolha o colaborador e a área, " +
@@ -1058,6 +1161,10 @@
       "o valor aprovado no início continua visível e dá para medir quanto as remarcações custaram no ano.</p>" +
       "<p><strong>Uber:</strong> aba Uber, cole o relatório e importe. Nome novo aparece como " +
       "<em>⚠ incluir no De-Para</em>, com um botão para vincular na hora.</p>" +
+      "<p><strong>Acessos:</strong> cada pessoa entra com o seu nome e a sua senha. " +
+      "Quem administra cria o acesso aqui mesmo e entrega uma senha provisória; a pessoa escolhe a definitiva " +
+      "na primeira entrada. Tudo que é incluído, alterado ou excluído fica no <em>Registro de alterações</em>, " +
+      "com nome e horário — e cada viagem mostra quem lançou e quem mexeu por último.</p>" +
       "</div></div>";
 
     html += "</div>";

@@ -723,6 +723,31 @@ tbody tr:hover td.col-acoes { background: var(--surface-2); }
   .kpi-value { font-size: 21px; }
 }
 
+/* ---------- acessos e registro de alterações ---------- */
+
+tbody tr.inativo td { opacity: .55; }
+
+.acao {
+  display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
+  text-transform: uppercase; padding: 1px 6px; border-radius: var(--r-sm);
+  background: var(--surface-2); color: var(--text-2); margin-right: 4px;
+}
+.acao-incluiu   { background: var(--good-bg); color: var(--good); }
+.acao-alterou   { background: var(--accent-soft); color: var(--accent); }
+.acao-excluiu   { background: var(--critical-bg); color: var(--critical); }
+.acao-importou  { background: var(--warning-bg); color: var(--warning); }
+.acao-restaurou { background: var(--warning-bg); color: var(--warning); }
+
+/* Senha provisória mostrada uma única vez, para ser copiada e entregue. */
+.senha-gerada {
+  font-family: var(--mono); font-size: 15px; letter-spacing: .04em;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 10px 12px; text-align: center; user-select: all;
+}
+
+/* Carimbo de autoria no rodapé do formulário de viagem. */
+.autoria { font-size: 11.5px; color: var(--text-2); line-height: 1.5; }
+
 </style>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='19' font-size='19'>✈️</text></svg>">
 </head>
@@ -3636,11 +3661,26 @@ window.SEED = {
       );
     },
 
-    entrar: function (senha, nome) {
-      return chamar("POST", "/sessao", { senha: senha, nome: nome });
+    entrar: function (usuario, senha) {
+      return chamar("POST", "/sessao", { usuario: usuario, senha: senha });
     },
 
     sair: function () { return chamar("DELETE", "/sessao"); },
+
+    trocarPropriaSenha: function (atual, nova) {
+      return chamar("PUT", "/senha", { atual: atual, nova: nova });
+    },
+
+    usuarios: function () { return chamar("GET", "/usuarios"); },
+    salvarUsuario: function (usuario, senha) {
+      return chamar("PUT", "/usuario", { usuario: usuario, senha: senha || "" });
+    },
+    excluirUsuario: function (id) { return chamar("DELETE", "/usuario/" + encodeURIComponent(id)); },
+    redefinirSenha: function (id, nova) {
+      return chamar("POST", "/usuario/" + encodeURIComponent(id) + "/senha", { nova: nova });
+    },
+
+    historico: function (limite) { return chamar("GET", "/historico?limite=" + (limite || 200)); },
 
     revisao: function () { return chamar("GET", "/revisao"); },
     estado: function () { return chamar("GET", "/estado"); },
@@ -3666,6 +3706,10 @@ window.SEED = {
   };
 
   // ---------- modo local ----------
+
+  function naoDisponivel() {
+    return Promise.reject(new Error("Os acessos individuais só existem na versão publicada, com servidor."));
+  }
 
   /**
    * No modo local o app é dono do estado: cada operação mexe no objeto em memória
@@ -3700,7 +3744,17 @@ window.SEED = {
       entrar: function () { return Promise.resolve({}); },
       sair: function () { return Promise.resolve({}); },
       revisao: function () { return Promise.resolve({ revisao: 0 }); },
-      estado: function () { return persistir(); }
+      estado: function () { return persistir(); },
+
+      // Sem servidor não há com quem compartilhar a base: o arquivo aberto no
+      // navegador é de uma pessoa só, e não faz sentido controlar acesso nem
+      // registrar quem alterou.
+      usuarios: function () { return Promise.resolve({ usuarios: [] }); },
+      historico: function () { return Promise.resolve({ total: 0, historico: [] }); },
+      trocarPropriaSenha: naoDisponivel,
+      salvarUsuario: naoDisponivel,
+      excluirUsuario: naoDisponivel,
+      redefinirSenha: naoDisponivel
     };
 
     ["salvarViagem", "excluirViagem", "salvarColaborador", "excluirColaborador",
@@ -3849,7 +3903,9 @@ window.SEED = {
 
   var db = null;
   var armazem = null;
-  var meta = { revisao: 0, atualizadoEm: "", atualizadoPor: "", nome: "" };
+  var meta = { revisao: 0, atualizadoEm: "", atualizadoPor: "", nome: "",
+               id: "", papel: "editor", mestre: false, trocarSenha: false };
+  var usuarios = [];          // quem tem acesso, sem as senhas (só no modo servidor)
   var equipeAtualizada = 0;   // nº de cadastros mexidos na última migração, para avisar na tela
 
   /** Usado só quando o estado guardado vem sem alguma lista (defesa). */
@@ -3896,15 +3952,58 @@ window.SEED = {
     });
   }
 
-  function entrar(senha, nome) {
-    return armazem.entrar(senha, nome).then(function (estado) {
-      meta.nome = estado.nome || "";
+  function entrar(usuario, senha) {
+    return armazem.entrar(usuario, senha).then(function (estado) {
       assume(estado);
       return estado;
     });
   }
 
   function sair() { return armazem.sair(); }
+
+  /** Toda resposta do servidor traz quem está logado e quem tem acesso. */
+  function adotaSessao(estado) {
+    if (estado.sessao) {
+      meta.id = estado.sessao.id || "";
+      meta.nome = estado.sessao.nome || "";
+      meta.papel = estado.sessao.papel || "editor";
+      meta.mestre = !!estado.sessao.mestre;
+      meta.trocarSenha = !!estado.sessao.trocarSenha;
+    }
+    if (Array.isArray(estado.usuarios)) usuarios = estado.usuarios;
+  }
+
+  function ehAdmin() { return meta.papel === "admin"; }
+
+  function trocarPropriaSenha(atual, nova) {
+    return armazem.trocarPropriaSenha(atual, nova).then(aplica);
+  }
+
+  function salvarUsuario(usuario, senha) {
+    return armazem.salvarUsuario(usuario, senha).then(aplica);
+  }
+
+  function excluirUsuario(id) { return armazem.excluirUsuario(id).then(aplica); }
+
+  function redefinirSenha(id, nova) { return armazem.redefinirSenha(id, nova).then(aplica); }
+
+  /** Registro de quem incluiu, alterou ou excluiu — vem por rota própria. */
+  function historico(limite) { return armazem.historico(limite); }
+
+  /**
+   * Senha inicial legível: fácil de ditar por telefone e de digitar uma vez.
+   * Sem letra e número que se confundem (O/0, l/1) para não gerar retrabalho.
+   */
+  function senhaSugerida() {
+    var palavras = ["viagem", "aereo", "hotel", "embarque", "destino", "bagagem",
+                    "cidade", "roteiro", "diaria", "voo"];
+    var letras = "abcdefghijkmnpqrstuvwxyz";
+    var sorteio = crypto.getRandomValues(new Uint8Array(8));
+    var sufixo = "";
+    for (var i = 0; i < 4; i++) sufixo += letras[sorteio[i] % letras.length];
+    var numero = 100 + (sorteio[4] % 90) * 10 + (sorteio[5] % 10);
+    return palavras[sorteio[6] % palavras.length] + "-" + sufixo + "-" + numero;
+  }
 
   /** Adota o estado que veio do servidor (ou do navegador, no modo local). */
   function assume(estado) {
@@ -3913,6 +4012,7 @@ window.SEED = {
       meta.revisao = estado.revisao || 0;
       meta.atualizadoEm = estado.atualizadoEm || "";
       meta.atualizadoPor = estado.atualizadoPor || "";
+      adotaSessao(estado);
     } else if (window.SEED) {
       db = estadoInicial();
     } else {
@@ -3981,6 +4081,7 @@ window.SEED = {
       meta.revisao = estado.revisao || 0;
       meta.atualizadoEm = estado.atualizadoEm || "";
       meta.atualizadoPor = estado.atualizadoPor || "";
+      adotaSessao(estado);
       normalizaEstado();
     } else if (estado) {
       meta.atualizadoEm = estado.atualizadoEm || meta.atualizadoEm;
@@ -4939,6 +5040,10 @@ window.SEED = {
     // estado
     iniciar: iniciar, entrar: entrar, sair: sair, aoMudar: aoMudar,
     recarregar: recarregar, revisaoRemota: revisaoRemota,
+    ehAdmin: ehAdmin, trocarPropriaSenha: trocarPropriaSenha,
+    salvarUsuario: salvarUsuario, excluirUsuario: excluirUsuario,
+    redefinirSenha: redefinirSenha, historico: historico, senhaSugerida: senhaSugerida,
+    get usuarios() { return usuarios; },
     restaurarBase: restaurarBase, substituirEstado: substituirEstado, salvarParams: salvarParams,
     get equipeAtualizada() { return equipeAtualizada; },
     get meta() { return meta; },
@@ -5958,7 +6063,104 @@ window.SEED = {
     return "Última alteração: " + formatada + (m.atualizadoPor ? " · por " + m.atualizadoPor : "");
   }
 
-  function ajustesView() {
+  // ---------- acessos e registro de alterações ----------
+
+  var ROTULO_PAPEL = { admin: "Administra", editor: "Lança e edita" };
+
+  function quando(iso, comHora) {
+    if (!iso) return "—";
+    var d = new Date(iso);
+    if (isNaN(d)) return "—";
+    return d.toLocaleDateString("pt-BR") +
+      (comHora ? " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "");
+  }
+
+  /** Quem tem acesso ao sistema. Só quem administra enxerga e mexe. */
+  function acessosCard() {
+    var lista = C.usuarios;
+    var eu = C.meta;
+
+    var linhas = lista.map(function (u) {
+      return "<tr" + (u.ativo ? "" : ' class="inativo"') + ">" +
+        '<td><button class="link-cel" data-acao="editar-acesso" data-id="' + esc(u.id) + '">' +
+        esc(u.nome) + "</button>" +
+        (u.id === eu.id ? ' <span class="chip">você</span>' : "") +
+        (u.trocarSenha ? ' <span class="chip warn" title="Vai definir a senha no próximo acesso">senha provisória</span>' : "") +
+        '<div class="t-sub">' + esc(u.email || "entra pelo nome") + "</div></td>" +
+        "<td>" + esc(ROTULO_PAPEL[u.papel] || u.papel) + "</td>" +
+        "<td>" + (u.ativo ? '<span class="chip ok">ativo</span>' : '<span class="chip">desativado</span>') + "</td>" +
+        '<td class="num t-sub">' + quando(u.ultimoAcesso, true) + "</td>" +
+        "</tr>";
+    }).join("");
+
+    return '<div class="card" style="grid-column:1/-1"><div class="card-head"><h2>Acessos</h2>' +
+      '<span class="chip">' + lista.length + "</span><span class=\"grow\"></span>" +
+      '<button class="btn btn-sm btn-primary" data-acao="novo-acesso">+ Novo acesso</button></div>' +
+      '<div class="card-body flush">' +
+      '<div class="note" style="margin:12px 14px 0">Cada pessoa entra com o seu nome (ou e-mail) e a sua própria senha, ' +
+      "e tudo que ela incluir ou alterar fica registrado no nome dela. " +
+      "<strong>Administra</strong> pode criar e remover acessos; <strong>lança e edita</strong> faz todo o resto. " +
+      "Ao criar um acesso você define uma senha provisória — a pessoa escolhe a definitiva na primeira entrada.</div>" +
+      '<div class="table-wrap" style="max-height:360px"><table><thead><tr>' +
+      "<th>Pessoa</th><th>Pode</th><th>Situação</th><th class=\"num\">Último acesso</th>" +
+      "</tr></thead><tbody>" +
+      (linhas || '<tr><td colspan="4" class="t-sub" style="padding:16px">Nenhum acesso individual criado ainda — ' +
+        "por enquanto só a senha mestre entra.</td></tr>") +
+      "</tbody></table></div></div></div>";
+  }
+
+  /**
+   * Registro de alterações. A lista vem do servidor por rota própria, então a
+   * view desenha o que já chegou e o app repinta quando a busca termina.
+   */
+  function historicoCard(estado) {
+    var reg = estado.registro || { carregando: true, itens: [], total: 0 };
+    var filtro = estado.registroFiltros || { pessoa: "", acao: "" };
+
+    var pessoas = {};
+    reg.itens.forEach(function (h) { if (h.por) pessoas[h.por] = 1; });
+
+    var itens = reg.itens.filter(function (h) {
+      if (filtro.pessoa && h.por !== filtro.pessoa) return false;
+      if (filtro.acao && h.acao !== filtro.acao) return false;
+      return true;
+    });
+
+    var corpo;
+    if (reg.carregando) {
+      corpo = '<tr><td colspan="4" class="t-sub" style="padding:16px">Carregando…</td></tr>';
+    } else if (!itens.length) {
+      corpo = '<tr><td colspan="4" class="t-sub" style="padding:16px">' +
+        (reg.itens.length ? "Nada com esse filtro." : "Nenhuma alteração registrada ainda.") + "</td></tr>";
+    } else {
+      corpo = itens.map(function (h) {
+        return "<tr><td class=\"num t-sub\" style=\"white-space:nowrap\">" + quando(h.em, true) + "</td>" +
+          "<td>" + esc(h.por || "—") +
+          (h.mestre ? ' <span class="chip warn" title="Entrou pela senha mestre">mestre</span>' : "") + "</td>" +
+          '<td><span class="acao acao-' + esc(h.acao) + '">' + esc(h.acao) + "</span> " +
+          esc(h.entidade) + ' <strong>' + esc(h.alvo) + "</strong></td>" +
+          '<td class="t-sub">' + esc(h.resumo || "—") + "</td></tr>";
+      }).join("");
+    }
+
+    return '<div class="card" style="grid-column:1/-1"><div class="card-head">' +
+      "<h2>Registro de alterações</h2>" +
+      '<span class="chip">' + (reg.total || 0) + "</span><span class=\"grow\"></span>" +
+      '<select name="registro-pessoa" aria-label="Filtrar por pessoa"><option value="">Todas as pessoas</option>' +
+      Object.keys(pessoas).sort().map(function (n) {
+        return '<option value="' + esc(n) + '"' + (filtro.pessoa === n ? " selected" : "") + ">" + esc(n) + "</option>";
+      }).join("") + "</select>" +
+      '<select name="registro-acao" aria-label="Filtrar por tipo"><option value="">Tudo</option>' +
+      ["incluiu", "alterou", "excluiu", "importou", "restaurou"].map(function (a) {
+        return '<option value="' + a + '"' + (filtro.acao === a ? " selected" : "") + ">" + a + "</option>";
+      }).join("") + "</select>" +
+      '<button class="btn btn-sm" data-acao="atualizar-registro">Atualizar</button></div>' +
+      '<div class="card-body flush"><div class="table-wrap rolagem" style="max-height:420px"><table class="compacta"><thead><tr>' +
+      '<th class="num">Quando</th><th>Quem</th><th>O que</th><th>Detalhe</th>' +
+      "</tr></thead><tbody>" + corpo + "</tbody></table></div></div></div>";
+  }
+
+  function ajustesView(estado) {
     var r = C.db.params.regras;
     var html = '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(330px,1fr))">';
 
@@ -6007,8 +6209,9 @@ window.SEED = {
     html += '<div class="card"><div class="card-head"><h2>Backup e exportação</h2></div>' +
       '<div class="card-body grid" style="gap:12px">' +
       (C.modo === "servidor"
-        ? '<div class="note">Os dados ficam no servidor: todo mundo que entra com a senha vê e lança na mesma base. ' +
-          "Um backup guarda uma foto do momento — útil antes de uma mudança grande.</div>"
+        ? '<div class="note">Os dados ficam no servidor: todo mundo que tem acesso vê e lança na mesma base, ' +
+          "cada um com o seu login. Um backup guarda uma foto do momento — útil antes de uma mudança grande. " +
+          "Ele leva os lançamentos, não os acessos nem as senhas.</div>"
         : '<div class="note">Os dados ficam salvos neste navegador. Faça um backup antes de trocar de máquina ou limpar o histórico.</div>') +
       '<div class="row">' +
       '<button class="btn btn-primary" data-acao="backup-baixar">Baixar backup (.json)</button>' +
@@ -6028,6 +6231,11 @@ window.SEED = {
       (C.modo === "servidor" ? ", para todo mundo." : " aqui.") + "</span></div>" +
       "</div></div>";
 
+    if (C.modo === "servidor") {
+      if (C.ehAdmin()) html += acessosCard();
+      html += historicoCard(estado);
+    }
+
     html += '<div class="card"><div class="card-head"><h2>Como usar</h2></div>' +
       '<div class="card-body grid" style="gap:10px;font-size:13px;color:var(--text-2)">' +
       "<p><strong>Lançar viagem:</strong> botão <em>Nova viagem</em>, no topo. Escolha o colaborador e a área, " +
@@ -6040,6 +6248,10 @@ window.SEED = {
       "o valor aprovado no início continua visível e dá para medir quanto as remarcações custaram no ano.</p>" +
       "<p><strong>Uber:</strong> aba Uber, cole o relatório e importe. Nome novo aparece como " +
       "<em>⚠ incluir no De-Para</em>, com um botão para vincular na hora.</p>" +
+      "<p><strong>Acessos:</strong> cada pessoa entra com o seu nome e a sua senha. " +
+      "Quem administra cria o acesso aqui mesmo e entrega uma senha provisória; a pessoa escolhe a definitiva " +
+      "na primeira entrada. Tudo que é incluído, alterado ou excluído fica no <em>Registro de alterações</em>, " +
+      "com nome e horário — e cada viagem mostra quem lançou e quem mexeu por último.</p>" +
       "</div></div>";
 
     html += "</div>";
@@ -6076,7 +6288,9 @@ window.SEED = {
     filtros: { busca: "", mes: "", area: "", status: "", tipo: "", avisos: false, ordem: "data-desc" },
     uberFiltros: { busca: "", mes: "", situacao: "" },
     equipeFiltros: { busca: "", area: "" },
-    custoOrdem: { campo: "total", desc: true }
+    custoOrdem: { campo: "total", desc: true },
+    registro: { carregando: true, itens: [], total: 0 },
+    registroFiltros: { pessoa: "", acao: "" }
   };
 
   var ABAS = [
@@ -6123,7 +6337,12 @@ window.SEED = {
     }).join("");
 
     atualizaAnos();
-    C.aoMudar(function () { atualizaAnos(); render(); });
+    C.aoMudar(function () {
+      // Toda mudança na base gera uma linha no registro: força a rebusca.
+      estado.registro.pronto = false;
+      atualizaAnos();
+      render();
+    });
 
     var hash = (location.hash || "").replace("#", "");
     if (ABAS.some(function (a) { return a.id === hash; })) estado.aba = hash;
@@ -6149,10 +6368,10 @@ window.SEED = {
       'd="M12 1.2a10.8 10.8 0 1 0 0 21.6 10.8 10.8 0 0 0 0-21.6Zm-2.35 5.9 6.28 3.5a1.6 1.6 0 0 1 0 2.8l-6.28 3.5A1.6 1.6 0 0 1 7.3 15.5v-7a1.6 1.6 0 0 1 2.35-1.4Z"/></svg></div>' +
       "<h1>Gestão de Viagens</h1>" +
       '<p class="entrada-sub">Ace Gaming · apostou.bet.br</p>' +
-      '<div class="field"><label for="e-nome">Seu nome</label>' +
-      '<input type="text" id="e-nome" name="nome" autocomplete="name" placeholder="Como aparecer nas alterações" ' +
-      'value="' + esc(localStorage.getItem("gvc.nome") || "") + '"></div>' +
-      '<div class="field"><label for="e-senha">Senha de acesso</label>' +
+      '<div class="field"><label for="e-nome">Seu nome ou e-mail</label>' +
+      '<input type="text" id="e-nome" name="usuario" autocomplete="username" placeholder="Como foi cadastrado no acesso" ' +
+      'value="' + esc(localStorage.getItem("gvc.nome") || "") + '" required></div>' +
+      '<div class="field"><label for="e-senha">Sua senha</label>' +
       '<input type="password" id="e-senha" name="senha" autocomplete="current-password" required></div>' +
       '<button class="btn btn-primary" type="submit">Entrar</button>' +
       '<p class="entrada-erro" data-erro>' + esc(mensagem || "") + "</p>" +
@@ -6168,9 +6387,10 @@ window.SEED = {
       botao.textContent = "Entrando…";
       aviso.textContent = "";
 
-      C.entrar(fd.get("senha"), (fd.get("nome") || "").trim()).then(function () {
-        localStorage.setItem("gvc.nome", (fd.get("nome") || "").trim());
-        montar();
+      C.entrar((fd.get("usuario") || "").trim(), fd.get("senha")).then(function () {
+        localStorage.setItem("gvc.nome", (fd.get("usuario") || "").trim());
+        if (C.meta.trocarSenha) telaNovaSenha();
+        else montar();
       }, function (e) {
         botao.disabled = false;
         botao.textContent = "Entrar";
@@ -6178,7 +6398,52 @@ window.SEED = {
         form.querySelector('[name="senha"]').select();
       });
     });
-    form.querySelector((localStorage.getItem("gvc.nome") ? '[name="senha"]' : '[name="nome"]')).focus();
+    form.querySelector((localStorage.getItem("gvc.nome") ? '[name="senha"]' : '[name="usuario"]')).focus();
+  }
+
+  /**
+   * Acesso novo, ou senha redefinida por quem administra: a pessoa escolhe a
+   * sua senha antes de ver a base. A provisória vale só para esta entrada.
+   */
+  function telaNovaSenha() {
+    document.body.classList.add("trancado");
+    document.getElementById("view").innerHTML =
+      '<form class="entrada" id="form-nova-senha">' +
+      '<div class="entrada-marca" aria-hidden="true">' +
+      '<svg viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" ' +
+      'd="M12 1.2a10.8 10.8 0 1 0 0 21.6 10.8 10.8 0 0 0 0-21.6Zm-2.35 5.9 6.28 3.5a1.6 1.6 0 0 1 0 2.8l-6.28 3.5A1.6 1.6 0 0 1 7.3 15.5v-7a1.6 1.6 0 0 1 2.35-1.4Z"/></svg></div>' +
+      "<h1>Escolha a sua senha</h1>" +
+      '<p class="entrada-sub">' + esc(C.meta.nome) + " · a senha provisória vale só para esta entrada</p>" +
+      '<div class="field"><label for="n-senha">Senha nova</label>' +
+      '<input type="password" id="n-senha" name="nova" autocomplete="new-password" minlength="8" required></div>' +
+      '<div class="field"><label for="n-senha2">Repita a senha</label>' +
+      '<input type="password" id="n-senha2" name="repete" autocomplete="new-password" minlength="8" required></div>' +
+      '<button class="btn btn-primary" type="submit">Salvar e entrar</button>' +
+      '<p class="entrada-erro" data-erro></p>' +
+      "</form>";
+
+    var form = document.getElementById("form-nova-senha");
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var fd = new FormData(form);
+      var aviso = form.querySelector("[data-erro]");
+      var botao = form.querySelector("button");
+      if (fd.get("nova") !== fd.get("repete")) {
+        aviso.textContent = "As duas senhas não são iguais.";
+        return;
+      }
+      botao.disabled = true;
+      botao.textContent = "Salvando…";
+      C.trocarPropriaSenha("", fd.get("nova")).then(function () {
+        montar();
+        toast("Senha definida");
+      }, function (e) {
+        botao.disabled = false;
+        botao.textContent = "Salvar e entrar";
+        aviso.textContent = e.message || "Não consegui salvar a senha.";
+      });
+    });
+    form.querySelector('[name="nova"]').focus();
   }
 
   function mostraQuemEstaDentro() {
@@ -6186,9 +6451,14 @@ window.SEED = {
     if (!alvo) return;
     if (C.modo !== "servidor") { alvo.hidden = true; return; }
     alvo.hidden = false;
-    var nome = C.meta.nome || localStorage.getItem("gvc.nome") || "";
+    var m = C.meta;
+    var nome = m.nome || localStorage.getItem("gvc.nome") || "";
+    var titulo = m.mestre ? "Entrou pela senha mestre"
+      : m.papel === "admin" ? "Administra os acessos" : "Lança e edita";
     alvo.innerHTML =
-      (nome ? '<span class="chip accent" title="Sessão aberta">' + esc(nome) + "</span>" : "") +
+      (nome ? '<span class="chip accent" title="' + esc(titulo) + '">' + esc(nome) +
+        (m.mestre ? " · mestre" : m.papel === "admin" ? " · admin" : "") + "</span>" : "") +
+      (m.mestre ? "" : '<button class="btn btn-ghost btn-sm" data-acao="minha-senha">Minha senha</button>') +
       '<button class="btn btn-ghost btn-sm" data-acao="sair">Sair</button>';
   }
 
@@ -6240,6 +6510,23 @@ window.SEED = {
     }
     $view.innerHTML = conteudo;
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+
+    if (estado.aba === "ajustes" && C.modo === "servidor" && !estado.registro.pronto) carregarRegistro();
+  }
+
+  /** Busca o registro de alterações — lista grande, então vem por rota própria. */
+  function carregarRegistro(forcar) {
+    if (estado.registro.buscando) return;
+    if (forcar) estado.registro = { carregando: true, itens: [], total: 0 };
+    estado.registro.buscando = true;
+    estado.registro.pronto = true;
+    C.historico(400).then(function (r) {
+      estado.registro = { carregando: false, pronto: true, itens: r.historico || [], total: r.total || 0 };
+      if (estado.aba === "ajustes") render();
+    }, function () {
+      estado.registro = { carregando: false, pronto: true, itens: [], total: 0 };
+      if (estado.aba === "ajustes") render();
+    });
   }
 
   function irPara(aba) { estado.aba = aba; render(); }
@@ -6334,6 +6621,12 @@ window.SEED = {
       case "sair":
         C.sair().then(function () { location.reload(); });
         break;
+      case "minha-senha": abrirMinhaSenha(); break;
+      case "novo-acesso": abrirAcesso(null); break;
+      case "editar-acesso":
+        abrirAcesso(C.usuarios.filter(function (u) { return u.id === id; })[0]);
+        break;
+      case "atualizar-registro": carregarRegistro(true); break;
       case "tema": alternarTema(); break;
       case "usar-regra": aplicarRegraAlimentacao(botao.closest("form")); break;
       case "fechar": botao.closest("dialog").close(); break;
@@ -6343,6 +6636,8 @@ window.SEED = {
   function aoMudarCampo(ev) {
     var alvo = ev.target;
     if (alvo.id === "ano") { estado.ano = alvo.value; render(); return; }
+    if (alvo.name === "registro-pessoa") { estado.registroFiltros.pessoa = alvo.value; render(); return; }
+    if (alvo.name === "registro-acao") { estado.registroFiltros.acao = alvo.value; render(); return; }
     if (alvo.name === "mesCal") { estado.mesCal = alvo.value; render(); return; }
 
     var mapa = {
@@ -6382,6 +6677,21 @@ window.SEED = {
   // ---------- formulário de viagem ----------
 
   var CAMPOS_MOEDA = ["aereo", "hospedagem", "alimentacao", "transporte", "custoAlteracao"];
+
+  /** Quem lançou e quem mexeu por último — aparece no rodapé do formulário. */
+  function autoria(v) {
+    if (!v || !v.id || (!v.criadoPor && !v.alteradoPor)) return "";
+    function linha(rotulo, quem, quando) {
+      if (!quem) return "";
+      var d = quando ? new Date(quando) : null;
+      return rotulo + " <strong>" + esc(quem) + "</strong>" +
+        (d && !isNaN(d) ? " em " + d.toLocaleString("pt-BR") : "");
+    }
+    var partes = [linha("Lançada por", v.criadoPor, v.criadoEm),
+                  linha("Última alteração por", v.alteradoPor, v.alteradoEm)].filter(Boolean);
+    return '<p class="autoria" style="margin:14px 0 0;border-top:1px solid var(--border);padding-top:10px">' +
+      partes.join(" · ") + "</p>";
+  }
 
   function abrirViagem(viagem, pre) {
     var novo = !viagem;
@@ -6462,7 +6772,8 @@ window.SEED = {
 
       '<div class="summary" style="margin-top:16px" data-resumo></div>' +
       '<datalist id="destinos">' + destinos.map(function (d) { return '<option value="' + esc(d) + '">'; }).join("") + "</datalist>" +
-      '<datalist id="aeroportos">' + window.BR.opcoesAeroporto() + "</datalist>";
+      '<datalist id="aeroportos">' + window.BR.opcoesAeroporto() + "</datalist>" +
+      autoria(v);
 
     var dialogo = abrirModal({
       titulo: novo ? "Nova viagem" : (ehAlteracao ? "Alteração da viagem #" + v.refId : "Viagem #" + v.id),
@@ -7645,6 +7956,130 @@ window.SEED = {
   }
 
   // ---------- modal, toast, tooltip, tema ----------
+
+  // ---------- acessos ----------
+
+  /** Mostra a senha provisória uma vez, para ser copiada e entregue à pessoa. */
+  function mostrarSenhaGerada(nome, senha) {
+    var d = abrirModal({
+      titulo: "Senha de " + nome,
+      corpo: '<div class="grid" style="gap:12px">' +
+        '<div class="note">Entregue esta senha por um canal privado. Ela vale para uma entrada: ' +
+        "na primeira vez que " + esc(nome) + " entrar, o sistema pede para escolher a senha definitiva. " +
+        "Depois de fechar esta janela a senha não aparece mais em lugar nenhum.</div>" +
+        '<div class="senha-gerada">' + esc(senha) + "</div></div>",
+      rodape: '<button class="btn" data-acao="copiar-senha">Copiar senha</button>' +
+        '<span class="grow"></span><button class="btn btn-primary" data-acao="fechar">Entendi</button>',
+      estreito: true
+    });
+    d.querySelector('[data-acao="copiar-senha"]').addEventListener("click", function () {
+      navigator.clipboard.writeText(senha).then(function () { toast("Senha copiada"); },
+        function () { toast("Não consegui copiar — selecione e copie à mão"); });
+    });
+  }
+
+  function abrirAcesso(u) {
+    var novo = !u;
+    var d = u || { nome: "", email: "", papel: "editor", ativo: true };
+    var senhaInicial = novo ? C.senhaSugerida() : "";
+
+    var dialogo = abrirModal({
+      titulo: novo ? "Novo acesso" : "Acesso de " + d.nome,
+      corpo: '<form id="form-acesso" method="dialog"><div class="form-grid">' +
+        V.campo("Nome", '<input type="text" name="nome" value="' + esc(d.nome) + '" required>', "c12",
+                "É por ele, ou pelo e-mail, que a pessoa entra — e é o nome que aparece no registro de alterações.") +
+        V.campo("E-mail corporativo", '<input type="email" name="email" value="' + esc(d.email || "") + '">', "c12",
+                "Opcional. Serve como segunda forma de entrar.") +
+        V.campo("Pode", V.selectHTML("papel", [
+          { v: "editor", r: "Lançar e editar viagens, Uber e cadastros" },
+          { v: "admin", r: "Tudo, inclusive criar e remover acessos" }
+        ], d.papel), "c12") +
+        (novo
+          ? V.campo("Senha provisória",
+              '<input type="text" name="senha" class="mono" value="' + esc(senhaInicial) + '" minlength="8" required>',
+              "c12", "A pessoa troca por uma sua na primeira entrada.")
+          : V.campo("Situação",
+              '<label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="ativo" style="width:auto"' +
+              (d.ativo ? " checked" : "") + "> Acesso ativo</label>", "c12",
+              "Desativar mantém o histórico da pessoa e impede a entrada.")) +
+        "</div></form>",
+      rodape: (novo ? "" :
+        '<button class="btn btn-sm" data-acao="resetar-senha">Redefinir senha</button>' +
+        '<button class="btn btn-sm btn-danger btn-ghost" data-acao="remover-acesso">Remover</button>') +
+        '<span class="grow"></span><button class="btn" data-acao="fechar">Cancelar</button>' +
+        '<button class="btn btn-primary" type="submit" form="form-acesso">' +
+        (novo ? "Criar acesso" : "Salvar") + "</button>",
+      estreito: true
+    });
+
+    var form = dialogo.querySelector("form");
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var fd = new FormData(form);
+      var dados = {
+        id: novo ? "" : d.id,
+        nome: (fd.get("nome") || "").trim(),
+        email: (fd.get("email") || "").trim(),
+        papel: fd.get("papel"),
+        ativo: novo ? true : !!fd.get("ativo")
+      };
+      var senha = novo ? String(fd.get("senha") || "") : "";
+      C.salvarUsuario(dados, senha).then(function () {
+        dialogo.close();
+        if (novo) mostrarSenhaGerada(dados.nome, senha);
+        else toast("Acesso atualizado");
+        render();
+      }, falhou);
+    });
+
+    var btnReset = dialogo.querySelector('[data-acao="resetar-senha"]');
+    if (btnReset) btnReset.addEventListener("click", function () {
+      var nova = C.senhaSugerida();
+      if (!confirm("Gerar uma senha provisória nova para " + d.nome + "? A senha atual deixa de valer.")) return;
+      C.redefinirSenha(d.id, nova).then(function () {
+        dialogo.close();
+        mostrarSenhaGerada(d.nome, nova);
+        render();
+      }, falhou);
+    });
+
+    var btnRemover = dialogo.querySelector('[data-acao="remover-acesso"]');
+    if (btnRemover) btnRemover.addEventListener("click", function () {
+      if (!confirm("Remover o acesso de " + d.nome + "? O que ela já lançou continua na base e no registro.")) return;
+      C.excluirUsuario(d.id).then(function () {
+        dialogo.close();
+        toast("Acesso removido");
+        render();
+      }, function (e) { alert((e && e.message) || "Não consegui remover."); });
+    });
+  }
+
+  function abrirMinhaSenha() {
+    var dialogo = abrirModal({
+      titulo: "Minha senha",
+      corpo: '<form id="form-minha-senha" method="dialog"><div class="form-grid">' +
+        V.campo("Senha atual", '<input type="password" name="atual" autocomplete="current-password" required>', "c12") +
+        V.campo("Senha nova", '<input type="password" name="nova" autocomplete="new-password" minlength="8" required>', "c12",
+                "Pelo menos 8 caracteres. Uma frase curta funciona melhor que uma palavra difícil.") +
+        V.campo("Repita a senha nova", '<input type="password" name="repete" autocomplete="new-password" minlength="8" required>', "c12") +
+        '</div><p class="entrada-erro" data-erro></p></form>',
+      rodape: '<span class="grow"></span><button class="btn" data-acao="fechar">Cancelar</button>' +
+        '<button class="btn btn-primary" type="submit" form="form-minha-senha">Trocar senha</button>',
+      estreito: true
+    });
+
+    var form = dialogo.querySelector("form");
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var fd = new FormData(form);
+      var aviso = form.querySelector("[data-erro]");
+      if (fd.get("nova") !== fd.get("repete")) { aviso.textContent = "As duas senhas não são iguais."; return; }
+      C.trocarPropriaSenha(fd.get("atual"), fd.get("nova")).then(function () {
+        dialogo.close();
+        toast("Senha trocada");
+      }, function (e) { aviso.textContent = (e && e.message) || "Não consegui trocar a senha."; });
+    });
+  }
 
   function abrirModal(opcoes) {
     var d = document.createElement("dialog");

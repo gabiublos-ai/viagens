@@ -127,7 +127,9 @@
 
   var db = null;
   var armazem = null;
-  var meta = { revisao: 0, atualizadoEm: "", atualizadoPor: "", nome: "" };
+  var meta = { revisao: 0, atualizadoEm: "", atualizadoPor: "", nome: "",
+               id: "", papel: "editor", mestre: false, trocarSenha: false };
+  var usuarios = [];          // quem tem acesso, sem as senhas (só no modo servidor)
   var equipeAtualizada = 0;   // nº de cadastros mexidos na última migração, para avisar na tela
 
   /** Usado só quando o estado guardado vem sem alguma lista (defesa). */
@@ -174,15 +176,58 @@
     });
   }
 
-  function entrar(senha, nome) {
-    return armazem.entrar(senha, nome).then(function (estado) {
-      meta.nome = estado.nome || "";
+  function entrar(usuario, senha) {
+    return armazem.entrar(usuario, senha).then(function (estado) {
       assume(estado);
       return estado;
     });
   }
 
   function sair() { return armazem.sair(); }
+
+  /** Toda resposta do servidor traz quem está logado e quem tem acesso. */
+  function adotaSessao(estado) {
+    if (estado.sessao) {
+      meta.id = estado.sessao.id || "";
+      meta.nome = estado.sessao.nome || "";
+      meta.papel = estado.sessao.papel || "editor";
+      meta.mestre = !!estado.sessao.mestre;
+      meta.trocarSenha = !!estado.sessao.trocarSenha;
+    }
+    if (Array.isArray(estado.usuarios)) usuarios = estado.usuarios;
+  }
+
+  function ehAdmin() { return meta.papel === "admin"; }
+
+  function trocarPropriaSenha(atual, nova) {
+    return armazem.trocarPropriaSenha(atual, nova).then(aplica);
+  }
+
+  function salvarUsuario(usuario, senha) {
+    return armazem.salvarUsuario(usuario, senha).then(aplica);
+  }
+
+  function excluirUsuario(id) { return armazem.excluirUsuario(id).then(aplica); }
+
+  function redefinirSenha(id, nova) { return armazem.redefinirSenha(id, nova).then(aplica); }
+
+  /** Registro de quem incluiu, alterou ou excluiu — vem por rota própria. */
+  function historico(limite) { return armazem.historico(limite); }
+
+  /**
+   * Senha inicial legível: fácil de ditar por telefone e de digitar uma vez.
+   * Sem letra e número que se confundem (O/0, l/1) para não gerar retrabalho.
+   */
+  function senhaSugerida() {
+    var palavras = ["viagem", "aereo", "hotel", "embarque", "destino", "bagagem",
+                    "cidade", "roteiro", "diaria", "voo"];
+    var letras = "abcdefghijkmnpqrstuvwxyz";
+    var sorteio = crypto.getRandomValues(new Uint8Array(8));
+    var sufixo = "";
+    for (var i = 0; i < 4; i++) sufixo += letras[sorteio[i] % letras.length];
+    var numero = 100 + (sorteio[4] % 90) * 10 + (sorteio[5] % 10);
+    return palavras[sorteio[6] % palavras.length] + "-" + sufixo + "-" + numero;
+  }
 
   /** Adota o estado que veio do servidor (ou do navegador, no modo local). */
   function assume(estado) {
@@ -191,6 +236,7 @@
       meta.revisao = estado.revisao || 0;
       meta.atualizadoEm = estado.atualizadoEm || "";
       meta.atualizadoPor = estado.atualizadoPor || "";
+      adotaSessao(estado);
     } else if (window.SEED) {
       db = estadoInicial();
     } else {
@@ -259,6 +305,7 @@
       meta.revisao = estado.revisao || 0;
       meta.atualizadoEm = estado.atualizadoEm || "";
       meta.atualizadoPor = estado.atualizadoPor || "";
+      adotaSessao(estado);
       normalizaEstado();
     } else if (estado) {
       meta.atualizadoEm = estado.atualizadoEm || meta.atualizadoEm;
@@ -1217,6 +1264,10 @@
     // estado
     iniciar: iniciar, entrar: entrar, sair: sair, aoMudar: aoMudar,
     recarregar: recarregar, revisaoRemota: revisaoRemota,
+    ehAdmin: ehAdmin, trocarPropriaSenha: trocarPropriaSenha,
+    salvarUsuario: salvarUsuario, excluirUsuario: excluirUsuario,
+    redefinirSenha: redefinirSenha, historico: historico, senhaSugerida: senhaSugerida,
+    get usuarios() { return usuarios; },
     restaurarBase: restaurarBase, substituirEstado: substituirEstado, salvarParams: salvarParams,
     get equipeAtualizada() { return equipeAtualizada; },
     get meta() { return meta; },

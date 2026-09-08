@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gerar a senha de acesso</title>
+<title>Gerar a senha mestre</title>
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="assets/styles.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='19' font-size='19'>🔑</text></svg>">
@@ -33,7 +33,7 @@
         </svg>
       </span>
       <span>
-        <div class="brand-name">Gerar a senha de acesso</div>
+        <div class="brand-name">Gerar a senha mestre</div>
         <div class="brand-sub">Gestão de Viagens · Ace Gaming</div>
       </span>
     </div>
@@ -44,17 +44,25 @@
   <div class="card">
     <div class="card-body grid" style="gap:14px">
       <div class="note">
-        Escolha a senha que a equipe vai usar para entrar. Ela é transformada aqui mesmo, no seu
-        navegador — <strong>não é enviada para lugar nenhum</strong>. O que você copia e cola no
-        Netlify são os dois valores gerados, dos quais não dá para voltar à senha original.
+        Cada pessoa da equipe entra com o seu próprio login e a sua própria senha, criados dentro do
+        sistema em <strong>Ajustes → Acessos</strong>. Esta página gera outra coisa: a
+        <strong>senha mestre</strong>, guardada na configuração do site. Ela serve para criar o
+        primeiro acesso e como porta de emergência se ninguém mais conseguir entrar — não é para
+        circular pela equipe.
+      </div>
+      <div class="note">
+        A senha é transformada aqui mesmo, no seu navegador — <strong>não é enviada para lugar
+        nenhum</strong>. O que você copia e cola no Netlify são os dois valores gerados, dos quais
+        não dá para voltar à senha original.
       </div>
 
       <form id="form" class="grid" style="gap:12px">
         <div class="field">
-          <label for="senha">Senha de acesso</label>
+          <label for="senha">Senha mestre</label>
           <input type="text" id="senha" name="senha" autocomplete="off" spellcheck="false"
                  placeholder="pelo menos 8 caracteres">
-          <span class="hint">Uma frase curta funciona melhor que uma palavra difícil de lembrar.</span>
+          <span class="hint">Uma frase curta funciona melhor que uma palavra difícil de lembrar.
+          Guarde-a com quem administra o sistema.</span>
         </div>
         <div class="row">
           <button class="btn btn-primary" type="submit">Gerar</button>
@@ -77,6 +85,8 @@
             <button class="btn btn-sm" data-copiar="segredo">Copiar</button>
           </div>
           <p class="saida" id="segredo"></p>
+          <span class="hint">Já configurou o site antes? Troque só o <strong>SENHA_HASH</strong>.
+          Trocar também o SESSAO_SEGREDO encerra a sessão de todo mundo na hora.</span>
         </div>
 
         <div class="grid" style="gap:10px;border-top:1px solid var(--border);padding-top:14px">
@@ -88,7 +98,11 @@
           <div class="passo"><span class="passo-n">3</span>
             <span>Em <strong>Deploys</strong>, clique em <strong>Trigger deploy → Deploy site</strong>.</span></div>
           <div class="passo"><span class="passo-n">4</span>
-            <span>Pronto: <a href="/">abra o app</a> e entre com a senha que você escolheu.</span></div>
+            <span><a href="/">Abra o app</a> e entre com o seu nome e a senha mestre.</span></div>
+          <div class="passo"><span class="passo-n">5</span>
+            <span>Em <strong>Ajustes → Acessos</strong>, crie o acesso individual de cada pessoa.
+            A partir daí cada uma entra com a sua senha, e o que ela incluir ou alterar fica
+            registrado no nome dela.</span></div>
         </div>
       </div>
     </div>

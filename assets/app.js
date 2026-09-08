@@ -13,7 +13,9 @@
     filtros: { busca: "", mes: "", area: "", status: "", tipo: "", avisos: false, ordem: "data-desc" },
     uberFiltros: { busca: "", mes: "", situacao: "" },
     equipeFiltros: { busca: "", area: "" },
-    custoOrdem: { campo: "total", desc: true }
+    custoOrdem: { campo: "total", desc: true },
+    registro: { carregando: true, itens: [], total: 0 },
+    registroFiltros: { pessoa: "", acao: "" }
   };
 
   var ABAS = [
@@ -60,7 +62,12 @@
     }).join("");
 
     atualizaAnos();
-    C.aoMudar(function () { atualizaAnos(); render(); });
+    C.aoMudar(function () {
+      // Toda mudança na base gera uma linha no registro: força a rebusca.
+      estado.registro.pronto = false;
+      atualizaAnos();
+      render();
+    });
 
     var hash = (location.hash || "").replace("#", "");
     if (ABAS.some(function (a) { return a.id === hash; })) estado.aba = hash;
@@ -86,10 +93,10 @@
       'd="M12 1.2a10.8 10.8 0 1 0 0 21.6 10.8 10.8 0 0 0 0-21.6Zm-2.35 5.9 6.28 3.5a1.6 1.6 0 0 1 0 2.8l-6.28 3.5A1.6 1.6 0 0 1 7.3 15.5v-7a1.6 1.6 0 0 1 2.35-1.4Z"/></svg></div>' +
       "<h1>Gestão de Viagens</h1>" +
       '<p class="entrada-sub">Ace Gaming · apostou.bet.br</p>' +
-      '<div class="field"><label for="e-nome">Seu nome</label>' +
-      '<input type="text" id="e-nome" name="nome" autocomplete="name" placeholder="Como aparecer nas alterações" ' +
-      'value="' + esc(localStorage.getItem("gvc.nome") || "") + '"></div>' +
-      '<div class="field"><label for="e-senha">Senha de acesso</label>' +
+      '<div class="field"><label for="e-nome">Seu nome ou e-mail</label>' +
+      '<input type="text" id="e-nome" name="usuario" autocomplete="username" placeholder="Como foi cadastrado no acesso" ' +
+      'value="' + esc(localStorage.getItem("gvc.nome") || "") + '" required></div>' +
+      '<div class="field"><label for="e-senha">Sua senha</label>' +
       '<input type="password" id="e-senha" name="senha" autocomplete="current-password" required></div>' +
       '<button class="btn btn-primary" type="submit">Entrar</button>' +
       '<p class="entrada-erro" data-erro>' + esc(mensagem || "") + "</p>" +
@@ -105,9 +112,10 @@
       botao.textContent = "Entrando…";
       aviso.textContent = "";
 
-      C.entrar(fd.get("senha"), (fd.get("nome") || "").trim()).then(function () {
-        localStorage.setItem("gvc.nome", (fd.get("nome") || "").trim());
-        montar();
+      C.entrar((fd.get("usuario") || "").trim(), fd.get("senha")).then(function () {
+        localStorage.setItem("gvc.nome", (fd.get("usuario") || "").trim());
+        if (C.meta.trocarSenha) telaNovaSenha();
+        else montar();
       }, function (e) {
         botao.disabled = false;
         botao.textContent = "Entrar";
@@ -115,7 +123,52 @@
         form.querySelector('[name="senha"]').select();
       });
     });
-    form.querySelector((localStorage.getItem("gvc.nome") ? '[name="senha"]' : '[name="nome"]')).focus();
+    form.querySelector((localStorage.getItem("gvc.nome") ? '[name="senha"]' : '[name="usuario"]')).focus();
+  }
+
+  /**
+   * Acesso novo, ou senha redefinida por quem administra: a pessoa escolhe a
+   * sua senha antes de ver a base. A provisória vale só para esta entrada.
+   */
+  function telaNovaSenha() {
+    document.body.classList.add("trancado");
+    document.getElementById("view").innerHTML =
+      '<form class="entrada" id="form-nova-senha">' +
+      '<div class="entrada-marca" aria-hidden="true">' +
+      '<svg viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" ' +
+      'd="M12 1.2a10.8 10.8 0 1 0 0 21.6 10.8 10.8 0 0 0 0-21.6Zm-2.35 5.9 6.28 3.5a1.6 1.6 0 0 1 0 2.8l-6.28 3.5A1.6 1.6 0 0 1 7.3 15.5v-7a1.6 1.6 0 0 1 2.35-1.4Z"/></svg></div>' +
+      "<h1>Escolha a sua senha</h1>" +
+      '<p class="entrada-sub">' + esc(C.meta.nome) + " · a senha provisória vale só para esta entrada</p>" +
+      '<div class="field"><label for="n-senha">Senha nova</label>' +
+      '<input type="password" id="n-senha" name="nova" autocomplete="new-password" minlength="8" required></div>' +
+      '<div class="field"><label for="n-senha2">Repita a senha</label>' +
+      '<input type="password" id="n-senha2" name="repete" autocomplete="new-password" minlength="8" required></div>' +
+      '<button class="btn btn-primary" type="submit">Salvar e entrar</button>' +
+      '<p class="entrada-erro" data-erro></p>' +
+      "</form>";
+
+    var form = document.getElementById("form-nova-senha");
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var fd = new FormData(form);
+      var aviso = form.querySelector("[data-erro]");
+      var botao = form.querySelector("button");
+      if (fd.get("nova") !== fd.get("repete")) {
+        aviso.textContent = "As duas senhas não são iguais.";
+        return;
+      }
+      botao.disabled = true;
+      botao.textContent = "Salvando…";
+      C.trocarPropriaSenha("", fd.get("nova")).then(function () {
+        montar();
+        toast("Senha definida");
+      }, function (e) {
+        botao.disabled = false;
+        botao.textContent = "Salvar e entrar";
+        aviso.textContent = e.message || "Não consegui salvar a senha.";
+      });
+    });
+    form.querySelector('[name="nova"]').focus();
   }
 
   function mostraQuemEstaDentro() {
@@ -123,9 +176,14 @@
     if (!alvo) return;
     if (C.modo !== "servidor") { alvo.hidden = true; return; }
     alvo.hidden = false;
-    var nome = C.meta.nome || localStorage.getItem("gvc.nome") || "";
+    var m = C.meta;
+    var nome = m.nome || localStorage.getItem("gvc.nome") || "";
+    var titulo = m.mestre ? "Entrou pela senha mestre"
+      : m.papel === "admin" ? "Administra os acessos" : "Lança e edita";
     alvo.innerHTML =
-      (nome ? '<span class="chip accent" title="Sessão aberta">' + esc(nome) + "</span>" : "") +
+      (nome ? '<span class="chip accent" title="' + esc(titulo) + '">' + esc(nome) +
+        (m.mestre ? " · mestre" : m.papel === "admin" ? " · admin" : "") + "</span>" : "") +
+      (m.mestre ? "" : '<button class="btn btn-ghost btn-sm" data-acao="minha-senha">Minha senha</button>') +
       '<button class="btn btn-ghost btn-sm" data-acao="sair">Sair</button>';
   }
 
@@ -177,6 +235,23 @@
     }
     $view.innerHTML = conteudo;
     window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+
+    if (estado.aba === "ajustes" && C.modo === "servidor" && !estado.registro.pronto) carregarRegistro();
+  }
+
+  /** Busca o registro de alterações — lista grande, então vem por rota própria. */
+  function carregarRegistro(forcar) {
+    if (estado.registro.buscando) return;
+    if (forcar) estado.registro = { carregando: true, itens: [], total: 0 };
+    estado.registro.buscando = true;
+    estado.registro.pronto = true;
+    C.historico(400).then(function (r) {
+      estado.registro = { carregando: false, pronto: true, itens: r.historico || [], total: r.total || 0 };
+      if (estado.aba === "ajustes") render();
+    }, function () {
+      estado.registro = { carregando: false, pronto: true, itens: [], total: 0 };
+      if (estado.aba === "ajustes") render();
+    });
   }
 
   function irPara(aba) { estado.aba = aba; render(); }
@@ -271,6 +346,12 @@
       case "sair":
         C.sair().then(function () { location.reload(); });
         break;
+      case "minha-senha": abrirMinhaSenha(); break;
+      case "novo-acesso": abrirAcesso(null); break;
+      case "editar-acesso":
+        abrirAcesso(C.usuarios.filter(function (u) { return u.id === id; })[0]);
+        break;
+      case "atualizar-registro": carregarRegistro(true); break;
       case "tema": alternarTema(); break;
       case "usar-regra": aplicarRegraAlimentacao(botao.closest("form")); break;
       case "fechar": botao.closest("dialog").close(); break;
@@ -280,6 +361,8 @@
   function aoMudarCampo(ev) {
     var alvo = ev.target;
     if (alvo.id === "ano") { estado.ano = alvo.value; render(); return; }
+    if (alvo.name === "registro-pessoa") { estado.registroFiltros.pessoa = alvo.value; render(); return; }
+    if (alvo.name === "registro-acao") { estado.registroFiltros.acao = alvo.value; render(); return; }
     if (alvo.name === "mesCal") { estado.mesCal = alvo.value; render(); return; }
 
     var mapa = {
@@ -319,6 +402,21 @@
   // ---------- formulário de viagem ----------
 
   var CAMPOS_MOEDA = ["aereo", "hospedagem", "alimentacao", "transporte", "custoAlteracao"];
+
+  /** Quem lançou e quem mexeu por último — aparece no rodapé do formulário. */
+  function autoria(v) {
+    if (!v || !v.id || (!v.criadoPor && !v.alteradoPor)) return "";
+    function linha(rotulo, quem, quando) {
+      if (!quem) return "";
+      var d = quando ? new Date(quando) : null;
+      return rotulo + " <strong>" + esc(quem) + "</strong>" +
+        (d && !isNaN(d) ? " em " + d.toLocaleString("pt-BR") : "");
+    }
+    var partes = [linha("Lançada por", v.criadoPor, v.criadoEm),
+                  linha("Última alteração por", v.alteradoPor, v.alteradoEm)].filter(Boolean);
+    return '<p class="autoria" style="margin:14px 0 0;border-top:1px solid var(--border);padding-top:10px">' +
+      partes.join(" · ") + "</p>";
+  }
 
   function abrirViagem(viagem, pre) {
     var novo = !viagem;
@@ -399,7 +497,8 @@
 
       '<div class="summary" style="margin-top:16px" data-resumo></div>' +
       '<datalist id="destinos">' + destinos.map(function (d) { return '<option value="' + esc(d) + '">'; }).join("") + "</datalist>" +
-      '<datalist id="aeroportos">' + window.BR.opcoesAeroporto() + "</datalist>";
+      '<datalist id="aeroportos">' + window.BR.opcoesAeroporto() + "</datalist>" +
+      autoria(v);
 
     var dialogo = abrirModal({
       titulo: novo ? "Nova viagem" : (ehAlteracao ? "Alteração da viagem #" + v.refId : "Viagem #" + v.id),
@@ -1582,6 +1681,130 @@
   }
 
   // ---------- modal, toast, tooltip, tema ----------
+
+  // ---------- acessos ----------
+
+  /** Mostra a senha provisória uma vez, para ser copiada e entregue à pessoa. */
+  function mostrarSenhaGerada(nome, senha) {
+    var d = abrirModal({
+      titulo: "Senha de " + nome,
+      corpo: '<div class="grid" style="gap:12px">' +
+        '<div class="note">Entregue esta senha por um canal privado. Ela vale para uma entrada: ' +
+        "na primeira vez que " + esc(nome) + " entrar, o sistema pede para escolher a senha definitiva. " +
+        "Depois de fechar esta janela a senha não aparece mais em lugar nenhum.</div>" +
+        '<div class="senha-gerada">' + esc(senha) + "</div></div>",
+      rodape: '<button class="btn" data-acao="copiar-senha">Copiar senha</button>' +
+        '<span class="grow"></span><button class="btn btn-primary" data-acao="fechar">Entendi</button>',
+      estreito: true
+    });
+    d.querySelector('[data-acao="copiar-senha"]').addEventListener("click", function () {
+      navigator.clipboard.writeText(senha).then(function () { toast("Senha copiada"); },
+        function () { toast("Não consegui copiar — selecione e copie à mão"); });
+    });
+  }
+
+  function abrirAcesso(u) {
+    var novo = !u;
+    var d = u || { nome: "", email: "", papel: "editor", ativo: true };
+    var senhaInicial = novo ? C.senhaSugerida() : "";
+
+    var dialogo = abrirModal({
+      titulo: novo ? "Novo acesso" : "Acesso de " + d.nome,
+      corpo: '<form id="form-acesso" method="dialog"><div class="form-grid">' +
+        V.campo("Nome", '<input type="text" name="nome" value="' + esc(d.nome) + '" required>', "c12",
+                "É por ele, ou pelo e-mail, que a pessoa entra — e é o nome que aparece no registro de alterações.") +
+        V.campo("E-mail corporativo", '<input type="email" name="email" value="' + esc(d.email || "") + '">', "c12",
+                "Opcional. Serve como segunda forma de entrar.") +
+        V.campo("Pode", V.selectHTML("papel", [
+          { v: "editor", r: "Lançar e editar viagens, Uber e cadastros" },
+          { v: "admin", r: "Tudo, inclusive criar e remover acessos" }
+        ], d.papel), "c12") +
+        (novo
+          ? V.campo("Senha provisória",
+              '<input type="text" name="senha" class="mono" value="' + esc(senhaInicial) + '" minlength="8" required>',
+              "c12", "A pessoa troca por uma sua na primeira entrada.")
+          : V.campo("Situação",
+              '<label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="ativo" style="width:auto"' +
+              (d.ativo ? " checked" : "") + "> Acesso ativo</label>", "c12",
+              "Desativar mantém o histórico da pessoa e impede a entrada.")) +
+        "</div></form>",
+      rodape: (novo ? "" :
+        '<button class="btn btn-sm" data-acao="resetar-senha">Redefinir senha</button>' +
+        '<button class="btn btn-sm btn-danger btn-ghost" data-acao="remover-acesso">Remover</button>') +
+        '<span class="grow"></span><button class="btn" data-acao="fechar">Cancelar</button>' +
+        '<button class="btn btn-primary" type="submit" form="form-acesso">' +
+        (novo ? "Criar acesso" : "Salvar") + "</button>",
+      estreito: true
+    });
+
+    var form = dialogo.querySelector("form");
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var fd = new FormData(form);
+      var dados = {
+        id: novo ? "" : d.id,
+        nome: (fd.get("nome") || "").trim(),
+        email: (fd.get("email") || "").trim(),
+        papel: fd.get("papel"),
+        ativo: novo ? true : !!fd.get("ativo")
+      };
+      var senha = novo ? String(fd.get("senha") || "") : "";
+      C.salvarUsuario(dados, senha).then(function () {
+        dialogo.close();
+        if (novo) mostrarSenhaGerada(dados.nome, senha);
+        else toast("Acesso atualizado");
+        render();
+      }, falhou);
+    });
+
+    var btnReset = dialogo.querySelector('[data-acao="resetar-senha"]');
+    if (btnReset) btnReset.addEventListener("click", function () {
+      var nova = C.senhaSugerida();
+      if (!confirm("Gerar uma senha provisória nova para " + d.nome + "? A senha atual deixa de valer.")) return;
+      C.redefinirSenha(d.id, nova).then(function () {
+        dialogo.close();
+        mostrarSenhaGerada(d.nome, nova);
+        render();
+      }, falhou);
+    });
+
+    var btnRemover = dialogo.querySelector('[data-acao="remover-acesso"]');
+    if (btnRemover) btnRemover.addEventListener("click", function () {
+      if (!confirm("Remover o acesso de " + d.nome + "? O que ela já lançou continua na base e no registro.")) return;
+      C.excluirUsuario(d.id).then(function () {
+        dialogo.close();
+        toast("Acesso removido");
+        render();
+      }, function (e) { alert((e && e.message) || "Não consegui remover."); });
+    });
+  }
+
+  function abrirMinhaSenha() {
+    var dialogo = abrirModal({
+      titulo: "Minha senha",
+      corpo: '<form id="form-minha-senha" method="dialog"><div class="form-grid">' +
+        V.campo("Senha atual", '<input type="password" name="atual" autocomplete="current-password" required>', "c12") +
+        V.campo("Senha nova", '<input type="password" name="nova" autocomplete="new-password" minlength="8" required>', "c12",
+                "Pelo menos 8 caracteres. Uma frase curta funciona melhor que uma palavra difícil.") +
+        V.campo("Repita a senha nova", '<input type="password" name="repete" autocomplete="new-password" minlength="8" required>', "c12") +
+        '</div><p class="entrada-erro" data-erro></p></form>',
+      rodape: '<span class="grow"></span><button class="btn" data-acao="fechar">Cancelar</button>' +
+        '<button class="btn btn-primary" type="submit" form="form-minha-senha">Trocar senha</button>',
+      estreito: true
+    });
+
+    var form = dialogo.querySelector("form");
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var fd = new FormData(form);
+      var aviso = form.querySelector("[data-erro]");
+      if (fd.get("nova") !== fd.get("repete")) { aviso.textContent = "As duas senhas não são iguais."; return; }
+      C.trocarPropriaSenha(fd.get("atual"), fd.get("nova")).then(function () {
+        dialogo.close();
+        toast("Senha trocada");
+      }, function (e) { aviso.textContent = (e && e.message) || "Não consegui trocar a senha."; });
+    });
+  }
 
   function abrirModal(opcoes) {
     var d = document.createElement("dialog");

@@ -15,18 +15,45 @@ R$ 11.158,29 de Uber, 25 colaboradores com despesa, 181 corridas, ticket médio 
 
 ## Como usar
 
-**Site com senha (equipe inteira na mesma base).** É o modo de produção: um endereço na
-internet, tela de senha, e todo mundo que entra vê e lança na mesma base, com sincronização
-automática. Passo a passo em [DEPLOY.md](DEPLOY.md) — no Netlify são alguns cliques, sem
+**Site com login por pessoa (equipe inteira na mesma base).** É o modo de produção: um endereço
+na internet, cada um entra com o seu nome e a sua senha, e todo mundo vê e lança na mesma base,
+com sincronização automática. Tudo que é incluído, alterado ou excluído fica registrado com nome
+e horário. Passo a passo em [DEPLOY.md](DEPLOY.md) — no Netlify são alguns cliques, sem
 terminal; também há a receita para Cloudflare Workers e para rodar numa máquina sua.
 
 **Arquivo único, offline.** Baixe `dist/gestao-viagens.html` e abra com dois cliques. Sem
-senha e sem servidor: os dados ficam no navegador daquela máquina. Bom para trabalhar sem
+login e sem servidor — e por isso sem registro de alterações: os dados ficam no navegador
+daquela máquina, de uma pessoa só. Bom para trabalhar sem
 internet ou para uma cópia de estudo. Leve de uma máquina a outra por **Ajustes → Baixar
 backup** e **Restaurar backup**.
 
 **Pasta do projeto.** Abra `index.html` — igual ao arquivo único, com os arquivos separados
 para editar.
+
+## Acessos e registro de alterações
+
+Cada pessoa tem o seu login. Quem administra cria o acesso em **Ajustes → Acessos**, informando
+nome, e-mail (opcional) e o que a pessoa pode fazer:
+
+| Papel | Pode |
+|---|---|
+| **Administra** | tudo, inclusive criar, desativar e remover acessos |
+| **Lança e edita** | viagens, Uber, cadastros, regras e backups — não mexe em acessos |
+
+Ao criar um acesso você entrega uma **senha provisória**, mostrada uma única vez. Na primeira
+entrada a pessoa escolhe a definitiva; a provisória deixa de valer. Ninguém, nem quem
+administra, consegue ler a senha de outra pessoa — só redefinir, o que gera uma provisória nova.
+
+Todo lançamento, alteração e exclusão vai para o **Registro de alterações**, com quem, quando,
+o que mudou e de que valor para qual. Cada viagem também carrega, no próprio formulário, quem a
+lançou e quem mexeu por último.
+
+A **senha mestre** (variável `SENHA_HASH`) continua existindo, mas mudou de papel: serve para
+criar o primeiro acesso e como porta de emergência de quem administra o site. Ela não é para
+circular pela equipe — quem entra por ela aparece marcado como *mestre* no registro.
+
+Desativar um acesso derruba a sessão da pessoa na hora, e o mesmo vale para uma mudança de
+papel: o que pode fazer é conferido na base a cada requisição, não no cookie.
 
 ## O que mudou em relação à planilha
 
@@ -81,15 +108,15 @@ assets/seed.js             base extraída da planilha (gerado; só no modo offli
 assets/armazenamento.js    de onde vêm os dados: servidor ou navegador
 assets/core.js             estado e todas as regras de cálculo
 assets/views.js            telas
-assets/app.js              navegação, entrada com senha, formulários e ações
+assets/app.js              navegação, login, acessos, formulários e ações
 
 servidor/api.js            a API — o mesmo código no Netlify, na Cloudflare e no Node
 servidor/netlify.js        adaptador Netlify (Blobs)
 servidor/worker.js         adaptador Cloudflare Workers (D1)
 servidor/local.js          adaptador Node, guardando o estado num arquivo
-servidor/senha.js          gera SENHA_HASH e SESSAO_SEGREDO pelo terminal
+servidor/senha.js          gera a senha mestre (SENHA_HASH/SESSAO_SEGREDO) pelo terminal
 servidor/seed.json         base original, para semear o banco (gerado)
-senha.html                 gera SENHA_HASH e SESSAO_SEGREDO pelo navegador
+senha.html                 gera a senha mestre pelo navegador
 netlify/functions/api.mjs  a função que atende /api/* no Netlify
 
 tools/extract_seed.py      regenera assets/seed.js a partir da planilha de viagens

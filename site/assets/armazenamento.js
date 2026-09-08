@@ -47,11 +47,26 @@
       );
     },
 
-    entrar: function (senha, nome) {
-      return chamar("POST", "/sessao", { senha: senha, nome: nome });
+    entrar: function (usuario, senha) {
+      return chamar("POST", "/sessao", { usuario: usuario, senha: senha });
     },
 
     sair: function () { return chamar("DELETE", "/sessao"); },
+
+    trocarPropriaSenha: function (atual, nova) {
+      return chamar("PUT", "/senha", { atual: atual, nova: nova });
+    },
+
+    usuarios: function () { return chamar("GET", "/usuarios"); },
+    salvarUsuario: function (usuario, senha) {
+      return chamar("PUT", "/usuario", { usuario: usuario, senha: senha || "" });
+    },
+    excluirUsuario: function (id) { return chamar("DELETE", "/usuario/" + encodeURIComponent(id)); },
+    redefinirSenha: function (id, nova) {
+      return chamar("POST", "/usuario/" + encodeURIComponent(id) + "/senha", { nova: nova });
+    },
+
+    historico: function (limite) { return chamar("GET", "/historico?limite=" + (limite || 200)); },
 
     revisao: function () { return chamar("GET", "/revisao"); },
     estado: function () { return chamar("GET", "/estado"); },
@@ -77,6 +92,10 @@
   };
 
   // ---------- modo local ----------
+
+  function naoDisponivel() {
+    return Promise.reject(new Error("Os acessos individuais só existem na versão publicada, com servidor."));
+  }
 
   /**
    * No modo local o app é dono do estado: cada operação mexe no objeto em memória
@@ -111,7 +130,17 @@
       entrar: function () { return Promise.resolve({}); },
       sair: function () { return Promise.resolve({}); },
       revisao: function () { return Promise.resolve({ revisao: 0 }); },
-      estado: function () { return persistir(); }
+      estado: function () { return persistir(); },
+
+      // Sem servidor não há com quem compartilhar a base: o arquivo aberto no
+      // navegador é de uma pessoa só, e não faz sentido controlar acesso nem
+      // registrar quem alterou.
+      usuarios: function () { return Promise.resolve({ usuarios: [] }); },
+      historico: function () { return Promise.resolve({ total: 0, historico: [] }); },
+      trocarPropriaSenha: naoDisponivel,
+      salvarUsuario: naoDisponivel,
+      excluirUsuario: naoDisponivel,
+      redefinirSenha: naoDisponivel
     };
 
     ["salvarViagem", "excluirViagem", "salvarColaborador", "excluirColaborador",

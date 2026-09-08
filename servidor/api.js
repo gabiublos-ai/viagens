@@ -5,9 +5,15 @@
  * `ler()` e `gravar()`.
  *
  * Contrato:
- *   POST   /api/sessao            {senha, nome}   → entra; devolve o estado
+ *   POST   /api/sessao            {usuario, senha} → entra; devolve o estado
  *   DELETE /api/sessao                            → sai
  *   GET    /api/sessao                            → quem está logado
+ *   PUT    /api/senha             {atual, nova}   → troca a própria senha
+ *   GET    /api/usuarios                          → quem tem acesso (sem as senhas)
+ *   PUT    /api/usuario           {usuario}       → cria ou atualiza (só admin)
+ *   DELETE /api/usuario/:id                       → remove o acesso (só admin)
+ *   POST   /api/usuario/:id/senha {nova}          → admin redefine a senha de alguém
+ *   GET    /api/historico?limite=                 → registro de quem incluiu/alterou
  *   GET    /api/estado                            → {revisao, dados, ...}
  *   GET    /api/revisao                           → só a revisão (para o polling)
  *   PUT    /api/viagem            {viagem}        → cria ou atualiza
@@ -27,6 +33,9 @@
 const DIAS_SESSAO = 30;
 const TENTATIVAS_MAX = 8;          // por janela, por IP
 const JANELA_TENTATIVAS = 10 * 60 * 1000;
+const LIMITE_HISTORICO = 1200;     // entradas guardadas no registro de alterações
+const PAPEIS = ["admin", "editor"];
+const SENHA_MINIMA = 8;
 
 // ---------- utilidades de resposta ----------
 
@@ -103,9 +112,17 @@ async function assinar(texto, segredo) {
   return base64url(await crypto.subtle.sign("HMAC", chave, enc.encode(texto)));
 }
 
-async function criaSessao(nome, segredo) {
+/**
+ * O token guarda só quem é (`id`) e até quando vale. O papel e o nome vêm da
+ * base a cada requisição — assim tirar o acesso de alguém, ou rebaixar de
+ * admin para editor, vale na hora e não daqui a trinta dias.
+ */
+async function criaSessao(id, nome, segredo) {
   const payload = base64url(enc.encode(JSON.stringify({
-    nome: String(nome || "").slice(0, 60),
+    id: String(id || "").slice(0, 40),
+    // Só o acesso mestre carrega o nome no token: ele não tem cadastro de onde
+    // buscá-lo, e sem isso o histórico registraria todo mundo como "mestre".
+    nome: id === ID_MESTRE ? String(nome || "").slice(0, 60) : undefined,
     exp: Date.now() + DIAS_SESSAO * 86400000
   })));
   return `v1.${payload}.${await assinar(payload, segredo)}`;
@@ -227,6 +244,111 @@ function estruturaValida(dados) {
          Array.isArray(dados.uber) && dados.params && typeof dados.params === "object";
 }
 
+// ---------- usuários ----------
+
+/* Cada pessoa tem o seu acesso. O `id` nunca muda: é por ele que a sessão e o
+ * histórico apontam para alguém, então trocar nome ou e-mail não quebra nada.
+ *
+ * O papel diz o que a pessoa pode fazer:
+ *   admin   — tudo, inclusive criar e remover acessos
+ *   editor  — lança e edita viagens, Uber e cadastros; não mexe em acessos
+ *
+ * A senha mestre (variável de ambiente) continua valendo como entrada de
+ * emergência de quem administra o site, para o caso de ninguém mais conseguir
+ * entrar. Ela abre uma sessão de admin marcada como mestre no histórico.
+ */
+
+const ID_MESTRE = "mestre";
+
+function proximoIdUsuario(usuarios) {
+  let max = 0;
+  for (const u of usuarios) {
+    const n = Number(String(u.id || "").replace(/^u/, ""));
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return "u" + (max + 1);
+}
+
+/** Nome ou e-mail servem para entrar; a comparação ignora acento e maiúscula. */
+function achaUsuario(usuarios, entrada) {
+  const chave = normal(entrada);
+  if (!chave) return null;
+  return usuarios.find((u) => normal(u.email) === chave || normal(u.nome) === chave) || null;
+}
+
+/** O que vai para o navegador: tudo menos a senha. */
+function semSenha(u) {
+  const { senhaHash, ...resto } = u;
+  return resto;
+}
+
+function limpaUsuario(bruto) {
+  return {
+    nome: texto(bruto.nome, 80).trim(),
+    email: texto(bruto.email, 120).trim(),
+    papel: PAPEIS.includes(bruto.papel) ? bruto.papel : "editor",
+    ativo: bruto.ativo !== false
+  };
+}
+
+// ---------- registro de alterações ----------
+
+/* Toda escrita passa por `grava()`, e é lá que a linha do histórico é criada.
+ * Guardamos o nome de quem fez, e não só o id, para a lista continuar legível
+ * mesmo depois que o acesso da pessoa for removido.
+ */
+
+function registra(estado, sessao, registro) {
+  if (!registro || !registro.acao) return;
+  estado.historico.unshift({
+    em: new Date().toISOString(),
+    por: texto(sessao.nome, 80),
+    porId: texto(sessao.id, 40),
+    mestre: sessao.mestre ? true : undefined,
+    acao: registro.acao,                     // incluiu | alterou | excluiu | importou | restaurou
+    entidade: registro.entidade,             // viagem | colaborador | uber | acesso | parâmetros | base
+    alvo: texto(registro.alvo, 140),
+    resumo: texto(registro.resumo, 400)
+  });
+  if (estado.historico.length > LIMITE_HISTORICO) estado.historico.length = LIMITE_HISTORICO;
+}
+
+const ROTULO_CAMPO = {
+  tipo: "tipo", colaborador: "colaborador", destino: "destino", aeroportoOrigem: "origem",
+  dataIda: "ida", dataVolta: "volta", aereo: "aéreo", diarias: "diárias",
+  valorDiaria: "valor da diária", alimentacao: "alimentação", transporte: "transporte",
+  custoAlteracao: "custo da alteração", status: "status", motivo: "motivo",
+  pendencias: "pendências", obs: "observações", hospedagem: "hospedagem",
+  tipoAlteracao: "tipo de alteração", cafeIncluso: "café incluso", conferencia: "conferência",
+  area: "área", cargo: "cargo", nivel: "nível", gestor: "gestor", contrato: "contrato",
+  cidade: "cidade", uf: "UF", aeroportoBase: "aeroporto base", email: "e-mail",
+  emailAlt: "e-mail alternativo", modelo: "modelo", nome: "nome", papel: "papel", ativo: "ativo"
+};
+
+function mostraValor(v) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "boolean") return v ? "sim" : "não";
+  if (typeof v === "object") return "…";
+  return texto(v, 60);
+}
+
+/** Resume o que mudou: "status: Cotado → Fechado · aéreo: 1200 → 1450". */
+function diferencas(antes, depois, campos) {
+  const partes = [];
+  for (const campo of campos) {
+    const a = antes ? antes[campo] : undefined;
+    const b = depois[campo];
+    if (a === b) continue;
+    if ((a === undefined || a === null || a === "") && (b === undefined || b === null || b === "")) continue;
+    if (typeof a === "object" || typeof b === "object") {
+      if (JSON.stringify(a || null) === JSON.stringify(b || null)) continue;
+    }
+    partes.push(`${ROTULO_CAMPO[campo] || campo}: ${mostraValor(a)} → ${mostraValor(b)}`);
+    if (partes.length >= 8) { partes.push("…"); break; }
+  }
+  return partes.join(" · ");
+}
+
 // ---------- API ----------
 
 /**
@@ -247,6 +369,8 @@ export function criarApi(cfg) {
       revisao: 1,
       atualizadoEm: new Date().toISOString(),
       atualizadoPor: "base original",
+      usuarios: [],
+      historico: [],
       dados: {
         baseEquipeVersao: seed.baseEquipeVersao || 0,
         colaboradores: JSON.parse(JSON.stringify(seed.colaboradores || [])),
@@ -259,18 +383,42 @@ export function criarApi(cfg) {
 
   async function estadoAtual() {
     const guardado = await cfg.ler();
-    if (guardado && estruturaValida(guardado.dados)) return guardado;
+    if (guardado && estruturaValida(guardado.dados)) {
+      // Base gravada antes dos acessos individuais existirem.
+      if (!Array.isArray(guardado.usuarios)) guardado.usuarios = [];
+      if (!Array.isArray(guardado.historico)) guardado.historico = [];
+      return guardado;
+    }
     const novo = estadoInicial();
     await cfg.gravar(novo);
     return novo;
   }
 
-  async function grava(estado, nome) {
+  /** Persiste, anota quem mexeu e devolve o estado já sem as senhas. */
+  async function grava(estado, sessao, registro) {
+    registra(estado, sessao, registro);
     estado.revisao = (estado.revisao || 0) + 1;
     estado.atualizadoEm = new Date().toISOString();
-    estado.atualizadoPor = nome || "";
+    estado.atualizadoPor = sessao.nome || "";
     await cfg.gravar(estado);
-    return json(estado);
+    return json(paraCliente(estado, sessao));
+  }
+
+  /**
+   * O corpo que o navegador recebe. O histórico fica de fora — é grande e tem
+   * rota própria — e os usuários vão sem o hash da senha.
+   */
+  function paraCliente(estado, sessao) {
+    return {
+      revisao: estado.revisao,
+      atualizadoEm: estado.atualizadoEm,
+      atualizadoPor: estado.atualizadoPor,
+      importacao: estado.importacao,
+      dados: estado.dados,
+      usuarios: estado.usuarios.map(semSenha),
+      sessao: sessao ? { id: sessao.id, nome: sessao.nome, papel: sessao.papel,
+                         mestre: !!sessao.mestre, trocarSenha: !!sessao.trocarSenha } : null
+    };
   }
 
   return async function handle(request) {
@@ -290,18 +438,38 @@ export function criarApi(cfg) {
       let corpo = {};
       try { corpo = await request.json(); } catch (e) { /* corpo inválido cai no 401 */ }
 
-      const confere = await senhaConfere(String(corpo.senha || ""), cfg.senhaHash);
-      // Atrasa toda resposta de login, certa ou errada, para tornar a força bruta cara.
-      await new Promise((r) => setTimeout(r, 350));
-      if (!confere) {
-        registraFalha(ip);
-        return erro(401, "Senha incorreta.");
+      const estado = await estadoAtual();
+      const senha = String(corpo.senha || "");
+      const identificador = texto(corpo.usuario || corpo.nome, 120).trim();
+      const usuario = achaUsuario(estado.usuarios, identificador);
+
+      // Quem tem acesso próprio entra pela sua senha; a senha mestre segue
+      // valendo como porta de emergência de quem administra o site.
+      let sessao = null;
+      if (usuario && usuario.ativo && await senhaConfere(senha, usuario.senhaHash)) {
+        sessao = { id: usuario.id, nome: usuario.nome, papel: usuario.papel, trocarSenha: !!usuario.trocarSenha };
+      } else if (cfg.senhaHash && await senhaConfere(senha, cfg.senhaHash)) {
+        // Entra como mestre com qualquer nome digitado — mas nunca com o nome de
+        // alguém cadastrado, para o registro não parecer que foi a própria pessoa.
+        sessao = { id: ID_MESTRE, papel: "admin", mestre: true,
+                   nome: (usuario || !identificador) ? "Acesso mestre" : identificador };
       }
 
-      const nome = texto(corpo.nome, 60).trim();
-      const token = await criaSessao(nome, cfg.segredo);
-      const estado = await estadoAtual();
-      return json({ nome, ...estado }, { headers: { "set-cookie": cookieSessao(token, seguro) } });
+      // Atrasa toda resposta de login, certa ou errada, para tornar a força bruta cara.
+      await new Promise((r) => setTimeout(r, 350));
+      if (!sessao) {
+        registraFalha(ip);
+        return erro(401, usuario && !usuario.ativo
+          ? "Este acesso está desativado. Fale com quem administra o sistema."
+          : "Usuário ou senha incorretos.");
+      }
+
+      const token = await criaSessao(sessao.id, sessao.nome, cfg.segredo);
+      if (usuario) {
+        usuario.ultimoAcesso = new Date().toISOString();
+        await cfg.gravar(estado);       // só carimba a entrada: não mexe na revisão
+      }
+      return json(paraCliente(estado, sessao), { headers: { "set-cookie": cookieSessao(token, seguro) } });
     }
 
     if (caminho === "/api/sessao" && metodo === "DELETE") {
@@ -309,17 +477,46 @@ export function criarApi(cfg) {
     }
 
     // ---- daqui para baixo, só com sessão ----
-    const sessao = await leSessao(leCookie(request, "sessao"), cfg.segredo);
-    if (!sessao) return erro(401, "Entre com a senha de acesso.");
-
-    if (caminho === "/api/sessao" && metodo === "GET") {
-      return json({ nome: sessao.nome });
-    }
+    const token = await leSessao(leCookie(request, "sessao"), cfg.segredo);
+    if (!token) return erro(401, "Entre com o seu usuário e senha.");
 
     const estado = await estadoAtual();
     const dados = estado.dados;
 
-    if (caminho === "/api/estado" && metodo === "GET") return json(estado);
+    // O papel vem da base agora, não do token: mudar o acesso de alguém vale
+    // na hora, sem esperar a sessão dela expirar.
+    let sessao;
+    if (token.id === ID_MESTRE) {
+      sessao = { id: ID_MESTRE, nome: token.nome || "Acesso mestre", papel: "admin", mestre: true };
+    } else {
+      const usuario = estado.usuarios.find((u) => u.id === token.id);
+      if (!usuario || !usuario.ativo) return erro(401, "Seu acesso foi encerrado. Entre de novo.");
+      sessao = { id: usuario.id, nome: usuario.nome, papel: usuario.papel, trocarSenha: !!usuario.trocarSenha };
+    }
+    const admin = sessao.papel === "admin";
+
+    if (caminho === "/api/sessao" && metodo === "GET") {
+      return json({ id: sessao.id, nome: sessao.nome, papel: sessao.papel,
+                    mestre: !!sessao.mestre, trocarSenha: !!sessao.trocarSenha });
+    }
+
+    if (caminho === "/api/estado" && metodo === "GET") return json(paraCliente(estado, sessao));
+
+    if (caminho === "/api/usuarios" && metodo === "GET") {
+      return json({ usuarios: estado.usuarios.map(semSenha) });
+    }
+
+    // A senha provisória serve para entrar e escolher a definitiva, e nada mais:
+    // enquanto não for trocada, a sessão só lê. Sem isso ela viraria uma senha
+    // permanente para quem chamasse a API por fora da tela.
+    if (sessao.trocarSenha && metodo !== "GET" && caminho !== "/api/senha") {
+      return erro(403, "Defina a sua senha antes de lançar qualquer coisa.");
+    }
+
+    if (caminho === "/api/historico" && metodo === "GET") {
+      const limite = Math.min(Math.max(Number(url.searchParams.get("limite")) || 200, 1), LIMITE_HISTORICO);
+      return json({ total: estado.historico.length, historico: estado.historico.slice(0, limite) });
+    }
 
     if (caminho === "/api/revisao" && metodo === "GET") {
       return json({
@@ -334,6 +531,111 @@ export function criarApi(cfg) {
       try { corpo = await request.json(); } catch (e) { corpo = {}; }
     }
 
+    // ---- a própria senha ----
+    if (caminho === "/api/senha" && metodo === "PUT") {
+      if (sessao.mestre) {
+        return erro(400, "O acesso mestre não tem senha própria: ela fica na configuração do site.");
+      }
+      const usuario = estado.usuarios.find((u) => u.id === sessao.id);
+      if (!usuario) return erro(404, "Acesso não encontrado.");
+      const nova = String(corpo.nova || "");
+      if (nova.length < SENHA_MINIMA) return erro(400, `A senha nova precisa de pelo menos ${SENHA_MINIMA} caracteres.`);
+      // Quem foi obrigado a trocar (acesso novo ou senha redefinida) já provou
+      // quem é ao entrar com a senha provisória, então não pedimos de novo.
+      if (!usuario.trocarSenha && !await senhaConfere(String(corpo.atual || ""), usuario.senhaHash)) {
+        await new Promise((r) => setTimeout(r, 350));
+        return erro(401, "A senha atual não confere.");
+      }
+      usuario.senhaHash = await hashSenha(nova);
+      usuario.trocarSenha = false;
+      sessao.trocarSenha = false;
+      return grava(estado, sessao, { acao: "alterou", entidade: "acesso",
+                                     alvo: usuario.nome, resumo: "trocou a própria senha" });
+    }
+
+    // ---- acessos (só admin) ----
+    const soAdmin = () => erro(403, "Só quem administra o sistema pode mexer nos acessos.");
+
+    /** Garante que a última pessoa com poder de administrar não se apague sozinha. */
+    function sobraAdmin(usuarios, ignorarId) {
+      return usuarios.some((u) => u.id !== ignorarId && u.ativo && u.papel === "admin");
+    }
+
+    if (caminho === "/api/usuario" && metodo === "PUT") {
+      if (!admin) return soAdmin();
+      const limpo = limpaUsuario(corpo.usuario || {});
+      if (!limpo.nome) return erro(400, "Informe o nome de quem vai ter acesso.");
+      if (limpo.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(limpo.email)) {
+        return erro(400, "E-mail inválido.");
+      }
+      const id = texto(corpo.usuario && corpo.usuario.id, 40);
+      const alvo = id ? estado.usuarios.find((u) => u.id === id) : null;
+      if (id && !alvo) return erro(404, "Acesso não encontrado.");
+
+      // Nome e e-mail servem para entrar, então não podem repetir.
+      const repetido = estado.usuarios.find((u) => u.id !== id && (
+        normal(u.nome) === normal(limpo.nome) ||
+        (limpo.email && normal(u.email) === normal(limpo.email))
+      ));
+      if (repetido) return erro(409, `Já existe um acesso com esse nome ou e-mail (${repetido.nome}).`);
+
+      let registro;
+      if (alvo) {
+        if ((!limpo.ativo || limpo.papel !== "admin") && alvo.papel === "admin" && alvo.ativo &&
+            !sobraAdmin(estado.usuarios, alvo.id)) {
+          return erro(409, "Este é o último acesso de administrador ativo. Promova outra pessoa antes.");
+        }
+        registro = { acao: "alterou", entidade: "acesso", alvo: limpo.nome,
+                     resumo: diferencas(alvo, limpo, ["nome", "email", "papel", "ativo"]) };
+        Object.assign(alvo, limpo);
+      } else {
+        const senha = String(corpo.senha || "");
+        if (senha.length < SENHA_MINIMA) {
+          return erro(400, `Defina uma senha inicial com pelo menos ${SENHA_MINIMA} caracteres.`);
+        }
+        const novo = {
+          id: proximoIdUsuario(estado.usuarios),
+          ...limpo,
+          senhaHash: await hashSenha(senha),
+          trocarSenha: true,          // a senha inicial vale uma vez; a pessoa escolhe a dela
+          criadoEm: new Date().toISOString(),
+          criadoPor: sessao.nome,
+          ultimoAcesso: ""
+        };
+        estado.usuarios.push(novo);
+        registro = { acao: "incluiu", entidade: "acesso", alvo: novo.nome,
+                     resumo: `${novo.papel}${novo.email ? " · " + novo.email : ""}` };
+      }
+      estado.usuarios.sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
+      return grava(estado, sessao, registro);
+    }
+
+    const casaSenhaUsuario = caminho.match(/^\/api\/usuario\/([^/]+)\/senha$/);
+    if (casaSenhaUsuario && metodo === "POST") {
+      if (!admin) return soAdmin();
+      const alvo = estado.usuarios.find((u) => u.id === decodeURIComponent(casaSenhaUsuario[1]));
+      if (!alvo) return erro(404, "Acesso não encontrado.");
+      const nova = String(corpo.nova || "");
+      if (nova.length < SENHA_MINIMA) return erro(400, `A senha precisa de pelo menos ${SENHA_MINIMA} caracteres.`);
+      alvo.senhaHash = await hashSenha(nova);
+      alvo.trocarSenha = true;
+      return grava(estado, sessao, { acao: "alterou", entidade: "acesso", alvo: alvo.nome,
+                                     resumo: "senha redefinida; será trocada no próximo acesso" });
+    }
+
+    const casaUsuario = caminho.match(/^\/api\/usuario\/([^/]+)$/);
+    if (casaUsuario && metodo === "DELETE") {
+      if (!admin) return soAdmin();
+      const alvoId = decodeURIComponent(casaUsuario[1]);
+      const alvo = estado.usuarios.find((u) => u.id === alvoId);
+      if (!alvo) return erro(404, "Acesso não encontrado.");
+      if (alvo.papel === "admin" && alvo.ativo && !sobraAdmin(estado.usuarios, alvoId)) {
+        return erro(409, "Este é o último acesso de administrador ativo. Promova outra pessoa antes.");
+      }
+      estado.usuarios = estado.usuarios.filter((u) => u.id !== alvoId);
+      return grava(estado, sessao, { acao: "excluiu", entidade: "acesso", alvo: alvo.nome, resumo: "" });
+    }
+
     // ---- viagens ----
     if (caminho === "/api/viagem" && metodo === "PUT") {
       const entrada = corpo.viagem || {};
@@ -342,24 +644,42 @@ export function criarApi(cfg) {
       if (!limpa.colaborador || !limpa.dataIda || !limpa.dataVolta) {
         return erro(400, "Informe colaborador e as datas de ida e volta.");
       }
+      const agora = new Date().toISOString();
       let alvo = id ? dados.viagens.find((v) => Number(v.id) === id) : null;
-      if (alvo) Object.assign(alvo, limpa);
-      else {
+      let registro;
+      if (alvo) {
+        const mudou = diferencas(alvo, limpa, CAMPOS_VIAGEM);
+        Object.assign(alvo, limpa);
+        alvo.alteradoPor = sessao.nome;
+        alvo.alteradoEm = agora;
+        registro = { acao: "alterou", entidade: "viagem",
+                     alvo: `#${alvo.id} · ${alvo.colaborador} · ${alvo.destino}`, resumo: mudou };
+      } else {
         alvo = { id: proximoId(dados), ...limpa };
+        alvo.criadoPor = sessao.nome;
+        alvo.criadoEm = agora;
         dados.viagens.push(alvo);
+        registro = { acao: "incluiu", entidade: "viagem",
+                     alvo: `#${alvo.id} · ${alvo.colaborador} · ${alvo.destino}`,
+                     resumo: `${alvo.dataIda} a ${alvo.dataVolta} · ${alvo.status || "sem status"}` };
       }
-      return grava(estado, sessao.nome);
+      return grava(estado, sessao, registro);
     }
 
     const casaViagem = caminho.match(/^\/api\/viagem\/(\d+)$/);
     if (casaViagem && metodo === "DELETE") {
       const id = Number(casaViagem[1]);
+      const removida = dados.viagens.find((v) => Number(v.id) === id);
       dados.viagens = dados.viagens.filter((v) => Number(v.id) !== id);
       // Alteração órfã vira lançamento comum, para nada sumir do total.
       for (const v of dados.viagens) {
         if (Number(v.refId) === id) { v.refId = null; v.tipo = "Viagem"; }
       }
-      return grava(estado, sessao.nome);
+      return grava(estado, sessao, {
+        acao: "excluiu", entidade: "viagem",
+        alvo: removida ? `#${id} · ${removida.colaborador} · ${removida.destino}` : `#${id}`,
+        resumo: removida ? `${removida.dataIda} a ${removida.dataVolta}` : ""
+      });
     }
 
     // ---- colaboradores ----
@@ -369,17 +689,22 @@ export function criarApi(cfg) {
       const anterior = texto(corpo.nomeOriginal, 200).trim();
       const chave = normal(anterior || limpo.nome);
       const alvo = dados.colaboradores.find((c) => normal(c.nome) === chave);
+      let registro;
       if (alvo) {
         if (anterior && normal(anterior) !== normal(limpo.nome)) {
           for (const v of dados.viagens) if (normal(v.colaborador) === chave) v.colaborador = limpo.nome;
           for (const m of dados.params.dePara || []) if (normal(m.colaborador) === chave) m.colaborador = limpo.nome;
         }
+        registro = { acao: "alterou", entidade: "colaborador", alvo: limpo.nome,
+                     resumo: diferencas(alvo, limpo, CAMPOS_COLABORADOR) };
         Object.assign(alvo, limpo);
       } else {
         dados.colaboradores.push(limpo);
+        registro = { acao: "incluiu", entidade: "colaborador", alvo: limpo.nome,
+                     resumo: [limpo.area, limpo.cargo].filter(Boolean).join(" · ") };
       }
       dados.colaboradores.sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
-      return grava(estado, sessao.nome);
+      return grava(estado, sessao, registro);
     }
 
     const casaColab = caminho.match(/^\/api\/colaborador\/(.+)$/);
@@ -387,8 +712,10 @@ export function criarApi(cfg) {
       const chave = normal(decodeURIComponent(casaColab[1]));
       const usos = dados.viagens.filter((v) => normal(v.colaborador) === chave).length;
       if (usos) return erro(409, `Este colaborador tem ${usos} viagem(ns) lançada(s).`);
+      const saiu = dados.colaboradores.find((c) => normal(c.nome) === chave);
       dados.colaboradores = dados.colaboradores.filter((c) => normal(c.nome) !== chave);
-      return grava(estado, sessao.nome);
+      return grava(estado, sessao, { acao: "excluiu", entidade: "colaborador",
+                                     alvo: saiu ? saiu.nome : decodeURIComponent(casaColab[1]), resumo: "" });
     }
 
     // ---- uber ----
@@ -404,38 +731,51 @@ export function criarApi(cfg) {
         novas++;
       }
       estado.importacao = { novas, repetidas };
-      return grava(estado, sessao.nome);
+      return grava(estado, sessao, { acao: "importou", entidade: "uber", alvo: "relatório do Uber",
+                                     resumo: `${novas} corrida(s) nova(s), ${repetidas} repetida(s) ignorada(s)` });
     }
 
     if (caminho === "/api/uber" && metodo === "DELETE") {
       const linha = texto(corpo.linha, 2000);
       dados.uber = dados.uber.filter((r) => r.linha !== linha);
-      return grava(estado, sessao.nome);
+      return grava(estado, sessao, { acao: "excluiu", entidade: "uber", alvo: "corrida",
+                                     resumo: linha.split(";").slice(0, 5).join(" · ") });
     }
 
     if (caminho === "/api/uber/tudo" && metodo === "DELETE") {
+      const quantas = dados.uber.length;
       dados.uber = [];
-      return grava(estado, sessao.nome);
+      return grava(estado, sessao, { acao: "excluiu", entidade: "uber", alvo: "base inteira do Uber",
+                                     resumo: `${quantas} linha(s) apagada(s)` });
     }
 
     // ---- parâmetros ----
     if (caminho === "/api/params" && metodo === "PUT") {
       if (!corpo.params || typeof corpo.params !== "object") return erro(400, "Parâmetros inválidos.");
+      const antes = dados.params.regras || {};
+      const depois = corpo.params.regras || {};
       dados.params = corpo.params;
-      return grava(estado, sessao.nome);
+      return grava(estado, sessao, {
+        acao: "alterou", entidade: "parâmetros", alvo: "regras e vínculos",
+        resumo: diferencas(antes, depois, ["jantar", "cafe", "toleranciaUber"])
+      });
     }
 
     // ---- backup e base original ----
     if (caminho === "/api/estado" && metodo === "PUT") {
       if (!estruturaValida(corpo.dados)) return erro(400, "Backup fora do formato esperado.");
       estado.dados = corpo.dados;
-      return grava(estado, sessao.nome);
+      return grava(estado, sessao, {
+        acao: "restaurou", entidade: "base", alvo: "backup",
+        resumo: `${corpo.dados.viagens.length} viagens · ${corpo.dados.colaboradores.length} pessoas`
+      });
     }
 
     if (caminho === "/api/base-original" && metodo === "POST") {
-      const novo = estadoInicial();
-      estado.dados = novo.dados;
-      return grava(estado, sessao.nome);
+      const inicial = estadoInicial();
+      estado.dados = inicial.dados;
+      return grava(estado, sessao, { acao: "restaurou", entidade: "base",
+                                     alvo: "base original da planilha", resumo: "" });
     }
 
     return erro(404, "Rota não encontrada.");
