@@ -33,16 +33,26 @@ para editar.
 ## Acessos e registro de alterações
 
 Cada pessoa tem o seu login, e a entrada é pelo **e-mail corporativo `@acegaming.com.br`** —
-endereço de outro domínio não é aceito no cadastro nem na tela de entrada. Quem administra cria o
-acesso em **Ajustes → Acessos**, informando nome, e-mail e o que a pessoa pode fazer:
+endereço de outro domínio não é aceito. O acesso sai do **cadastro da equipe**: em
+**Ajustes → Acessos** quem administra escolhe a pessoa na lista do headcount e o e-mail dela vem
+junto, do próprio cadastro. Não há nome nem endereço digitado à mão, então o acesso nunca aponta
+para alguém que não existe na base.
 
 | Papel | Pode |
 |---|---|
-| **Administra** | tudo, inclusive criar, desativar e remover acessos |
-| **Lança e edita** | viagens, Uber, cadastros, regras e backups — não mexe em acessos |
+| **Admin** | tudo, inclusive criar, desativar e remover acessos |
+| **Compras** | tudo, menos mexer em acessos |
+| **Financeiro** | consulta a base inteira e exporta relatórios; não altera nada |
+| **Gestor** | consulta apenas os lançamentos e custos da sua equipe; não altera nada |
+
+O recorte do **gestor** é feito no servidor, a partir do campo *gestor* do cadastro: ele recebe
+quem responde para ele, direta ou indiretamente, e ele próprio. Viagens, Uber, cadastros e
+painéis das outras equipes não chegam ao navegador dele — não é a tela que esconde, é o servidor
+que não manda. Quem não escreve também não vê os botões que escrevem, e qualquer requisição de
+escrita é recusada com 403.
 
 Ao criar um acesso você entrega uma **senha provisória**, mostrada uma única vez. Na primeira
-entrada a pessoa escolhe a definitiva; a provisória deixa de valer. Ninguém, nem quem
+entrada a pessoa escolhe a definitiva; até lá a sessão dela só lê. A provisória deixa de valer. Ninguém, nem quem
 administra, consegue ler a senha de outra pessoa — só redefinir, o que gera uma provisória nova.
 
 Todo lançamento, alteração e exclusão vai para o **Registro de alterações**, com quem, quando,

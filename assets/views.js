@@ -978,7 +978,14 @@
 
   // ---------- acessos e registro de alterações ----------
 
-  var ROTULO_PAPEL = { admin: "Administra", editor: "Lança e edita" };
+  var ROTULO_PAPEL = { admin: "Admin", compras: "Compras", financeiro: "Financeiro", gestor: "Gestor" };
+
+  var DESCRICAO_PAPEL = {
+    admin: "Tudo, inclusive criar e remover acessos.",
+    compras: "Lança, edita e importa — tudo, menos mexer em acessos.",
+    financeiro: "Vê a base inteira e exporta relatórios; não altera nada.",
+    gestor: "Vê apenas os lançamentos e custos de quem responde para ela; não altera nada."
+  };
 
   function quando(iso, comHora) {
     if (!iso) return "—";
@@ -1000,7 +1007,7 @@
         (u.id === eu.id ? ' <span class="chip">você</span>' : "") +
         (u.trocarSenha ? ' <span class="chip warn" title="Vai definir a senha no próximo acesso">senha provisória</span>' : "") +
         '<div class="t-sub">' + esc(u.email || "—") + "</div></td>" +
-        "<td>" + esc(ROTULO_PAPEL[u.papel] || u.papel) + "</td>" +
+        '<td title="' + esc(DESCRICAO_PAPEL[u.papel] || "") + '">' + esc(ROTULO_PAPEL[u.papel] || u.papel) + "</td>" +
         "<td>" + (u.ativo ? '<span class="chip ok">ativo</span>' : '<span class="chip">desativado</span>') + "</td>" +
         '<td class="num t-sub">' + quando(u.ultimoAcesso, true) + "</td>" +
         "</tr>";
@@ -1013,10 +1020,14 @@
       '<div class="note" style="margin:12px 14px 0">Cada pessoa entra com o seu e-mail corporativo ' +
       "<strong>@acegaming.com.br</strong> e a sua própria senha, " +
       "e tudo que ela incluir ou alterar fica registrado no nome dela. " +
-      "<strong>Administra</strong> pode criar e remover acessos; <strong>lança e edita</strong> faz todo o resto. " +
-      "Ao criar um acesso você define uma senha provisória — a pessoa escolhe a definitiva na primeira entrada.</div>" +
+      "O acesso sai do cadastro da equipe: escolha a pessoa e o e-mail dela vem junto. " +
+      "Ao criar, você entrega uma senha provisória — a definitiva quem escolhe é ela, na primeira entrada.</div>" +
+      '<div class="note" style="margin:10px 14px 0">' +
+      Object.keys(ROTULO_PAPEL).map(function (p) {
+        return "<strong>" + esc(ROTULO_PAPEL[p]) + ":</strong> " + esc(DESCRICAO_PAPEL[p]);
+      }).join("<br>") + "</div>" +
       '<div class="table-wrap" style="max-height:360px"><table><thead><tr>' +
-      "<th>Pessoa</th><th>Pode</th><th>Situação</th><th class=\"num\">Último acesso</th>" +
+      "<th>Pessoa</th><th>Papel</th><th>Situação</th><th class=\"num\">Último acesso</th>" +
       "</tr></thead><tbody>" +
       (linhas || '<tr><td colspan="4" class="t-sub" style="padding:16px">Nenhum acesso individual criado ainda — ' +
         "por enquanto só a senha mestre entra.</td></tr>") +
@@ -1077,6 +1088,17 @@
   function ajustesView(estado) {
     var r = C.db.params.regras;
     var html = '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(330px,1fr))">';
+
+    if (C.modo === "servidor" && !C.podeEditar()) {
+      html += '<div class="card" style="grid-column:1/-1"><div class="card-body">' +
+        '<div class="note ok">Este acesso é de consulta: dá para navegar por tudo que aparece aqui e ' +
+        "baixar os relatórios, mas não para lançar, editar nem apagar." +
+        (C.soDaEquipe()
+          ? " Você está vendo apenas <strong>" + esc(C.meta.nome) + "</strong> e quem responde para você — " +
+            C.db.colaboradores.length + " pessoa(s) e " + C.db.viagens.length + " lançamento(s)."
+          : "") +
+        "</div></div></div>";
+    }
 
     html += '<div class="card"><div class="card-head"><h2>Regra de alimentação</h2></div>' +
       '<div class="card-body grid" style="gap:12px">' +
@@ -1147,7 +1169,7 @@
 
     if (C.modo === "servidor") {
       if (C.ehAdmin()) html += acessosCard();
-      html += historicoCard(estado);
+      if (C.veRegistro()) html += historicoCard(estado);
     }
 
     html += '<div class="card"><div class="card-head"><h2>Como usar</h2></div>' +
@@ -1163,9 +1185,10 @@
       "<p><strong>Uber:</strong> aba Uber, cole o relatório e importe. Nome novo aparece como " +
       "<em>⚠ incluir no De-Para</em>, com um botão para vincular na hora.</p>" +
       "<p><strong>Acessos:</strong> cada pessoa entra com o seu e-mail corporativo e a sua senha. " +
-      "Quem administra cria o acesso aqui mesmo e entrega uma senha provisória; a pessoa escolhe a definitiva " +
-      "na primeira entrada. Tudo que é incluído, alterado ou excluído fica no <em>Registro de alterações</em>, " +
-      "com nome e horário — e cada viagem mostra quem lançou e quem mexeu por último.</p>" +
+      "Quem administra escolhe a pessoa no cadastro da equipe, define o que ela pode fazer e entrega uma " +
+      "senha provisória; a definitiva quem escolhe é ela, na primeira entrada. Tudo que é incluído, alterado " +
+      "ou excluído fica no <em>Registro de alterações</em>, com nome e horário — e cada viagem mostra quem " +
+      "lançou e quem mexeu por último.</p>" +
       "</div></div>";
 
     html += "</div>";
@@ -1177,8 +1200,11 @@
       (dica ? '<span class="hint">' + esc(dica) + "</span>" : "") + "</div>";
   }
 
+  function descricaoPapel(papel) { return DESCRICAO_PAPEL[papel] || ""; }
+
   window.Views = {
     esc: esc, campo: campo, selectHTML: selectHTML, pessoa: pessoa, vazio: vazio,
+    descricaoPapel: descricaoPapel,
     kpi: kpi, chipStatus: chipStatus,
     painel: painel, viagens: viagensView, calendario: calendarioView,
     uber: uberView, equipe: equipeView, ajustes: ajustesView

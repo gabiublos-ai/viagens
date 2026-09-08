@@ -127,8 +127,12 @@
 
   var db = null;
   var armazem = null;
+  // Sem servidor (arquivo aberto direto no navegador) não há papel nem acesso a
+  // controlar: quem abriu o arquivo é dono dele e pode tudo, menos o que só faz
+  // sentido com uma base compartilhada.
   var meta = { revisao: 0, atualizadoEm: "", atualizadoPor: "", nome: "",
-               id: "", papel: "editor", mestre: false, trocarSenha: false };
+               id: "", papel: "admin", colaborador: "", mestre: false, trocarSenha: false,
+               escreve: true, acessos: false, registro: false, escopo: "tudo" };
   var usuarios = [];          // quem tem acesso, sem as senhas (só no modo servidor)
   var equipeAtualizada = 0;   // nº de cadastros mexidos na última migração, para avisar na tela
 
@@ -187,17 +191,26 @@
 
   /** Toda resposta do servidor traz quem está logado e quem tem acesso. */
   function adotaSessao(estado) {
-    if (estado.sessao) {
-      meta.id = estado.sessao.id || "";
-      meta.nome = estado.sessao.nome || "";
-      meta.papel = estado.sessao.papel || "editor";
-      meta.mestre = !!estado.sessao.mestre;
-      meta.trocarSenha = !!estado.sessao.trocarSenha;
+    var s = estado.sessao;
+    if (s) {
+      meta.id = s.id || "";
+      meta.nome = s.nome || "";
+      meta.papel = s.papel || "gestor";
+      meta.colaborador = s.colaborador || "";
+      meta.mestre = !!s.mestre;
+      meta.trocarSenha = !!s.trocarSenha;
+      meta.escreve = !!s.escreve;
+      meta.acessos = !!s.acessos;
+      meta.registro = !!s.registro;
+      meta.escopo = s.escopo || "tudo";
     }
     if (Array.isArray(estado.usuarios)) usuarios = estado.usuarios;
   }
 
-  function ehAdmin() { return meta.papel === "admin"; }
+  function ehAdmin() { return !!meta.acessos; }
+  function podeEditar() { return !!meta.escreve; }
+  function veRegistro() { return !!meta.registro; }
+  function soDaEquipe() { return meta.escopo === "equipe"; }
 
   function trocarPropriaSenha(atual, nova) {
     return armazem.trocarPropriaSenha(atual, nova).then(aplica);
@@ -1264,7 +1277,8 @@
     // estado
     iniciar: iniciar, entrar: entrar, sair: sair, aoMudar: aoMudar,
     recarregar: recarregar, revisaoRemota: revisaoRemota,
-    ehAdmin: ehAdmin, trocarPropriaSenha: trocarPropriaSenha,
+    ehAdmin: ehAdmin, podeEditar: podeEditar, veRegistro: veRegistro, soDaEquipe: soDaEquipe,
+    trocarPropriaSenha: trocarPropriaSenha,
     salvarUsuario: salvarUsuario, excluirUsuario: excluirUsuario,
     redefinirSenha: redefinirSenha, historico: historico, senhaSugerida: senhaSugerida,
     get usuarios() { return usuarios; },

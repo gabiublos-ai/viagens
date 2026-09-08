@@ -34,8 +34,26 @@ const DIAS_SESSAO = 30;
 const TENTATIVAS_MAX = 8;          // por janela, por IP
 const JANELA_TENTATIVAS = 10 * 60 * 1000;
 const LIMITE_HISTORICO = 1200;     // entradas guardadas no registro de alterações
-const PAPEIS = ["admin", "editor"];
 const DOMINIO_EMAIL = "@acegaming.com.br";   // só o e-mail corporativo entra
+
+/* O que cada papel pode fazer.
+ *   escreve   — lançar, editar, excluir, importar, restaurar
+ *   acessos   — criar, alterar e remover acessos
+ *   registro  — ver o registro de alterações da base inteira
+ *   escopo    — "tudo" ou "equipe" (só quem responde para a pessoa)
+ */
+const CAPACIDADES = {
+  admin:      { escreve: true,  acessos: true,  registro: true,  escopo: "tudo" },
+  compras:    { escreve: true,  acessos: false, registro: true,  escopo: "tudo" },
+  financeiro: { escreve: false, acessos: false, registro: true,  escopo: "tudo" },
+  gestor:     { escreve: false, acessos: false, registro: false, escopo: "equipe" }
+};
+const PAPEIS = Object.keys(CAPACIDADES);
+
+/** Papel desconhecido cai no mais restrito que ainda enxerga alguma coisa. */
+function capacidades(papel) {
+  return CAPACIDADES[papel] || CAPACIDADES.gestor;
+}
 const SENHA_MINIMA = 8;
 
 // ---------- utilidades de resposta ----------
@@ -252,9 +270,11 @@ function estruturaValida(dados) {
  * que a sessão e o histórico apontam para alguém, então trocar nome ou e-mail
  * não quebra nada.
  *
- * O papel diz o que a pessoa pode fazer:
- *   admin   — tudo, inclusive criar e remover acessos
- *   editor  — lança e edita viagens, Uber e cadastros; não mexe em acessos
+ * O papel diz o que a pessoa pode fazer (ver CAPACIDADES):
+ *   admin       — tudo, inclusive criar e remover acessos
+ *   compras     — tudo, menos mexer em acessos
+ *   financeiro  — só consulta e exportação, da base inteira
+ *   gestor      — só consulta, e apenas da sua equipe
  *
  * A senha mestre (variável de ambiente) continua valendo como entrada de
  * emergência de quem administra o site, para o caso de ninguém mais conseguir
@@ -292,10 +312,94 @@ function semSenha(u) {
 
 function limpaUsuario(bruto) {
   return {
+    // `colaborador` é o nome como está no cadastro da equipe: é ele que amarra
+    // o acesso ao headcount e, no caso do gestor, define de quem é a equipe.
+    colaborador: texto(bruto.colaborador, 120).trim(),
     nome: texto(bruto.nome, 80).trim(),
     email: texto(bruto.email, 120).trim().toLowerCase(),
-    papel: PAPEIS.includes(bruto.papel) ? bruto.papel : "editor",
+    papel: PAPEIS.includes(bruto.papel) ? bruto.papel : "gestor",
     ativo: bruto.ativo !== false
+  };
+}
+
+/** O e-mail corporativo de quem está no cadastro — o principal ou o alternativo. */
+function emailDoCadastro(c) {
+  for (const campo of ["email", "emailAlt"]) {
+    if (emailCorporativo(c[campo])) return normal(c[campo]);
+  }
+  return "";
+}
+
+// ---------- recorte da equipe (papel "gestor") ----------
+
+/**
+ * Nomes (normalizados) de quem responde para a pessoa, direta ou
+ * indiretamente, mais ela própria. Um líder enxerga a cadeia inteira abaixo
+ * dele — de outro jeito o custo de uma equipe dentro da sua ficaria invisível.
+ */
+function equipeDe(colaboradores, lider) {
+  const raiz = normal(lider);
+  const equipe = new Set();
+  if (!raiz) return equipe;
+  equipe.add(raiz);
+
+  const filhos = new Map();
+  for (const c of colaboradores) {
+    const g = normal(c.gestor);
+    if (!g) continue;
+    if (!filhos.has(g)) filhos.set(g, []);
+    filhos.get(g).push(normal(c.nome));
+  }
+
+  const fila = [raiz];
+  while (fila.length) {
+    for (const nome of filhos.get(fila.shift()) || []) {
+      if (equipe.has(nome)) continue;
+      equipe.add(nome);
+      fila.push(nome);
+    }
+  }
+  return equipe;
+}
+
+/** De quem é a corrida: o vínculo do De-Para ou o próprio nome do relatório. */
+function donoDaCorrida(linha, porNomeUber) {
+  const p = String(linha).split(";");
+  const nome = ((p[2] || "") + " " + (p[3] || "")).replace(/\s+/g, " ").trim();
+  if (!nome || nome === "-- --" || nome === "--") return "";
+  return porNomeUber.get(normal(nome)) || nome;
+}
+
+function chaveCorrida(linha) {
+  const p = String(linha).split(";");
+  return [p[0], p[1], p[2], p[3], p[9], p[10]].join("|").slice(0, 120);
+}
+
+/** A base vista por um gestor: só a equipe dele, e nada mais sai do servidor. */
+function recorteDaEquipe(dados, lider) {
+  const equipe = equipeDe(dados.colaboradores, lider);
+  const naEquipe = (nome) => equipe.has(normal(nome));
+
+  const porNomeUber = new Map();
+  for (const m of dados.params.dePara || []) porNomeUber.set(normal(m.uber), m.colaborador);
+
+  const uber = dados.uber.filter((r) => naEquipe(donoDaCorrida(r.linha, porNomeUber)));
+  const chaves = new Set(uber.map((r) => chaveCorrida(r.linha)));
+  const conferencias = {};
+  for (const [chave, valor] of Object.entries(dados.params.conferenciasUber || {})) {
+    if (chaves.has(chave)) conferencias[chave] = valor;
+  }
+
+  return {
+    ...dados,
+    colaboradores: dados.colaboradores.filter((c) => naEquipe(c.nome)),
+    viagens: dados.viagens.filter((v) => naEquipe(v.colaborador)),
+    uber,
+    params: {
+      ...dados.params,
+      dePara: (dados.params.dePara || []).filter((m) => naEquipe(m.colaborador)),
+      conferenciasUber: conferencias
+    }
   };
 }
 
@@ -417,15 +521,25 @@ export function criarApi(cfg) {
    * rota própria — e os usuários vão sem o hash da senha.
    */
   function paraCliente(estado, sessao) {
+    const cap = capacidades(sessao && sessao.papel);
+    // O gestor recebe só a fatia dele: o recorte é aqui, no servidor, para o
+    // custo das outras equipes nem chegar ao navegador.
+    const dados = cap.escopo === "equipe"
+      ? recorteDaEquipe(estado.dados, sessao.colaborador)
+      : estado.dados;
     return {
       revisao: estado.revisao,
       atualizadoEm: estado.atualizadoEm,
       atualizadoPor: estado.atualizadoPor,
       importacao: estado.importacao,
-      dados: estado.dados,
-      usuarios: estado.usuarios.map(semSenha),
-      sessao: sessao ? { id: sessao.id, nome: sessao.nome, papel: sessao.papel,
-                         mestre: !!sessao.mestre, trocarSenha: !!sessao.trocarSenha } : null
+      dados,
+      usuarios: cap.acessos ? estado.usuarios.map(semSenha) : [],
+      sessao: sessao ? {
+        id: sessao.id, nome: sessao.nome, papel: sessao.papel,
+        colaborador: sessao.colaborador || "",
+        mestre: !!sessao.mestre, trocarSenha: !!sessao.trocarSenha,
+        escreve: cap.escreve, acessos: cap.acessos, registro: cap.registro, escopo: cap.escopo
+      } : null
     };
   }
 
@@ -455,7 +569,8 @@ export function criarApi(cfg) {
       // valendo como porta de emergência de quem administra o site.
       let sessao = null;
       if (usuario && usuario.ativo && await senhaConfere(senha, usuario.senhaHash)) {
-        sessao = { id: usuario.id, nome: usuario.nome, papel: usuario.papel, trocarSenha: !!usuario.trocarSenha };
+        sessao = { id: usuario.id, nome: usuario.nome, papel: usuario.papel,
+                   colaborador: usuario.colaborador || usuario.nome, trocarSenha: !!usuario.trocarSenha };
       } else if (cfg.senhaHash && await senhaConfere(senha, cfg.senhaHash)) {
         // Entra como mestre com qualquer nome digitado — mas nunca com o nome de
         // alguém cadastrado, para o registro não parecer que foi a própria pessoa.
@@ -499,18 +614,21 @@ export function criarApi(cfg) {
     } else {
       const usuario = estado.usuarios.find((u) => u.id === token.id);
       if (!usuario || !usuario.ativo) return erro(401, "Seu acesso foi encerrado. Entre de novo.");
-      sessao = { id: usuario.id, nome: usuario.nome, papel: usuario.papel, trocarSenha: !!usuario.trocarSenha };
+      sessao = { id: usuario.id, nome: usuario.nome, papel: usuario.papel,
+                 colaborador: usuario.colaborador || usuario.nome, trocarSenha: !!usuario.trocarSenha };
     }
-    const admin = sessao.papel === "admin";
+    const cap = capacidades(sessao.papel);
 
     if (caminho === "/api/sessao" && metodo === "GET") {
       return json({ id: sessao.id, nome: sessao.nome, papel: sessao.papel,
-                    mestre: !!sessao.mestre, trocarSenha: !!sessao.trocarSenha });
+                    mestre: !!sessao.mestre, trocarSenha: !!sessao.trocarSenha,
+                    escreve: cap.escreve, acessos: cap.acessos, registro: cap.registro });
     }
 
     if (caminho === "/api/estado" && metodo === "GET") return json(paraCliente(estado, sessao));
 
     if (caminho === "/api/usuarios" && metodo === "GET") {
+      if (!cap.acessos) return erro(403, "Só quem administra o sistema vê a lista de acessos.");
       return json({ usuarios: estado.usuarios.map(semSenha) });
     }
 
@@ -521,7 +639,14 @@ export function criarApi(cfg) {
       return erro(403, "Defina a sua senha antes de lançar qualquer coisa.");
     }
 
+    // Papel de consulta não escreve nada — a única exceção é a própria senha.
+    if (!cap.escreve && metodo !== "GET" && caminho !== "/api/senha") {
+      return erro(403, "Este acesso é de consulta: dá para ver e exportar, mas não alterar.");
+    }
+
     if (caminho === "/api/historico" && metodo === "GET") {
+      // O registro fala da base inteira; quem só enxerga a própria equipe não o vê.
+      if (!cap.registro) return erro(403, "Este acesso não abre o registro de alterações.");
       const limite = Math.min(Math.max(Number(url.searchParams.get("limite")) || 200, 1), LIMITE_HISTORICO);
       return json({ total: estado.historico.length, historico: estado.historico.slice(0, limite) });
     }
@@ -563,6 +688,7 @@ export function criarApi(cfg) {
 
     // ---- acessos (só admin) ----
     const soAdmin = () => erro(403, "Só quem administra o sistema pode mexer nos acessos.");
+    const admin = cap.acessos;
 
     /** Garante que a última pessoa com poder de administrar não se apague sozinha. */
     function sobraAdmin(usuarios, ignorarId) {
@@ -572,35 +698,49 @@ export function criarApi(cfg) {
     if (caminho === "/api/usuario" && metodo === "PUT") {
       if (!admin) return soAdmin();
       const limpo = limpaUsuario(corpo.usuario || {});
-      if (!limpo.nome) return erro(400, "Informe o nome de quem vai ter acesso.");
-      if (!emailCorporativo(limpo.email)) {
-        return erro(400, `O acesso é pelo e-mail corporativo: informe um endereço terminado em ${DOMINIO_EMAIL}.`);
-      }
       const id = texto(corpo.usuario && corpo.usuario.id, 40);
       const alvo = id ? estado.usuarios.find((u) => u.id === id) : null;
       if (id && !alvo) return erro(404, "Acesso não encontrado.");
 
-      // O e-mail é a identidade de quem entra: não pode repetir.
-      const repetido = estado.usuarios.find((u) => u.id !== id && normal(u.email) === normal(limpo.email));
-      if (repetido) return erro(409, `Este e-mail já tem acesso (${repetido.nome}).`);
-
       let registro;
       if (alvo) {
-        if ((!limpo.ativo || limpo.papel !== "admin") && alvo.papel === "admin" && alvo.ativo &&
+        // Nome e e-mail vêm do cadastro da equipe e não se editam aqui: no
+        // acesso já criado só mudam o papel e a situação.
+        const mudanca = { papel: limpo.papel, ativo: limpo.ativo };
+        if ((!mudanca.ativo || mudanca.papel !== "admin") && alvo.papel === "admin" && alvo.ativo &&
             !sobraAdmin(estado.usuarios, alvo.id)) {
           return erro(409, "Este é o último acesso de administrador ativo. Promova outra pessoa antes.");
         }
-        registro = { acao: "alterou", entidade: "acesso", alvo: limpo.nome,
-                     resumo: diferencas(alvo, limpo, ["nome", "email", "papel", "ativo"]) };
-        Object.assign(alvo, limpo);
+        registro = { acao: "alterou", entidade: "acesso", alvo: alvo.nome,
+                     resumo: diferencas(alvo, mudanca, ["papel", "ativo"]) };
+        Object.assign(alvo, mudanca);
       } else {
+        // O acesso sai do headcount: quem tem cadastro na equipe, com o e-mail
+        // corporativo que já está lá. Nada de nome ou endereço digitado à mão.
+        const pessoa = dados.colaboradores.find((c) => normal(c.nome) === normal(limpo.colaborador));
+        if (!pessoa) {
+          return erro(400, "Escolha alguém do cadastro da equipe para receber o acesso.");
+        }
+        const email = emailDoCadastro(pessoa);
+        if (!email) {
+          return erro(400, `${pessoa.nome} está sem e-mail ${DOMINIO_EMAIL} no cadastro. ` +
+                           "Preencha o e-mail na aba Equipe e crie o acesso de novo.");
+        }
+        const repetido = estado.usuarios.find((u) => normal(u.email) === email ||
+                                                     normal(u.colaborador) === normal(pessoa.nome));
+        if (repetido) return erro(409, `${repetido.nome} já tem acesso.`);
+
         const senha = String(corpo.senha || "");
         if (senha.length < SENHA_MINIMA) {
           return erro(400, `Defina uma senha inicial com pelo menos ${SENHA_MINIMA} caracteres.`);
         }
         const novo = {
           id: proximoIdUsuario(estado.usuarios),
-          ...limpo,
+          colaborador: pessoa.nome,
+          nome: pessoa.nome,
+          email,
+          papel: limpo.papel,
+          ativo: true,
           senhaHash: await hashSenha(senha),
           trocarSenha: true,          // a senha inicial vale uma vez; a pessoa escolhe a dela
           criadoEm: new Date().toISOString(),
@@ -609,7 +749,7 @@ export function criarApi(cfg) {
         };
         estado.usuarios.push(novo);
         registro = { acao: "incluiu", entidade: "acesso", alvo: novo.nome,
-                     resumo: `${novo.papel}${novo.email ? " · " + novo.email : ""}` };
+                     resumo: `${novo.papel} · ${novo.email}` };
       }
       estado.usuarios.sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
       return grava(estado, sessao, registro);

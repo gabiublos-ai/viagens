@@ -29,6 +29,11 @@
 
   var $view, $tabs, $anoSel;
 
+  /* Ações que mudam a base. Papel de consulta não as enxerga (CSS) e, se
+     chegar a uma por outro caminho, o clique para aqui — antes do servidor,
+     que recusaria de todo jeito. */
+  var ACOES_DE_ESCRITA = ["nova-viagem", "nova-viagem-para", "editar", "duplicar", "alteracao", "registrar-alteracao", "cancelar", "excluir", "excluir-corrida", "excluir-depara", "validar", "desvalidar", "mapear", "importar-uber", "importar-viagens", "limpar-uber", "salvar-regras", "backup-restaurar", "restaurar-base", "novo-acesso", "editar-acesso", "novo-colaborador", "editar-colaborador", "usar-regra"];
+
   // ---------- inicialização ----------
 
   function iniciar() {
@@ -55,6 +60,7 @@
   /** Liga a aplicação depois que a base está na mão. */
   function montar() {
     document.body.classList.remove("trancado");
+    document.body.classList.toggle("so-leitura", !C.podeEditar());
     estado.ano = C.anosComDados().slice(-1)[0];
 
     $tabs.innerHTML = ABAS.map(function (a) {
@@ -188,11 +194,10 @@
     alvo.hidden = false;
     var m = C.meta;
     var nome = m.nome || localStorage.getItem("gvc.nome") || "";
-    var titulo = m.mestre ? "Entrou pela senha mestre"
-      : m.papel === "admin" ? "Administra os acessos" : "Lança e edita";
+    var titulo = m.mestre ? "Entrou pela senha mestre" : (V.descricaoPapel(m.papel) || "");
     alvo.innerHTML =
       (nome ? '<span class="chip accent" title="' + esc(titulo) + '">' + esc(nome) +
-        (m.mestre ? " · mestre" : m.papel === "admin" ? " · admin" : "") + "</span>" : "") +
+        " · " + esc(m.mestre ? "mestre" : m.papel) + "</span>" : "") +
       (m.mestre ? "" : '<button class="btn btn-ghost btn-sm" data-acao="minha-senha">Minha senha</button>') +
       '<button class="btn btn-ghost btn-sm" data-acao="sair">Sair</button>';
   }
@@ -296,6 +301,11 @@
     if (!botao) return;
     var acao = botao.dataset.acao;
     var id = botao.dataset.id;
+
+    if (ACOES_DE_ESCRITA.indexOf(acao) > -1 && !C.podeEditar()) {
+      toast("Este acesso é de consulta: dá para ver e exportar, mas não alterar.");
+      return;
+    }
 
     switch (acao) {
       case "nova-viagem": abrirViagem(null); break;
@@ -1359,7 +1369,10 @@
           return "<li><strong>" + esc(a.curto) + "</strong> — " + esc(a.texto) + "</li>";
         }).join("") + "</ul></div>";
 
-      corpo += c.conferido
+      // Acesso de consulta vê o alerta, mas não o formulário que o resolve.
+      corpo += !C.podeEditar() && !c.conferido
+        ? '<div class="note">Esta corrida ainda não foi validada. Quem lança é que valida.</div>'
+        : c.conferido
         ? '<div class="note ' + (c.devida ? "ok" : "warn") + '"><strong>' +
           (c.devida ? "✓ Despesa devida" : "✗ Despesa não devida") + "</strong> · validado por " +
           esc(c.conferencia.por || "—") + " em " + esc(C.fmtData((c.conferencia.em || "").slice(0, 10))) +
@@ -1713,29 +1726,68 @@
     });
   }
 
+  var PAPEIS_ACESSO = [
+    { v: "admin", r: "Admin — tudo, inclusive criar e remover acessos" },
+    { v: "compras", r: "Compras — tudo, menos mexer em acessos" },
+    { v: "financeiro", r: "Financeiro — consulta a base inteira e exporta relatórios" },
+    { v: "gestor", r: "Gestor — consulta só os lançamentos da própria equipe" }
+  ];
+
+  /**
+   * Quem pode receber acesso: o cadastro da equipe, fora quem já tem acesso,
+   * quem saiu e quem ainda não tem e-mail corporativo. O e-mail não se digita —
+   * vem do cadastro, e é ele que a pessoa vai usar para entrar.
+   */
+  function candidatosAcesso() {
+    var comAcesso = {};
+    C.usuarios.forEach(function (u) { comAcesso[C.normal(u.colaborador || u.nome)] = 1; });
+    return C.colaboradoresOrdenados().filter(function (c) {
+      if (comAcesso[C.normal(c.nome)]) return false;
+      if ((c.status || "").toLowerCase().indexOf("deslig") === 0) return false;
+      return !!emailCorporativo(c);
+    });
+  }
+
+  function emailCorporativo(c) {
+    var candidatos = [c.email, c.emailAlt];
+    for (var i = 0; i < candidatos.length; i++) {
+      var e = String(candidatos[i] || "").trim().toLowerCase();
+      if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) && e.slice(-17) === "@acegaming.com.br") return e;
+    }
+    return "";
+  }
+
   function abrirAcesso(u) {
     var novo = !u;
-    var d = u || { nome: "", email: "", papel: "editor", ativo: true };
+    var d = u || { nome: "", email: "", papel: "gestor", ativo: true };
     var senhaInicial = novo ? C.senhaSugerida() : "";
+    var candidatos = novo ? candidatosAcesso() : [];
 
     var dialogo = abrirModal({
       titulo: novo ? "Novo acesso" : "Acesso de " + d.nome,
       corpo: '<form id="form-acesso" method="dialog"><div class="form-grid">' +
-        V.campo("Nome", '<input type="text" name="nome" value="' + esc(d.nome) + '" required>', "c12",
-                "É o nome que aparece no registro de alterações.") +
-        V.campo("E-mail corporativo",
-                '<input type="email" name="email" value="' + esc(d.email || "") + '" required ' +
-                'placeholder="nome.sobrenome@acegaming.com.br" pattern=".+@acegaming\\.com\\.br" ' +
-                'title="O acesso é pelo e-mail corporativo, terminado em @acegaming.com.br">', "c12",
-                "É por ele que a pessoa entra. Só endereços @acegaming.com.br são aceitos.") +
-        V.campo("Pode", V.selectHTML("papel", [
-          { v: "editor", r: "Lançar e editar viagens, Uber e cadastros" },
-          { v: "admin", r: "Tudo, inclusive criar e remover acessos" }
-        ], d.papel), "c12") +
         (novo
-          ? V.campo("Senha provisória",
-              '<input type="text" name="senha" class="mono" value="' + esc(senhaInicial) + '" minlength="8" required>',
-              "c12", "A pessoa troca por uma sua na primeira entrada.")
+          ? (candidatos.length
+              ? V.campo("Pessoa", V.selectHTML("colaborador",
+                  [{ v: "", r: "Escolha no cadastro da equipe…" }].concat(candidatos.map(function (c) {
+                    return { v: c.nome, r: c.nome + " · " + (c.area || "sem área") };
+                  })), "", "required"), "c12",
+                  "O e-mail corporativo vem do cadastro — não precisa digitar.") +
+                '<div class="field c12"><label>E-mail de entrada</label>' +
+                '<p class="saida" data-email-acesso>escolha a pessoa acima</p></div>'
+              : '<div class="field c12"><div class="note">Todo mundo do cadastro com e-mail ' +
+                "@acegaming.com.br já tem acesso. Para liberar mais alguém, cadastre a pessoa na aba " +
+                "<strong>Equipe</strong> com o e-mail corporativo dela.</div></div>")
+          : '<div class="field c12"><label>Pessoa</label>' +
+            '<p class="saida">' + esc(d.nome) + " · " + esc(d.email || "—") + "</p>" +
+            '<span class="hint">Nome e e-mail vêm do cadastro da equipe; para mudar, altere lá.</span></div>') +
+        V.campo("Papel", V.selectHTML("papel", PAPEIS_ACESSO, d.papel), "c12") +
+        (novo
+          ? (candidatos.length
+              ? V.campo("Senha provisória",
+                  '<input type="text" name="senha" class="mono" value="' + esc(senhaInicial) + '" minlength="8" required>',
+                  "c12", "A pessoa troca por uma sua na primeira entrada.")
+              : "")
           : V.campo("Situação",
               '<label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="ativo" style="width:auto"' +
               (d.ativo ? " checked" : "") + "> Acesso ativo</label>", "c12",
@@ -1745,26 +1797,38 @@
         '<button class="btn btn-sm" data-acao="resetar-senha">Redefinir senha</button>' +
         '<button class="btn btn-sm btn-danger btn-ghost" data-acao="remover-acesso">Remover</button>') +
         '<span class="grow"></span><button class="btn" data-acao="fechar">Cancelar</button>' +
-        '<button class="btn btn-primary" type="submit" form="form-acesso">' +
-        (novo ? "Criar acesso" : "Salvar") + "</button>",
+        (novo && !candidatos.length ? "" :
+          '<button class="btn btn-primary" type="submit" form="form-acesso">' +
+          (novo ? "Criar acesso" : "Salvar") + "</button>"),
       estreito: true
     });
 
     var form = dialogo.querySelector("form");
+
+    // Mostra o e-mail que vai valer, tirado do cadastro, assim que a pessoa é escolhida.
+    var saidaEmail = dialogo.querySelector("[data-email-acesso]");
+    if (saidaEmail) {
+      form.addEventListener("change", function (ev) {
+        if (ev.target.name !== "colaborador") return;
+        var c = C.colaborador(ev.target.value);
+        saidaEmail.textContent = c ? emailCorporativo(c) : "escolha a pessoa acima";
+      });
+    }
+
     form.addEventListener("submit", function (ev) {
       ev.preventDefault();
       var fd = new FormData(form);
+      var escolhido = (fd.get("colaborador") || "").trim();
       var dados = {
         id: novo ? "" : d.id,
-        nome: (fd.get("nome") || "").trim(),
-        email: (fd.get("email") || "").trim(),
+        colaborador: novo ? escolhido : d.colaborador,
         papel: fd.get("papel"),
         ativo: novo ? true : !!fd.get("ativo")
       };
       var senha = novo ? String(fd.get("senha") || "") : "";
       C.salvarUsuario(dados, senha).then(function () {
         dialogo.close();
-        if (novo) mostrarSenhaGerada(dados.nome, senha);
+        if (novo) mostrarSenhaGerada(escolhido, senha);
         else toast("Acesso atualizado");
         render();
       }, falhou);

@@ -730,6 +730,13 @@ tbody tr.inativo td { opacity: .55; }
 .acao-importou  { background: var(--warning-bg); color: var(--warning); }
 .acao-restaurou { background: var(--warning-bg); color: var(--warning); }
 
+/* Valor vindo do cadastro, mostrado no formulário sem ser editável. */
+.saida {
+  font-family: var(--mono); font-size: 12.5px; word-break: break-all; margin: 0;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 9px 11px; color: var(--text-2);
+}
+
 /* Senha provisória mostrada uma única vez, para ser copiada e entregue. */
 .senha-gerada {
   font-family: var(--mono); font-size: 15px; letter-spacing: .04em;
@@ -739,3 +746,36 @@ tbody tr.inativo td { opacity: .55; }
 
 /* Carimbo de autoria no rodapé do formulário de viagem. */
 .autoria { font-size: 11.5px; color: var(--text-2); line-height: 1.5; }
+
+/* ---------- acesso de consulta ---------- */
+
+/* Papel que não escreve não vê o que escreve. A trava de verdade é do servidor,
+   que recusa qualquer requisição de escrita; isto aqui é para a tela não
+   oferecer um caminho que vai terminar em erro. */
+body.so-leitura [data-acao="nova-viagem"],
+body.so-leitura [data-acao="nova-viagem-para"],
+body.so-leitura [data-acao="editar"],
+body.so-leitura [data-acao="duplicar"],
+body.so-leitura [data-acao="alteracao"],
+body.so-leitura [data-acao="registrar-alteracao"],
+body.so-leitura [data-acao="cancelar"],
+body.so-leitura [data-acao="excluir"],
+body.so-leitura [data-acao="excluir-corrida"],
+body.so-leitura [data-acao="excluir-depara"],
+body.so-leitura [data-acao="validar"],
+body.so-leitura [data-acao="desvalidar"],
+body.so-leitura [data-acao="mapear"],
+body.so-leitura [data-acao="importar-uber"],
+body.so-leitura [data-acao="importar-viagens"],
+body.so-leitura [data-acao="limpar-uber"],
+body.so-leitura [data-acao="salvar-regras"],
+body.so-leitura [data-acao="backup-restaurar"],
+body.so-leitura [data-acao="restaurar-base"],
+body.so-leitura [data-acao="novo-acesso"],
+body.so-leitura [data-acao="editar-acesso"],
+body.so-leitura [data-acao="novo-colaborador"],
+body.so-leitura [data-acao="editar-colaborador"],
+body.so-leitura [data-acao="usar-regra"] {
+  display: none !important;
+}
+body.so-leitura .actions-cell { display: none; }
