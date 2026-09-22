@@ -832,3 +832,17 @@ body.so-leitura .actions-cell { display: none; }
 /* Linha de detalhe logo abaixo da categoria que ela abre. */
 tbody tr.sublinha td { color: var(--text-2); font-size: 12px; padding-top: 2px; padding-bottom: 8px; }
 tbody tr.sublinha td:first-child { padding-left: 22px; }
+
+/* Coluna do gráfico mensal: a área sensível cobre a altura toda, para o clique
+   pegar o mês e não a fatia embaixo do cursor. */
+.chart g.coluna { cursor: pointer; }
+.chart .area-clique { fill: transparent; }
+.chart g.coluna:hover .area-clique,
+.chart g.coluna:focus-visible .area-clique { fill: var(--surface-2); }
+.chart g.coluna:focus-visible { outline: none; }
+.chart g.coluna:focus-visible .area-clique { stroke: var(--accent); stroke-width: 1.5; }
+
+.mes-topo {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 14px; margin-bottom: 12px;
+}

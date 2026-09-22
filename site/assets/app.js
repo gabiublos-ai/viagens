@@ -45,6 +45,7 @@
 
     document.addEventListener("click", aoClicar);
     document.addEventListener("change", aoMudarCampo);
+    document.addEventListener("keydown", aoTeclar);
     document.addEventListener("input", aoDigitar);
     document.addEventListener("mouseover", aoPassarMouse);
     document.addEventListener("mouseout", escondeTip);
@@ -372,10 +373,20 @@
         abrirAcesso(C.usuarios.filter(function (u) { return u.id === id; })[0]);
         break;
       case "atualizar-registro": carregarRegistro(true); break;
+      case "ver-mes": abrirMes(botao.dataset.mes); break;
       case "tema": alternarTema(); break;
       case "usar-regra": aplicarRegraAlimentacao(botao.closest("form")); break;
       case "fechar": botao.closest("dialog").close(); break;
     }
+  }
+
+  /** O mês do gráfico é um botão: teclado precisa abrir igual ao clique. */
+  function aoTeclar(ev) {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    var alvo = ev.target.closest && ev.target.closest('[data-acao="ver-mes"]');
+    if (!alvo) return;
+    ev.preventDefault();
+    abrirMes(alvo.dataset.mes);
   }
 
   function aoMudarCampo(ev) {
@@ -1716,6 +1727,25 @@
   }
 
   // ---------- modal, toast, tooltip, tema ----------
+
+  // ---------- detalhe do mês ----------
+
+  function abrirMes(mesRef) {
+    if (!mesRef) return;
+    var dialogo = abrirModal({
+      titulo: C.mesNome(mesRef),
+      corpo: V.detalheMes(mesRef, estado.ano),
+      rodape: '<button class="btn" data-acao="viagens-do-mes" data-mes="' + esc(mesRef) + '">' +
+        "Ver os lançamentos de " + esc(C.mesRotulo(mesRef)) + "</button>" +
+        '<span class="grow"></span><button class="btn btn-primary" data-acao="fechar">Fechar</button>'
+    });
+    dialogo.querySelector('[data-acao="viagens-do-mes"]').addEventListener("click", function () {
+      estado.filtros.mes = mesRef;
+      estado.filtros.avisos = false;
+      dialogo.close();
+      irPara("viagens");
+    });
+  }
 
   // ---------- acessos ----------
 

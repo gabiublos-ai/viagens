@@ -835,6 +835,20 @@ body.so-leitura .actions-cell { display: none; }
 tbody tr.sublinha td { color: var(--text-2); font-size: 12px; padding-top: 2px; padding-bottom: 8px; }
 tbody tr.sublinha td:first-child { padding-left: 22px; }
 
+/* Coluna do gráfico mensal: a área sensível cobre a altura toda, para o clique
+   pegar o mês e não a fatia embaixo do cursor. */
+.chart g.coluna { cursor: pointer; }
+.chart .area-clique { fill: transparent; }
+.chart g.coluna:hover .area-clique,
+.chart g.coluna:focus-visible .area-clique { fill: var(--surface-2); }
+.chart g.coluna:focus-visible { outline: none; }
+.chart g.coluna:focus-visible .area-clique { stroke: var(--accent); stroke-width: 1.5; }
+
+.mes-topo {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 14px; margin-bottom: 12px;
+}
+
 </style>
 <header class="topbar">
   <div class="topbar-row">
@@ -5376,7 +5390,16 @@ window.SEED = {
    * Barras empilhadas mês a mês. series = [{nome, cor, valores: []}], rotulos = eixo X.
    * Fatias com 2px de folga entre si, extremidade arredondada só no topo da pilha.
    */
-  function barrasEmpilhadas(rotulos, series, alturaBarra, referencia) {
+  /**
+   * @param {object} o
+   * @param {string[]} o.rotulos      rótulo de cada coluna
+   * @param {string[]} [o.chaves]     chave de cada coluna; presente, a coluna vira clicável
+   * @param {object[]} o.series       [{nome, cor, valores: []}]
+   * @param {object} [o.referencia]   {valor, rotulo} — linha de alvo
+   */
+  function barrasEmpilhadas(o) {
+    var rotulos = o.rotulos, series = o.series, alturaBarra = o.altura, referencia = o.referencia;
+    var chaves = o.chaves || [];
     var L = 52, R = 8, T = 22, B = 26;
     var W = 1000, H = (alturaBarra || 190) + T + B;
     var plotW = W - L - R, plotH = H - T - B;
@@ -5410,6 +5433,17 @@ window.SEED = {
       var cx = L + largura * i + largura / 2;
       var y = T + plotH;
       var total = totais[i];
+
+      // Cada mês é um grupo: o clique pega a coluna inteira, não só a fatia
+      // debaixo do cursor, e a área sensível vai do eixo ao topo do gráfico.
+      var clicavel = total > 0 && chaves[i];
+      svg += clicavel
+        ? '<g class="coluna" data-acao="ver-mes" data-mes="' + esc(chaves[i]) + '" role="button" tabindex="0" ' +
+          'aria-label="Abrir ' + esc(rot) + '">' +
+          '<rect class="area-clique" x="' + (cx - largura / 2 + 2) + '" y="' + T +
+          '" width="' + (largura - 4) + '" height="' + plotH + '" rx="4"/>'
+        : "<g>";
+
       if (total > 0 && anterior) {
         var pct = (total - anterior) / anterior * 100;
         var sobe = pct > 0;
@@ -5430,6 +5464,7 @@ window.SEED = {
           'data-tip="' + esc(rot + " · " + se.nome + "|" + C.brlSigla(v)) + '"/>';
       });
       svg += '<text x="' + cx + '" y="' + (T + plotH + 17) + '" text-anchor="middle" font-size="11">' + esc(rot) + "</text>";
+      svg += "</g>";
     });
 
     svg += '<line class="axis-line" x1="' + L + '" x2="' + (W - R) + '" y1="' + (T + plotH) + '" y2="' + (T + plotH) + '"/>';
@@ -5522,20 +5557,9 @@ window.SEED = {
     return '<div class="card" style="grid-column:1/-1"><div class="card-head">' +
       "<h2>Orçamento × realizado</h2><span class=\"grow\"></span>" +
       '<span class="t-sub">' + C.moeda(o.budget) + "/mês · " + o.nMeses +
-      (o.nMeses === 1 ? " mês com lançamento" : " meses com lançamento") + "</span></div>" +
-      '<div class="card-body grid" style="gap:14px">' +
-
-      '<div class="orc-resumo">' +
-      '<div><span class="eyebrow">Realizado no ano</span>' +
-      '<div class="orc-numero ' + (estourou ? "acima" : "abaixo") + '">' + C.moeda(o.totalRealizado) + "</div>" +
-      '<span class="t-sub">de ' + C.moeda(o.totalBudget) + " orçados</span></div>" +
-      '<div><span class="eyebrow">' + (estourou ? "Acima do orçamento" : "Saldo disponível") + "</span>" +
-      '<div class="orc-numero ' + (estourou ? "acima" : "abaixo") + '">' + C.moeda(Math.abs(o.saldo)) + "</div>" +
-      '<span class="t-sub">' + C.brl(o.consumo * 100, 0) + "% do orçamento consumido</span></div>" +
-      '<div><span class="eyebrow">Média por mês</span>' +
-      '<div class="orc-numero">' + C.moeda(o.mediaMensal) + "</div>" +
-      '<span class="t-sub">' + (o.budget ? C.brl(o.mediaMensal / o.budget * 100, 0) + "% do teto mensal" : "") + "</span></div>" +
-      "</div>" +
+      (o.nMeses === 1 ? " mês com lançamento" : " meses com lançamento") +
+      " · média de " + C.moeda(o.mediaMensal) + "/mês</span></div>" +
+      '<div class="card-body grid" style="gap:12px">' +
 
       medidor(o.totalRealizado, o.totalBudget) +
 
@@ -5545,8 +5569,11 @@ window.SEED = {
           "Para caber nos " + C.moeda(o.budget) + " mensais, o gasto médio precisaria cair " +
           C.brl((1 - o.budget / o.mediaMensal) * 100, 0) + "%" +
           (o.pior ? " — o mês mais pesado foi " + esc(C.mesRotulo(o.pior.mes)) + ", com " +
-            C.moeda(-o.pior.saldo) + " acima." : "")
-        : "<strong>Dentro do orçamento.</strong> Sobra de " + C.moeda(o.saldo) + " no acumulado do ano.") +
+            C.moeda(-o.pior.saldo) + " acima." : "") +
+          " Mantido o ritmo, o ano fecha em " + C.moeda(o.mediaMensal * 12) + " ante " +
+          C.moeda(o.budget * 12) + " de orçamento anual."
+        : "<strong>Dentro do orçamento.</strong> Sobra de " + C.moeda(o.saldo) +
+          " no acumulado do ano; mantido o ritmo, fecha em " + C.moeda(o.mediaMensal * 12) + ".") +
       "</div>" +
 
       "</div>" +
@@ -5572,22 +5599,10 @@ window.SEED = {
   function analisesCard(r, o, pessoas, uber, ano) {
     var itens = [];
 
-    // 1. Ritmo × orçamento
-    if (o.budget) {
-      var projecao = o.mediaMensal * 12;
-      itens.push({
-        rotulo: "Ritmo anualizado",
-        valor: C.moeda(projecao),
-        nota: "Mantido o gasto médio de " + C.moeda(o.mediaMensal) + "/mês, o ano fecharia em " +
-              C.moeda(projecao) + " ante " + C.moeda(o.budget * 12) + " de orçamento — " +
-              (projecao > o.budget * 12
-                ? C.moeda(projecao - o.budget * 12) + " acima."
-                : C.moeda(o.budget * 12 - projecao) + " abaixo."),
-        tom: projecao > o.budget * 12 ? "acima" : "abaixo"
-      });
-    }
+    // O confronto com o orçamento fica todo no cartão de cima; aqui só entra o
+    // que ele não responde: para onde o dinheiro vai e a que preço.
 
-    // 2. Onde o dinheiro está
+    // 1. Onde o dinheiro está
     var cats = r.categorias.map(function (cat) {
       return { nome: cat, total: r.meses.reduce(function (s2, m) { return s2 + r.porCategoria[cat][m]; }, 0) };
     }).filter(function (c) { return c.total > 0; }).sort(function (a, b) { return b.total - a.total; });
@@ -5669,15 +5684,19 @@ window.SEED = {
       });
     }
 
-    // 7. O mês mais caro e o mais barato
-    if (o.pior && o.melhor && o.pior.mes !== o.melhor.mes) {
+    // 7. Quanto custa a diária de hotel, já sem o aluguel de apartamento
+    var hotel = { valor: 0, noites: 0 };
+    C.viagens().forEach(function (v) {
+      if (C.anoDe(v.mesRef) !== String(ano) || v.locacao || v.cancelada) return;
+      hotel.valor += v.hospedagem;
+      hotel.noites += v.noitesEfetivas;
+    });
+    if (hotel.noites && hotel.valor) {
       itens.push({
-        rotulo: "Amplitude entre meses",
-        valor: C.moeda(o.pior.realizado - o.melhor.realizado),
-        nota: "De " + C.moeda(o.melhor.realizado) + " em " + esc(C.mesRotulo(o.melhor.mes)) +
-              " a " + C.moeda(o.pior.realizado) + " em " + esc(C.mesRotulo(o.pior.mes)) +
-              " — variação de " + C.brl((o.pior.realizado / (o.melhor.realizado || 1) - 1) * 100, 0) +
-              "% entre o mês mais leve e o mais pesado.",
+        rotulo: "Diária média de hotel",
+        valor: C.moeda(hotel.valor / hotel.noites),
+        nota: C.moeda(hotel.valor) + " de hotel em " + hotel.noites + " pernoites, já fora o aluguel " +
+              "de apartamento. É este o número a levar para uma negociação de tarifa corporativa.",
         tom: ""
       });
     }
@@ -5694,6 +5713,91 @@ window.SEED = {
           '<div class="analise-valor ' + i.tom + '">' + i.valor + "</div>" +
           '<p class="analise-nota">' + i.nota + "</p></div>";
       }).join("") + "</div></div></div>";
+  }
+
+  /**
+   * Detalhe de um mês: todas as linhas de custo, o confronto com o teto e os
+   * lançamentos que mais pesaram. É o que abre ao clicar na barra do mês.
+   */
+  function detalheMes(mesRef, ano) {
+    var r = C.resumoAnual(ano);
+    var o = C.orcamento(ano);
+    var i = r.meses.indexOf(mesRef);
+    var anterior = i > 0 ? r.meses[i - 1] : null;
+    var linhaOrc = o.meses.filter(function (l) { return l.mes === mesRef; })[0];
+    var total = r.totalMes[mesRef] || 0;
+
+    var html = "";
+
+    if (linhaOrc) {
+      var estourou = linhaOrc.saldo < 0;
+      html += '<div class="mes-topo">' +
+        '<div><span class="eyebrow">Realizado</span><div class="orc-numero ' +
+        (estourou ? "acima" : "abaixo") + '">' + C.moeda(total) + "</div></div>" +
+        '<div><span class="eyebrow">Orçamento</span><div class="orc-numero">' +
+        C.moeda(linhaOrc.budget) + "</div></div>" +
+        '<div><span class="eyebrow">' + (estourou ? "Estouro" : "Saldo") + "</span>" +
+        '<div class="orc-numero ' + (estourou ? "acima" : "abaixo") + '">' +
+        (estourou ? "−" : "+") + C.moeda(Math.abs(linhaOrc.saldo)) + "</div>" +
+        '<span class="t-sub">' + C.brl(linhaOrc.consumo * 100, 0) + "% do teto</span></div>" +
+        "</div>" + medidor(total, linhaOrc.budget);
+    } else {
+      html += '<div class="mes-topo"><div><span class="eyebrow">Realizado</span>' +
+        '<div class="orc-numero">' + C.moeda(total) + "</div></div></div>";
+    }
+
+    // Todas as linhas de custo do mês, com o que variou contra o mês anterior.
+    html += '<div class="table-wrap" style="margin-top:14px"><table><thead><tr>' +
+      "<th>Linha de custo</th><th class=\"n\">Valor</th><th class=\"n\">% do mês</th>" +
+      '<th class="n">vs ' + (anterior ? esc(C.mesRotulo(anterior)) : "M-1") + "</th></tr></thead><tbody>" +
+      r.categorias.map(function (cat, idx) {
+        var v = r.porCategoria[cat][mesRef] || 0;
+        var ant = anterior ? (r.porCategoria[cat][anterior] || 0) : 0;
+        return { cat: cat, cor: CORES[idx % CORES.length], v: v, ant: ant };
+      }).filter(function (l) { return l.v > 0 || l.ant > 0; })
+        .sort(function (a, b) { return b.v - a.v; })
+        .map(function (l) {
+          var sub = l.cat === "Hospedagem" && r.locacaoMes[mesRef]
+            ? '<tr class="sublinha"><td>↳ dos quais locação de apartamento</td>' +
+              '<td class="n">' + C.moeda(r.locacaoMes[mesRef]) + "</td><td></td><td></td></tr>"
+            : "";
+          return "<tr><td><span class='legend-swatch' style='display:inline-block;background:" + l.cor +
+            ";margin-right:7px'></span>" + esc(l.cat) + "</td>" +
+            '<td class="n">' + (l.v ? C.moeda(l.v) : "—") + "</td>" +
+            '<td class="n t-sub">' + (total ? C.brl(l.v / total * 100, 0) + "%" : "—") + "</td>" +
+            '<td class="n">' + (anterior ? variacao(l.v, l.ant) : "—") + "</td></tr>" + sub;
+        }).join("") +
+      "</tbody><tfoot><tr><td><strong>TOTAL DO MÊS</strong></td>" +
+      '<td class="n"><strong>' + C.moeda(total) + "</strong></td>" +
+      '<td class="n"><strong>100%</strong></td>' +
+      '<td class="n">' + (anterior ? variacao(total, r.totalMes[anterior] || 0) : "—") + "</td>" +
+      "</tr></tfoot></table></div>";
+
+    // O que puxou o mês
+    var doMes = C.viagens().filter(function (v) { return v.mesRef === mesRef; })
+      .sort(function (a, b) { return b.total - a.total; });
+    if (doMes.length) {
+      html += '<div class="section-label" style="margin-top:16px"><span class="eyebrow">' +
+        "O que puxou o mês</span></div>" +
+        '<div class="table-wrap" style="max-height:260px"><table class="compacta"><thead><tr>' +
+        "<th>Colaborador</th><th>Período</th><th>Área</th><th class=\"n\">Total</th>" +
+        "</tr></thead><tbody>" +
+        doMes.slice(0, 8).map(function (v) {
+          return "<tr><td>" + esc(v.colaborador) +
+            (v.locacao ? ' <span class="chip">apartamento</span>' : "") + "</td>" +
+            '<td class="t-sub num">' + C.fmtDataCurta(v.dataIda) + " → " + C.fmtDataCurta(v.dataVolta) + "</td>" +
+            "<td>" + esc(v.area) + "</td>" +
+            '<td class="n">' + C.moeda(v.total) + "</td></tr>";
+        }).join("") +
+        "</tbody></table></div>" +
+        '<p class="t-sub" style="margin:8px 0 0">' + doMes.length +
+        (doMes.length === 1 ? " lançamento" : " lançamentos") + " no mês · " +
+        Object.keys(r.pessoasMes[mesRef] || {}).length + " pessoas viajaram" +
+        (r.totalUber ? " · Uber do mês: " + C.moeda(r.porCategoria["Uber Corporativo"][mesRef] || 0) : "") +
+        "</p>";
+    }
+
+    return html;
   }
 
   // ---------- aba: painel ----------
@@ -5737,11 +5841,16 @@ window.SEED = {
     }
 
     html += '<div class="card">' +
-      '<div class="card-head"><h2>Custo mensal por categoria</h2><span class="grow"></span>' +
-      '<span class="eyebrow">' + esc(ano) + "</span></div>" +
+      '<div class="card-head"><h2>Custo mensal por categoria</h2>' +
+      '<span class="t-sub">clique no mês para abrir o detalhe</span>' +
+      '<span class="grow"></span><span class="eyebrow">' + esc(ano) + "</span></div>" +
       '<div class="card-body">' +
-      barrasEmpilhadas(r.meses.map(C.mesRotulo), series, null,
-                       o.budget ? { valor: o.budget, rotulo: "Orçamento R$ " + C.brlCurto(o.budget) + "/mês" } : null) +
+      barrasEmpilhadas({
+        rotulos: r.meses.map(C.mesRotulo),
+        chaves: r.meses,
+        series: series,
+        referencia: o.budget ? { valor: o.budget, rotulo: "Orçamento R$ " + C.brlCurto(o.budget) + "/mês" } : null
+      }) +
       "</div>" + legenda(series) + "</div>";
 
     html += orcamentoCard(o, ano);
@@ -6759,7 +6868,7 @@ window.SEED = {
 
   window.Views = {
     esc: esc, campo: campo, selectHTML: selectHTML, pessoa: pessoa, vazio: vazio,
-    descricaoPapel: descricaoPapel,
+    descricaoPapel: descricaoPapel, detalheMes: detalheMes,
     kpi: kpi, chipStatus: chipStatus,
     painel: painel, viagens: viagensView, calendario: calendarioView,
     uber: uberView, equipe: equipeView, ajustes: ajustesView
@@ -6815,6 +6924,7 @@ window.SEED = {
 
     document.addEventListener("click", aoClicar);
     document.addEventListener("change", aoMudarCampo);
+    document.addEventListener("keydown", aoTeclar);
     document.addEventListener("input", aoDigitar);
     document.addEventListener("mouseover", aoPassarMouse);
     document.addEventListener("mouseout", escondeTip);
@@ -7142,10 +7252,20 @@ window.SEED = {
         abrirAcesso(C.usuarios.filter(function (u) { return u.id === id; })[0]);
         break;
       case "atualizar-registro": carregarRegistro(true); break;
+      case "ver-mes": abrirMes(botao.dataset.mes); break;
       case "tema": alternarTema(); break;
       case "usar-regra": aplicarRegraAlimentacao(botao.closest("form")); break;
       case "fechar": botao.closest("dialog").close(); break;
     }
+  }
+
+  /** O mês do gráfico é um botão: teclado precisa abrir igual ao clique. */
+  function aoTeclar(ev) {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    var alvo = ev.target.closest && ev.target.closest('[data-acao="ver-mes"]');
+    if (!alvo) return;
+    ev.preventDefault();
+    abrirMes(alvo.dataset.mes);
   }
 
   function aoMudarCampo(ev) {
@@ -8486,6 +8606,25 @@ window.SEED = {
   }
 
   // ---------- modal, toast, tooltip, tema ----------
+
+  // ---------- detalhe do mês ----------
+
+  function abrirMes(mesRef) {
+    if (!mesRef) return;
+    var dialogo = abrirModal({
+      titulo: C.mesNome(mesRef),
+      corpo: V.detalheMes(mesRef, estado.ano),
+      rodape: '<button class="btn" data-acao="viagens-do-mes" data-mes="' + esc(mesRef) + '">' +
+        "Ver os lançamentos de " + esc(C.mesRotulo(mesRef)) + "</button>" +
+        '<span class="grow"></span><button class="btn btn-primary" data-acao="fechar">Fechar</button>'
+    });
+    dialogo.querySelector('[data-acao="viagens-do-mes"]').addEventListener("click", function () {
+      estado.filtros.mes = mesRef;
+      estado.filtros.avisos = false;
+      dialogo.close();
+      irPara("viagens");
+    });
+  }
 
   // ---------- acessos ----------
 
