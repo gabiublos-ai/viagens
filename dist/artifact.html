@@ -781,6 +781,12 @@ body.so-leitura [data-acao="usar-regra"] {
   display: none !important;
 }
 body.so-leitura .actions-cell { display: none; }
+/* Campos de parâmetro e a caixa de colagem do Uber ficam só de leitura: sem o
+   botão de salvar, digitar ali daria a impressão de ter mudado alguma coisa. */
+body.so-leitura [name^="regra-"],
+body.so-leitura [name="colar-uber"] {
+  pointer-events: none; background: var(--surface-2); color: var(--text-2);
+}
 
 /* ---------- orçamento e análises de custo ---------- */
 
@@ -4205,6 +4211,14 @@ window.SEED = {
     ["meses", "categorias", "statuses", "servicos", "tiposTransacao", "palavrasAeroporto", "dePara"].forEach(function (k) {
       if (!db.params[k]) db.params[k] = clone(base[k] || PARAMS_PADRAO[k] || []);
     });
+
+    // "Alterada" é posto pelo próprio app ao registrar uma remarcação. Se a
+    // lista guardada não o tiver — bases antigas não têm —, o formulário abriria
+    // a viagem sem opção correspondente e, ao salvar, rebaixaria o status para o
+    // primeiro da lista. Completar a lista evita a perda silenciosa.
+    PARAMS_PADRAO.statuses.forEach(function (st) {
+      if (db.params.statuses.indexOf(st) === -1) db.params.statuses.push(st);
+    });
     db.params.regras = Object.assign({}, PARAMS_PADRAO.regras, base.regras || {}, db.params.regras || {});
     if (!db.params.conferenciasUber || typeof db.params.conferenciasUber !== "object") db.params.conferenciasUber = {};
     db.uber = db.uber || [];
@@ -4866,6 +4880,7 @@ window.SEED = {
   // ---------- agregações ----------
 
   var CATEGORIAS = ["Aéreo", "Hospedagem", "Alimentação", "Transporte/Aux.", "Alterações", "Uber Corporativo"];
+  var SEM_AREA = "Sem vínculo";
 
   function categoriasDaViagem(v) {
     return {
@@ -4881,7 +4896,9 @@ window.SEED = {
   /** Meses com movimento (viagens ou Uber), em ordem cronológica. */
   function mesesComDados() {
     var set = {};
-    db.viagens.forEach(function (v) { var m = mesRefDe(v.dataIda); if (m) set[m] = 1; });
+    // Mesmo critério do painel: o mês é o que ficou com mais pernoites, senão
+    // uma viagem de virada de mês some do seletor.
+    db.viagens.forEach(function (v) { var m = mesRefViagem(v); if (m) set[m] = 1; });
     corridas().forEach(function (c) { if (c.mesRef && c.considerar) set[c.mesRef] = 1; });
     return Object.keys(set).sort(function (a, b) {
       return (anoDe(a) + a.slice(0, 2)).localeCompare(anoDe(b) + b.slice(0, 2));
@@ -4938,7 +4955,12 @@ window.SEED = {
       if (!c.considerar || !c.mesRef || anoDe(c.mesRef) !== String(ano)) return;
       porCategoria["Uber Corporativo"][c.mesRef] += c.valor;
       totalMes[c.mesRef] += c.valor;
-      if (porArea[c.area]) porArea[c.area][c.mesRef] += c.valor;
+      // Encargo sem dono (multa de atraso, ajuste da fatura) não tem área. Sem
+      // um balde próprio ele sumiria da tabela por área, que então não fecharia
+      // com o total do painel.
+      var areaC = c.area && c.area !== "—" ? c.area : SEM_AREA;
+      if (!porArea[areaC]) porArea[areaC] = {};
+      porArea[areaC][c.mesRef] = (porArea[areaC][c.mesRef] || 0) + c.valor;
       if (c.colaborador) pessoas[c.colaborador] = 1;
     });
 
@@ -5908,22 +5930,21 @@ window.SEED = {
 
     // Área × mês
     var areasComGasto = Object.keys(r.porArea).filter(function (a) {
-      return mesesAtivos.some(function (m) { return r.porArea[a][m] > 0; });
-    }).sort(function (a, b) {
-      var ta = mesesAtivos.reduce(function (s, m) { return s + r.porArea[a][m]; }, 0);
-      var tb = mesesAtivos.reduce(function (s, m) { return s + r.porArea[b][m]; }, 0);
-      return tb - ta;
+      return mesesAtivos.some(function (m) { return (r.porArea[a][m] || 0) > 0; });
     });
 
     html += '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">';
 
     var ordemArea = estado.areaOrdem || { campo: "total", desc: true };
-    function totalArea(a) { return mesesAtivos.reduce(function (s, m) { return s + r.porArea[a][m]; }, 0); }
+    // `|| 0`: uma área criada só pela sobra (encargo do Uber sem dono) não tem
+    // todos os meses preenchidos, e sem isso a soma viraria NaN.
+    function valorArea(a, m) { return r.porArea[a][m] || 0; }
+    function totalArea(a) { return mesesAtivos.reduce(function (s, m) { return s + valorArea(a, m); }, 0); }
     areasComGasto.sort(function (a, b) {
       var x, y;
       if (ordemArea.campo === "area") { x = a; y = b; }
       else if (ordemArea.campo === "total") { x = totalArea(a); y = totalArea(b); }
-      else { x = r.porArea[a][ordemArea.campo] || 0; y = r.porArea[b][ordemArea.campo] || 0; }
+      else { x = valorArea(a, ordemArea.campo); y = valorArea(b, ordemArea.campo); }
       var res = typeof x === "string" ? C.ordenaPt(x, y) : (x - y);
       return ordemArea.desc ? -res : res;
     });
@@ -5938,17 +5959,17 @@ window.SEED = {
         var t = totalArea(a);
         return "<tr><td>" + esc(a) + "</td>" +
           mesesAtivos.map(function (m) {
-            var v = r.porArea[a][m];
+            var v = valorArea(a, m);
             return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.moeda(v) : "—") + "</td>";
           }).join("") + '<td class="n"><strong>' + C.moeda(t) + "</strong></td></tr>";
       }).join("") +
       "</tbody><tfoot><tr><td><strong>TOTAL</strong></td>" +
       mesesAtivos.map(function (m) {
-        var tm = areasComGasto.reduce(function (s2, a) { return s2 + r.porArea[a][m]; }, 0);
+        var tm = areasComGasto.reduce(function (s2, a) { return s2 + valorArea(a, m); }, 0);
         return '<td class="n"><strong>' + C.moeda(tm) + "</strong></td>";
       }).join("") +
       '<td class="n"><strong>' + C.moeda(areasComGasto.reduce(function (s2, a) {
-        return s2 + mesesAtivos.reduce(function (s3, m) { return s3 + r.porArea[a][m]; }, 0);
+        return s2 + totalArea(a);
       }, 0)) + "</strong></td></tr></tfoot></table></div></div></div>";
 
     html += '<div class="card"><div class="card-head"><h2>Top 10 colaboradores</h2>' +
@@ -7313,6 +7334,16 @@ window.SEED = {
 
   var CAMPOS_MOEDA = ["aereo", "hospedagem", "alimentacao", "transporte", "custoAlteracao"];
 
+  /**
+   * A lista de status com o valor atual garantido dentro dela. Um lançamento
+   * antigo pode carregar um status que saiu da lista; sem isto o select abriria
+   * na primeira opção e o salvamento trocaria o status sem ninguém pedir.
+   */
+  function statusesCom(atual) {
+    var lista = C.db.params.statuses;
+    return atual && lista.indexOf(atual) === -1 ? [atual].concat(lista) : lista;
+  }
+
   /** Quem lançou e quem mexeu por último — aparece no rodapé do formulário. */
   function autoria(v) {
     if (!v || !v.id || (!v.criadoPor && !v.alteradoPor)) return "";
@@ -7368,7 +7399,7 @@ window.SEED = {
       V.campo("Data de ida", '<input type="date" name="dataIda" value="' + esc(v.dataIda) + '" required>', "c3") +
       V.campo("Data de volta", '<input type="date" name="dataVolta" value="' + esc(v.dataVolta) + '" required>', "c3") +
       '<div class="field c3"><label>Noites</label><input type="text" name="noites" readonly value="0"></div>' +
-      V.campo("Status", V.selectHTML("status", C.db.params.statuses, v.status), "c3") +
+      V.campo("Status", V.selectHTML("status", statusesCom(v.status), v.status), "c3") +
 
       '<div class="section-label"><span class="eyebrow">Custos</span></div>' +
       V.campo("Aéreo (R$)", '<input type="text" class="money" name="aereo" value="' + C.brl(v.aereo) + '">', "c3") +

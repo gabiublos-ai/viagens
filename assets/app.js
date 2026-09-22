@@ -434,6 +434,16 @@
 
   var CAMPOS_MOEDA = ["aereo", "hospedagem", "alimentacao", "transporte", "custoAlteracao"];
 
+  /**
+   * A lista de status com o valor atual garantido dentro dela. Um lançamento
+   * antigo pode carregar um status que saiu da lista; sem isto o select abriria
+   * na primeira opção e o salvamento trocaria o status sem ninguém pedir.
+   */
+  function statusesCom(atual) {
+    var lista = C.db.params.statuses;
+    return atual && lista.indexOf(atual) === -1 ? [atual].concat(lista) : lista;
+  }
+
   /** Quem lançou e quem mexeu por último — aparece no rodapé do formulário. */
   function autoria(v) {
     if (!v || !v.id || (!v.criadoPor && !v.alteradoPor)) return "";
@@ -489,7 +499,7 @@
       V.campo("Data de ida", '<input type="date" name="dataIda" value="' + esc(v.dataIda) + '" required>', "c3") +
       V.campo("Data de volta", '<input type="date" name="dataVolta" value="' + esc(v.dataVolta) + '" required>', "c3") +
       '<div class="field c3"><label>Noites</label><input type="text" name="noites" readonly value="0"></div>' +
-      V.campo("Status", V.selectHTML("status", C.db.params.statuses, v.status), "c3") +
+      V.campo("Status", V.selectHTML("status", statusesCom(v.status), v.status), "c3") +
 
       '<div class="section-label"><span class="eyebrow">Custos</span></div>' +
       V.campo("Aéreo (R$)", '<input type="text" class="money" name="aereo" value="' + C.brl(v.aereo) + '">', "c3") +

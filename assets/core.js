@@ -332,6 +332,14 @@
     ["meses", "categorias", "statuses", "servicos", "tiposTransacao", "palavrasAeroporto", "dePara"].forEach(function (k) {
       if (!db.params[k]) db.params[k] = clone(base[k] || PARAMS_PADRAO[k] || []);
     });
+
+    // "Alterada" é posto pelo próprio app ao registrar uma remarcação. Se a
+    // lista guardada não o tiver — bases antigas não têm —, o formulário abriria
+    // a viagem sem opção correspondente e, ao salvar, rebaixaria o status para o
+    // primeiro da lista. Completar a lista evita a perda silenciosa.
+    PARAMS_PADRAO.statuses.forEach(function (st) {
+      if (db.params.statuses.indexOf(st) === -1) db.params.statuses.push(st);
+    });
     db.params.regras = Object.assign({}, PARAMS_PADRAO.regras, base.regras || {}, db.params.regras || {});
     if (!db.params.conferenciasUber || typeof db.params.conferenciasUber !== "object") db.params.conferenciasUber = {};
     db.uber = db.uber || [];
@@ -993,6 +1001,7 @@
   // ---------- agregações ----------
 
   var CATEGORIAS = ["Aéreo", "Hospedagem", "Alimentação", "Transporte/Aux.", "Alterações", "Uber Corporativo"];
+  var SEM_AREA = "Sem vínculo";
 
   function categoriasDaViagem(v) {
     return {
@@ -1008,7 +1017,9 @@
   /** Meses com movimento (viagens ou Uber), em ordem cronológica. */
   function mesesComDados() {
     var set = {};
-    db.viagens.forEach(function (v) { var m = mesRefDe(v.dataIda); if (m) set[m] = 1; });
+    // Mesmo critério do painel: o mês é o que ficou com mais pernoites, senão
+    // uma viagem de virada de mês some do seletor.
+    db.viagens.forEach(function (v) { var m = mesRefViagem(v); if (m) set[m] = 1; });
     corridas().forEach(function (c) { if (c.mesRef && c.considerar) set[c.mesRef] = 1; });
     return Object.keys(set).sort(function (a, b) {
       return (anoDe(a) + a.slice(0, 2)).localeCompare(anoDe(b) + b.slice(0, 2));
@@ -1065,7 +1076,12 @@
       if (!c.considerar || !c.mesRef || anoDe(c.mesRef) !== String(ano)) return;
       porCategoria["Uber Corporativo"][c.mesRef] += c.valor;
       totalMes[c.mesRef] += c.valor;
-      if (porArea[c.area]) porArea[c.area][c.mesRef] += c.valor;
+      // Encargo sem dono (multa de atraso, ajuste da fatura) não tem área. Sem
+      // um balde próprio ele sumiria da tabela por área, que então não fecharia
+      // com o total do painel.
+      var areaC = c.area && c.area !== "—" ? c.area : SEM_AREA;
+      if (!porArea[areaC]) porArea[areaC] = {};
+      porArea[areaC][c.mesRef] = (porArea[areaC][c.mesRef] || 0) + c.valor;
       if (c.colaborador) pessoas[c.colaborador] = 1;
     });
 

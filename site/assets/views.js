@@ -610,22 +610,21 @@
 
     // Área × mês
     var areasComGasto = Object.keys(r.porArea).filter(function (a) {
-      return mesesAtivos.some(function (m) { return r.porArea[a][m] > 0; });
-    }).sort(function (a, b) {
-      var ta = mesesAtivos.reduce(function (s, m) { return s + r.porArea[a][m]; }, 0);
-      var tb = mesesAtivos.reduce(function (s, m) { return s + r.porArea[b][m]; }, 0);
-      return tb - ta;
+      return mesesAtivos.some(function (m) { return (r.porArea[a][m] || 0) > 0; });
     });
 
     html += '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">';
 
     var ordemArea = estado.areaOrdem || { campo: "total", desc: true };
-    function totalArea(a) { return mesesAtivos.reduce(function (s, m) { return s + r.porArea[a][m]; }, 0); }
+    // `|| 0`: uma área criada só pela sobra (encargo do Uber sem dono) não tem
+    // todos os meses preenchidos, e sem isso a soma viraria NaN.
+    function valorArea(a, m) { return r.porArea[a][m] || 0; }
+    function totalArea(a) { return mesesAtivos.reduce(function (s, m) { return s + valorArea(a, m); }, 0); }
     areasComGasto.sort(function (a, b) {
       var x, y;
       if (ordemArea.campo === "area") { x = a; y = b; }
       else if (ordemArea.campo === "total") { x = totalArea(a); y = totalArea(b); }
-      else { x = r.porArea[a][ordemArea.campo] || 0; y = r.porArea[b][ordemArea.campo] || 0; }
+      else { x = valorArea(a, ordemArea.campo); y = valorArea(b, ordemArea.campo); }
       var res = typeof x === "string" ? C.ordenaPt(x, y) : (x - y);
       return ordemArea.desc ? -res : res;
     });
@@ -640,17 +639,17 @@
         var t = totalArea(a);
         return "<tr><td>" + esc(a) + "</td>" +
           mesesAtivos.map(function (m) {
-            var v = r.porArea[a][m];
+            var v = valorArea(a, m);
             return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.moeda(v) : "—") + "</td>";
           }).join("") + '<td class="n"><strong>' + C.moeda(t) + "</strong></td></tr>";
       }).join("") +
       "</tbody><tfoot><tr><td><strong>TOTAL</strong></td>" +
       mesesAtivos.map(function (m) {
-        var tm = areasComGasto.reduce(function (s2, a) { return s2 + r.porArea[a][m]; }, 0);
+        var tm = areasComGasto.reduce(function (s2, a) { return s2 + valorArea(a, m); }, 0);
         return '<td class="n"><strong>' + C.moeda(tm) + "</strong></td>";
       }).join("") +
       '<td class="n"><strong>' + C.moeda(areasComGasto.reduce(function (s2, a) {
-        return s2 + mesesAtivos.reduce(function (s3, m) { return s3 + r.porArea[a][m]; }, 0);
+        return s2 + totalArea(a);
       }, 0)) + "</strong></td></tr></tfoot></table></div></div></div>";
 
     html += '<div class="card"><div class="card-head"><h2>Top 10 colaboradores</h2>' +

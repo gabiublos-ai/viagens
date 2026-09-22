@@ -779,6 +779,12 @@ body.so-leitura [data-acao="usar-regra"] {
   display: none !important;
 }
 body.so-leitura .actions-cell { display: none; }
+/* Campos de parâmetro e a caixa de colagem do Uber ficam só de leitura: sem o
+   botão de salvar, digitar ali daria a impressão de ter mudado alguma coisa. */
+body.so-leitura [name^="regra-"],
+body.so-leitura [name="colar-uber"] {
+  pointer-events: none; background: var(--surface-2); color: var(--text-2);
+}
 
 /* ---------- orçamento e análises de custo ---------- */
 
