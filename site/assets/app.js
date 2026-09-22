@@ -1558,11 +1558,18 @@
   // ---------- regras ----------
 
   function salvarRegras() {
+    // Os campos estão em dois cartões de Ajustes e os dois botões salvam tudo:
+    // ler pelo nome mantém um caminho só, e o que não estiver na tela não muda.
+    function num(nome, atual) {
+      var campo = document.querySelector('[name="' + nome + '"]');
+      return campo ? C.parseNum(campo.value) : atual;
+    }
     var r = C.db.params.regras;
-    r.jantar = C.parseNum(document.querySelector('[name="regra-jantar"]').value);
-    r.cafe = C.parseNum(document.querySelector('[name="regra-cafe"]').value);
-    r.toleranciaUber = Math.max(0, Math.round(C.parseNum(document.querySelector('[name="regra-tol"]').value)));
-    C.salvarParams().then(function () { toast("Regras salvas — base recalculada"); }, falhou);
+    r.jantar = num("regra-jantar", r.jantar);
+    r.cafe = num("regra-cafe", r.cafe);
+    r.toleranciaUber = Math.max(0, Math.round(num("regra-tol", r.toleranciaUber)));
+    r.budgetMensal = Math.max(0, num("regra-budget", r.budgetMensal));
+    C.salvarParams().then(function () { toast("Salvo — base recalculada"); }, falhou);
   }
 
   /** Mensagem única para qualquer falha vinda do servidor. */

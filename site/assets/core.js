@@ -142,7 +142,9 @@
     statuses: ["Fechado", "Cotado", "Pendente", "Cancelado", "Alterada"],
     servicos: [], tiposTransacao: [],
     palavrasAeroporto: ["aeroport", "airport", "terminal", "linneu gomes", "confins", "rocha pombo"],
-    regras: { jantar: 70, cafe: 30, toleranciaUber: 1 },
+    // budgetMensal cobre o pacote inteiro de viagens do mês — aéreo, hospedagem,
+    // alimentação, transporte, alterações e o Uber corporativo.
+    regras: { jantar: 70, cafe: 30, toleranciaUber: 1, budgetMensal: 27000 },
     dePara: [],
     conferenciasUber: {}
   };
@@ -364,6 +366,54 @@
       if (normal(db.colaboradores[i].nome) === alvo) return db.colaboradores[i];
     }
     return null;
+  }
+
+  /** Orçamento mensal do pacote de viagens, em reais. 0 desliga a comparação. */
+  function budgetMensal() {
+    var v = Number(db.params.regras.budgetMensal);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  }
+
+  /**
+   * Orçamento contra realizado, mês a mês. Só entram os meses que tiveram
+   * movimento: um mês ainda sem lançamento não é economia, é mês que não
+   * chegou, e contá-lo como sobra esconderia o estouro dos outros.
+   */
+  function orcamento(ano) {
+    var r = resumoAnual(ano);
+    var budget = budgetMensal();
+    var meses = r.meses.filter(function (m) { return r.totalMes[m] > 0; });
+
+    var acumuladoSaldo = 0;
+    var linhas = meses.map(function (m) {
+      var realizado = r.totalMes[m];
+      var saldo = budget - realizado;
+      acumuladoSaldo += saldo;
+      return {
+        mes: m,
+        realizado: realizado,
+        budget: budget,
+        saldo: saldo,
+        consumo: budget ? realizado / budget : 0,
+        acumulado: acumuladoSaldo
+      };
+    });
+
+    var totalBudget = budget * meses.length;
+    var estourados = linhas.filter(function (l) { return l.saldo < 0; });
+    return {
+      budget: budget,
+      meses: linhas,
+      nMeses: meses.length,
+      totalBudget: totalBudget,
+      totalRealizado: r.totalAno,
+      saldo: totalBudget - r.totalAno,
+      consumo: totalBudget ? r.totalAno / totalBudget : 0,
+      mediaMensal: meses.length ? r.totalAno / meses.length : 0,
+      nEstourados: estourados.length,
+      pior: linhas.slice().sort(function (a, b) { return a.saldo - b.saldo; })[0] || null,
+      melhor: linhas.slice().sort(function (a, b) { return b.saldo - a.saldo; })[0] || null
+    };
   }
 
   function areaDe(nome) { var c = colaborador(nome); return c ? c.area : "—"; }
@@ -1314,6 +1364,7 @@
 
     // análises
     CATEGORIAS: CATEGORIAS, resumoAnual: resumoAnual, porColaborador: porColaborador,
+    budgetMensal: budgetMensal, orcamento: orcamento,
     resumoUber: resumoUber, calendario: calendario, mesesComDados: mesesComDados, anosComDados: anosComDados,
 
     // exportação

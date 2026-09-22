@@ -779,3 +779,52 @@ body.so-leitura [data-acao="usar-regra"] {
   display: none !important;
 }
 body.so-leitura .actions-cell { display: none; }
+
+/* ---------- orçamento e análises de custo ---------- */
+
+/* O alvo é tracejado de propósito: a grade é sólida, então o tracejado só
+   aparece onde existe mesmo um limite a respeitar. */
+.chart .linha-ref { stroke: var(--text-2); stroke-width: 1.5; stroke-dasharray: 6 4; }
+/* Contorno da cor do fundo: o rótulo do alvo cruza as barras dos meses cheios
+   e sem isso ficaria ilegível justamente onde o estouro é maior. */
+.chart .rotulo-ref {
+  fill: var(--text-2); font-weight: 650;
+  stroke: var(--surface); stroke-width: 3.5; paint-order: stroke fill;
+}
+
+.acima  { color: var(--critical); }
+.abaixo { color: var(--good); }
+.atencao { color: var(--warning); }
+
+.orc-resumo {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;
+}
+.orc-numero { font-size: 24px; font-weight: 700; letter-spacing: -.01em; margin: 2px 0 1px; }
+
+.medidor-trilho {
+  position: relative; height: 12px; background: var(--surface-2);
+  border-radius: 6px; overflow: hidden;
+}
+.medidor-fill {
+  display: block; height: 100%; background: var(--good); border-radius: 6px;
+}
+.medidor-fill.estourou { background: var(--critical); }
+/* Marca de onde fica o teto — some quando coincide com a ponta da barra. */
+.medidor-marca {
+  position: absolute; top: -3px; bottom: -3px; width: 2px;
+  background: var(--text); border-radius: 1px;
+}
+
+.mini-barra {
+  display: inline-block; width: 52px; height: 6px; margin-right: 8px;
+  background: var(--surface-2); border-radius: 3px; overflow: hidden; vertical-align: middle;
+}
+.mini-fill { display: block; height: 100%; background: var(--good); border-radius: 3px; }
+.mini-fill.estourou { background: var(--critical); }
+
+.analises {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px 24px;
+}
+.analise { border-left: 2px solid var(--border); padding-left: 12px; }
+.analise-valor { font-size: 19px; font-weight: 700; letter-spacing: -.01em; margin: 3px 0 4px; }
+.analise-nota { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }

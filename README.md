@@ -30,6 +30,25 @@ backup** e **Restaurar backup**.
 **Pasta do projeto.** Abra `index.html` — igual ao arquivo único, com os arquivos separados
 para editar.
 
+## Orçamento e análises de custo
+
+O painel compara o realizado contra um **teto mensal** do pacote inteiro de viagens — aéreo,
+hospedagem, alimentação, transporte, alterações e Uber corporativo. O valor fica em
+**Ajustes → Orçamento de viagens** (padrão R$ 27.000/mês) e vale para todos os meses; zero
+desliga a comparação.
+
+O que entra no painel a partir daí:
+
+- uma **linha de alvo** no gráfico de custo mensal, tracejada, para o estouro aparecer no mesmo
+  lugar onde a composição é lida;
+- o cartão **Orçamento × realizado**, com o medidor do ano, o saldo mês a mês e o saldo
+  acumulado — só contam os meses que tiveram lançamento, porque mês sem movimento não é
+  economia, é mês que não chegou;
+- o cartão **Análises de custo**, que lê o ritmo anualizado contra o orçamento, a maior linha de
+  custo, a concentração nos cinco maiores, o custo por pernoite, o que as remarcações custaram,
+  o valor médio da corrida de Uber e a amplitude entre o mês mais leve e o mais pesado. Cada
+  frase é calculada da base; nada ali é texto fixo.
+
 ## Acessos e registro de alterações
 
 Cada pessoa tem o seu login, e a entrada é pelo **e-mail corporativo `@acegaming.com.br`** —

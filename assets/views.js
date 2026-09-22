@@ -92,7 +92,7 @@
    * Barras empilhadas mês a mês. series = [{nome, cor, valores: []}], rotulos = eixo X.
    * Fatias com 2px de folga entre si, extremidade arredondada só no topo da pilha.
    */
-  function barrasEmpilhadas(rotulos, series, alturaBarra) {
+  function barrasEmpilhadas(rotulos, series, alturaBarra, referencia) {
     var L = 52, R = 8, T = 22, B = 26;
     var W = 1000, H = (alturaBarra || 190) + T + B;
     var plotW = W - L - R, plotH = H - T - B;
@@ -100,7 +100,10 @@
     var totais = rotulos.map(function (_, i) {
       return series.reduce(function (s, se) { return s + (se.valores[i] || 0); }, 0);
     });
-    var max = Math.max.apply(null, totais.concat([1]));
+    // O alvo entra na escala: uma linha de orçamento fora do gráfico não serviria
+    // de referência para nada.
+    var alvo = referencia && referencia.valor > 0 ? referencia.valor : 0;
+    var max = Math.max.apply(null, totais.concat([1, alvo]));
     var passo = escala(max);
     var topo = Math.ceil(max / passo) * passo || passo;
 
@@ -146,6 +149,15 @@
     });
 
     svg += '<line class="axis-line" x1="' + L + '" x2="' + (W - R) + '" y1="' + (T + plotH) + '" y2="' + (T + plotH) + '"/>';
+
+    // A linha do alvo vai por cima das barras, tracejada, para não se confundir
+    // com a grade nem com uma série.
+    if (alvo) {
+      var yAlvo = T + plotH - (alvo / topo) * plotH;
+      svg += '<line class="linha-ref" x1="' + L + '" x2="' + (W - R) + '" y1="' + yAlvo + '" y2="' + yAlvo + '"/>' +
+        '<text class="rotulo-ref" x="' + (W - R) + '" y="' + (yAlvo - 6) + '" text-anchor="end" font-size="11">' +
+        esc(referencia.rotulo || "") + "</text>";
+    }
     svg += "</svg>";
     return svg;
   }
@@ -181,6 +193,208 @@
     }).join("") + "</div>";
   }
 
+  // ---------- orçamento e análises ----------
+
+  /** Medidor de um valor contra um limite. Acima do limite, a barra vira alerta. */
+  function medidor(realizado, limite) {
+    var escala = Math.max(realizado, limite, 1);
+    var estourou = realizado > limite;
+    return '<div class="medidor">' +
+      '<div class="medidor-trilho">' +
+      '<span class="medidor-fill' + (estourou ? " estourou" : "") + '" style="width:' +
+      (realizado / escala * 100).toFixed(1) + '%"></span>' +
+      '<span class="medidor-marca" style="left:' + (limite / escala * 100).toFixed(1) + '%"></span>' +
+      "</div></div>";
+  }
+
+  /** Barra fina de consumo dentro da célula da tabela. */
+  function barraConsumo(fracao) {
+    var pct = Math.min(100, Math.max(2, fracao * 100));
+    return '<span class="mini-barra"><span class="mini-fill' + (fracao > 1 ? " estourou" : "") +
+      '" style="width:' + pct.toFixed(1) + '%"></span></span>';
+  }
+
+  function orcamentoCard(o, ano) {
+    if (!o.budget) {
+      return '<div class="card"><div class="card-head"><h2>Orçamento</h2></div><div class="card-body">' +
+        '<div class="note">Nenhum orçamento mensal definido. Informe o valor em ' +
+        '<a href="#ajustes" data-ir="ajustes" class="link-inline">Ajustes → Orçamento de viagens</a> ' +
+        "para o painel comparar mês a mês.</div></div></div>";
+    }
+
+    var estourou = o.saldo < 0;
+    var linhas = o.meses.map(function (l) {
+      return "<tr><td>" + esc(C.mesRotulo(l.mes)) + "</td>" +
+        '<td class="n">' + C.moeda(l.realizado) + "</td>" +
+        '<td class="n t-sub">' + C.moeda(l.budget) + "</td>" +
+        '<td class="n ' + (l.saldo < 0 ? "acima" : "abaixo") + '">' +
+        (l.saldo < 0 ? "−" : "+") + C.moeda(Math.abs(l.saldo)).replace("R$ ", "R$ ") + "</td>" +
+        '<td class="n">' + barraConsumo(l.consumo) +
+        '<span class="' + (l.consumo > 1 ? "acima" : "abaixo") + '">' + C.brl(l.consumo * 100, 0) + "%</span></td>" +
+        '<td class="n ' + (l.acumulado < 0 ? "acima" : "abaixo") + '">' +
+        (l.acumulado < 0 ? "−" : "+") + C.moeda(Math.abs(l.acumulado)) + "</td></tr>";
+    }).join("");
+
+    return '<div class="card" style="grid-column:1/-1"><div class="card-head">' +
+      "<h2>Orçamento × realizado</h2><span class=\"grow\"></span>" +
+      '<span class="t-sub">' + C.moeda(o.budget) + "/mês · " + o.nMeses +
+      (o.nMeses === 1 ? " mês com lançamento" : " meses com lançamento") + "</span></div>" +
+      '<div class="card-body grid" style="gap:14px">' +
+
+      '<div class="orc-resumo">' +
+      '<div><span class="eyebrow">Realizado no ano</span>' +
+      '<div class="orc-numero ' + (estourou ? "acima" : "abaixo") + '">' + C.moeda(o.totalRealizado) + "</div>" +
+      '<span class="t-sub">de ' + C.moeda(o.totalBudget) + " orçados</span></div>" +
+      '<div><span class="eyebrow">' + (estourou ? "Acima do orçamento" : "Saldo disponível") + "</span>" +
+      '<div class="orc-numero ' + (estourou ? "acima" : "abaixo") + '">' + C.moeda(Math.abs(o.saldo)) + "</div>" +
+      '<span class="t-sub">' + C.brl(o.consumo * 100, 0) + "% do orçamento consumido</span></div>" +
+      '<div><span class="eyebrow">Média por mês</span>' +
+      '<div class="orc-numero">' + C.moeda(o.mediaMensal) + "</div>" +
+      '<span class="t-sub">' + (o.budget ? C.brl(o.mediaMensal / o.budget * 100, 0) + "% do teto mensal" : "") + "</span></div>" +
+      "</div>" +
+
+      medidor(o.totalRealizado, o.totalBudget) +
+
+      '<div class="note' + (estourou ? " warn" : " ok") + '">' +
+      (estourou
+        ? "<strong>" + o.nEstourados + " de " + o.nMeses + " meses fecharam acima do teto.</strong> " +
+          "Para caber nos " + C.moeda(o.budget) + " mensais, o gasto médio precisaria cair " +
+          C.brl((1 - o.budget / o.mediaMensal) * 100, 0) + "%" +
+          (o.pior ? " — o mês mais pesado foi " + esc(C.mesRotulo(o.pior.mes)) + ", com " +
+            C.moeda(-o.pior.saldo) + " acima." : "")
+        : "<strong>Dentro do orçamento.</strong> Sobra de " + C.moeda(o.saldo) + " no acumulado do ano.") +
+      "</div>" +
+
+      "</div>" +
+      '<div class="card-body flush"><div class="table-wrap"><table><thead><tr>' +
+      "<th>Mês</th><th class=\"n\">Realizado</th><th class=\"n\">Orçamento</th>" +
+      "<th class=\"n\">Saldo do mês</th><th class=\"n\">Consumo</th><th class=\"n\">Saldo acumulado</th>" +
+      "</tr></thead><tbody>" + linhas + "</tbody><tfoot><tr>" +
+      "<td><strong>TOTAL</strong></td>" +
+      '<td class="n"><strong>' + C.moeda(o.totalRealizado) + "</strong></td>" +
+      '<td class="n"><strong>' + C.moeda(o.totalBudget) + "</strong></td>" +
+      '<td class="n ' + (estourou ? "acima" : "abaixo") + '"><strong>' + (estourou ? "−" : "+") +
+      C.moeda(Math.abs(o.saldo)) + "</strong></td>" +
+      '<td class="n"><strong class="' + (o.consumo > 1 ? "acima" : "abaixo") + '">' +
+      C.brl(o.consumo * 100, 0) + "%</strong></td><td></td>" +
+      "</tr></tfoot></table></div></div></div>";
+  }
+
+  /**
+   * Leituras de custo que o painel não entrega sozinho: para onde o dinheiro
+   * está indo, o quanto está concentrado e o que o ritmo atual projeta. Cada
+   * frase sai do dado — nada aqui é fixo.
+   */
+  function analisesCard(r, o, pessoas, uber, ano) {
+    var itens = [];
+
+    // 1. Ritmo × orçamento
+    if (o.budget) {
+      var projecao = o.mediaMensal * 12;
+      itens.push({
+        rotulo: "Ritmo anualizado",
+        valor: C.moeda(projecao),
+        nota: "Mantido o gasto médio de " + C.moeda(o.mediaMensal) + "/mês, o ano fecharia em " +
+              C.moeda(projecao) + " ante " + C.moeda(o.budget * 12) + " de orçamento — " +
+              (projecao > o.budget * 12
+                ? C.moeda(projecao - o.budget * 12) + " acima."
+                : C.moeda(o.budget * 12 - projecao) + " abaixo."),
+        tom: projecao > o.budget * 12 ? "acima" : "abaixo"
+      });
+    }
+
+    // 2. Onde o dinheiro está
+    var cats = r.categorias.map(function (cat) {
+      return { nome: cat, total: r.meses.reduce(function (s2, m) { return s2 + r.porCategoria[cat][m]; }, 0) };
+    }).filter(function (c) { return c.total > 0; }).sort(function (a, b) { return b.total - a.total; });
+    if (cats.length) {
+      var top = cats[0];
+      itens.push({
+        rotulo: "Maior linha de custo",
+        valor: esc(top.nome),
+        nota: C.moeda(top.total) + " no ano, " + C.brl(top.total / r.totalAno * 100, 0) +
+              "% do total" + (cats[1] ? " — à frente de " + esc(cats[1].nome) + ", com " +
+              C.brl(cats[1].total / r.totalAno * 100, 0) + "%." : "."),
+        tom: ""
+      });
+    }
+
+    // 3. Concentração em poucas pessoas
+    if (pessoas.length >= 5) {
+      var top5 = pessoas.slice(0, 5).reduce(function (s2, p) { return s2 + p.total; }, 0);
+      itens.push({
+        rotulo: "Concentração",
+        valor: C.brl(top5 / r.totalAno * 100, 0) + "%",
+        nota: "Os 5 maiores respondem por " + C.moeda(top5) + " de " + C.moeda(r.totalAno) +
+              ", entre " + pessoas.length + " pessoas com despesa. O maior sozinho é " +
+              esc(pessoas[0].nome) + ", com " + C.brl(pessoas[0].total / r.totalAno * 100, 0) + "%.",
+        tom: top5 / r.totalAno > 0.5 ? "atencao" : ""
+      });
+    }
+
+    // 4. Quanto custa um dia fora
+    if (r.noites) {
+      itens.push({
+        rotulo: "Custo por pernoite",
+        valor: C.moeda(r.totalViagens / r.noites),
+        nota: r.noites + " pernoites no ano, " + C.moeda(r.totalViagens) + " em viagens — " +
+              "sem contar o Uber, que sai a " + C.moeda(r.totalUber / r.noites) + " por pernoite.",
+        tom: ""
+      });
+    }
+
+    // 5. O que a remarcação custou
+    var alteracoes = r.meses.reduce(function (s2, m) { return s2 + (r.porCategoria["Alterações"] ? r.porCategoria["Alterações"][m] : 0); }, 0);
+    if (alteracoes > 0) {
+      itens.push({
+        rotulo: "Custo de remarcação",
+        valor: C.moeda(alteracoes),
+        nota: C.brl(alteracoes / r.totalAno * 100, 1) + "% do custo do ano saiu de mudança de " +
+              "passagem ou de período depois da viagem aprovada.",
+        tom: "atencao"
+      });
+    }
+
+    // 6. Uber
+    if (uber.n) {
+      itens.push({
+        rotulo: "Uber por corrida",
+        valor: C.moeda(r.totalUber / uber.n),
+        nota: uber.n + " corridas, " + C.moeda(r.totalUber) + " no ano" +
+              (uber.valorNaoDevidas > 0
+                ? " — " + C.moeda(uber.valorNaoDevidas) + " já marcados como não devidos na auditoria."
+                : "."),
+        tom: ""
+      });
+    }
+
+    // 7. O mês mais caro e o mais barato
+    if (o.pior && o.melhor && o.pior.mes !== o.melhor.mes) {
+      itens.push({
+        rotulo: "Amplitude entre meses",
+        valor: C.moeda(o.pior.realizado - o.melhor.realizado),
+        nota: "De " + C.moeda(o.melhor.realizado) + " em " + esc(C.mesRotulo(o.melhor.mes)) +
+              " a " + C.moeda(o.pior.realizado) + " em " + esc(C.mesRotulo(o.pior.mes)) +
+              " — variação de " + C.brl((o.pior.realizado / (o.melhor.realizado || 1) - 1) * 100, 0) +
+              "% entre o mês mais leve e o mais pesado.",
+        tom: ""
+      });
+    }
+
+    if (!itens.length) return "";
+
+    return '<div class="card" style="grid-column:1/-1"><div class="card-head">' +
+      "<h2>Análises de custo</h2><span class=\"grow\"></span>" +
+      '<span class="t-sub">' + esc(ano) + "</span></div>" +
+      '<div class="card-body"><div class="analises">' +
+      itens.map(function (i) {
+        return '<div class="analise">' +
+          '<span class="eyebrow">' + esc(i.rotulo) + "</span>" +
+          '<div class="analise-valor ' + i.tom + '">' + i.valor + "</div>" +
+          '<p class="analise-nota">' + i.nota + "</p></div>";
+      }).join("") + "</div></div></div>";
+  }
+
   // ---------- aba: painel ----------
 
   function painel(estado) {
@@ -194,6 +408,7 @@
       return { nome: cat, cor: CORES[i % CORES.length], valores: r.meses.map(function (m) { return r.porCategoria[cat][m]; }) };
     }).filter(function (s) { return s.valores.some(function (v) { return v > 0; }); });
 
+    var o = C.orcamento(ano);
     var mediaViagem = r.nViagens ? r.totalViagens / r.nViagens : 0;
     var avisos = C.viagens().filter(function (v) { return C.anoDe(v.mesRef) === String(ano) && v.precisaConferir; });
 
@@ -206,6 +421,12 @@
           "Média de " + C.brlSigla(mediaViagem) + " por viagem") +
       kpi("Uber corporativo", C.moeda(r.totalUber),
           (r.totalAno ? C.brl(r.totalUber / r.totalAno * 100, 0) : "0") + "% do custo total · " + uber.n + " corridas") +
+      (o.budget
+        ? kpi("Orçamento " + ano, C.moeda(o.totalBudget),
+              '<span class="' + (o.saldo < 0 ? "acima" : "abaixo") + '">' +
+              C.brl(o.consumo * 100, 0) + "% consumido · " + C.moeda(Math.abs(o.saldo)) +
+              (o.saldo < 0 ? " acima" : " de saldo") + "</span>")
+        : "") +
       "</div>";
 
     if (avisos.length) {
@@ -217,8 +438,13 @@
     html += '<div class="card">' +
       '<div class="card-head"><h2>Custo mensal por categoria</h2><span class="grow"></span>' +
       '<span class="eyebrow">' + esc(ano) + "</span></div>" +
-      '<div class="card-body">' + barrasEmpilhadas(r.meses.map(C.mesRotulo), series) + "</div>" +
-      legenda(series) + "</div>";
+      '<div class="card-body">' +
+      barrasEmpilhadas(r.meses.map(C.mesRotulo), series, null,
+                       o.budget ? { valor: o.budget, rotulo: "Orçamento R$ " + C.brlCurto(o.budget) + "/mês" } : null) +
+      "</div>" + legenda(series) + "</div>";
+
+    html += orcamentoCard(o, ano);
+    html += analisesCard(r, o, pessoas, uber, ano);
 
     // Matriz categoria × mês (só meses com movimento, para caber na tela)
     html += '<div class="card"><div class="card-head"><h2>Composição por categoria</h2>' +
@@ -1113,6 +1339,19 @@
             "c6", "Dias antes e depois da viagem que ainda contam como período válido. 0 = auditoria rígida.") +
       "</div>" +
       '<div class="row"><button class="btn btn-primary" data-acao="salvar-regras">Salvar regras</button></div>' +
+      "</div></div>";
+
+    html += '<div class="card"><div class="card-head"><h2>Orçamento de viagens</h2></div>' +
+      '<div class="card-body grid" style="gap:12px">' +
+      '<div class="note">Teto mensal do pacote inteiro — aéreo, hospedagem, alimentação, transporte, ' +
+      "alterações e Uber corporativo. O painel compara mês a mês contra este valor e mostra o saldo " +
+      "acumulado do ano. Deixe em zero para desligar a comparação.</div>" +
+      '<div class="form-grid">' +
+      campo("Orçamento por mês (R$)", '<input type="text" class="money" name="regra-budget" value="' +
+            C.brl(C.db.params.regras.budgetMensal || 0) + '">', "c6",
+            "Vale para todos os meses do ano.") +
+      "</div>" +
+      '<div class="row"><button class="btn btn-primary" data-acao="salvar-regras">Salvar</button></div>' +
       "</div></div>";
 
     var dp = C.db.params.dePara;
