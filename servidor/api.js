@@ -209,7 +209,7 @@ function proximoId(dados) {
 const CAMPOS_VIAGEM = ["tipo", "colaborador", "destino", "aeroportoOrigem", "dataIda", "dataVolta",
   "aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao",
   "status", "refId", "motivo", "pendencias", "obs", "conferencia",
-  "hospedagem", "tipoAlteracao", "cafeIncluso"];
+  "hospedagem", "tipoHospedagem", "tipoAlteracao", "cafeIncluso"];
 
 const CAMPOS_COLABORADOR = ["nome", "status", "area", "cargo", "nivel", "gestor", "contrato",
   "cidade", "uf", "aeroportoBase", "email", "emailAlt", "modelo"];
@@ -431,6 +431,7 @@ const ROTULO_CAMPO = {
   valorDiaria: "valor da diária", alimentacao: "alimentação", transporte: "transporte",
   custoAlteracao: "custo da alteração", status: "status", motivo: "motivo",
   pendencias: "pendências", obs: "observações", hospedagem: "hospedagem",
+  tipoHospedagem: "tipo de hospedagem",
   tipoAlteracao: "tipo de alteração", cafeIncluso: "café incluso", conferencia: "conferência",
   area: "área", cargo: "cargo", nivel: "nível", gestor: "gestor", contrato: "contrato",
   cidade: "cidade", uf: "UF", aeroportoBase: "aeroporto base", email: "e-mail",

@@ -332,6 +332,23 @@
       });
     }
 
+    // 3b. O peso do aluguel de apartamento — recorrente, não é diária de viagem
+    if (o.totalLocacao > 0) {
+      itens.push({
+        rotulo: "Locação de apartamento",
+        valor: C.moeda(o.totalLocacao),
+        nota: C.brl(o.totalLocacao / r.totalAno * 100, 0) + "% do custo do ano é aluguel de apartamento, " +
+              "que se repete todo mês e não é diária de viagem. Sem ele o realizado cairia para " +
+              C.moeda(o.semLocacao) +
+              (o.budget
+                ? " — " + (o.saldoSemLocacao < 0
+                    ? C.moeda(-o.saldoSemLocacao) + " acima do orçamento, em vez de " + C.moeda(-o.saldo) + "."
+                    : C.moeda(o.saldoSemLocacao) + " dentro do orçamento.")
+                : "."),
+        tom: "atencao"
+      });
+    }
+
     // 4. Quanto custa um dia fora
     if (r.noites) {
       itens.push({
@@ -469,6 +486,16 @@
           '<td class="n"><strong>' + C.moeda(totalCat) + "</strong></td>" +
           '<td class="n">' + (r.totalAno ? C.brl(totalCat / r.totalAno * 100, 0) : "0") + "%</td></tr>";
       }).join("") +
+      (r.totalLocacao
+        ? '<tr class="sublinha"><td title="Parte da hospedagem contratada como aluguel de apartamento, e não como diária de hotel">' +
+          "↳ dos quais locação de apartamento</td>" +
+          mesesAtivos.map(function (m) {
+            var v = r.locacaoMes[m];
+            return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.moeda(v) : "—") + "</td>";
+          }).join("") +
+          '<td class="n">' + C.moeda(r.totalLocacao) + "</td>" +
+          '<td class="n">' + (r.totalAno ? C.brl(r.totalLocacao / r.totalAno * 100, 0) : "0") + "%</td></tr>"
+        : "") +
       "</tbody><tfoot><tr><td><strong>TOTAL</strong></td>" +
       mesesAtivos.map(function (m) { return '<td class="n"><strong>' + C.moeda(r.totalMes[m]) + "</strong></td>"; }).join("") +
       '<td class="n"><strong>' + C.moeda(r.totalAno) + '</strong></td><td class="n"><strong>100%</strong></td></tr>' +
@@ -676,7 +703,9 @@
         "</span> · " + v.noites + (v.noites === 1 ? " noite" : " noites") + "</span></td>" +
         '<td class="n">' + dinheiro(v.aereo) + "</td>" +
         '<td class="n">' + dinheiro(v.hospedagem) +
-        (v.porNoite ? '<br><span class="t-sub">' + C.moeda(v.porNoite) + "/noite</span>" : "") + "</td>" +
+        (v.locacao
+          ? '<br><span class="t-sub" title="Locação de apartamento — hospedagem recorrente, não diária de hotel">apartamento</span>'
+          : v.porNoite ? '<br><span class="t-sub">' + C.moeda(v.porNoite) + "/noite</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(v.alimentacao) +
         (v.cafeIncluso ? '<br><span class="t-sub" title="Hospedagem com café da manhã: só o jantar é devido">café incluso</span>' : "") +
         (v.difAlim ? '<br><span class="t-sub" style="color:var(--' + (v.difAlim < 0 ? "critical" : "warning") + ')">' +
@@ -1421,6 +1450,9 @@
       "<p><strong>Remarcação:</strong> use o botão de alteração (↻) na linha da viagem. " +
       "A viagem original passa para <em>Alterada</em> e a extensão entra como um lançamento novo, ligado a ela — " +
       "o valor aprovado no início continua visível e dá para medir quanto as remarcações custaram no ano.</p>" +
+      "<p><strong>Em que mês a viagem conta:</strong> no mês que ficou com mais pernoites. " +
+      "Uma viagem de 30/11 a 04/12 tem 1 noite em novembro e 3 em dezembro, então entra em dezembro — " +
+      "e é assim que ela aparece no painel, no custo por área e no orçamento do mês.</p>" +
       "<p><strong>Uber:</strong> aba Uber, cole o relatório e importe. Nome novo aparece como " +
       "<em>⚠ incluir no De-Para</em>, com um botão para vincular na hora.</p>" +
       "<p><strong>Acessos:</strong> cada pessoa entra com o seu e-mail corporativo e a sua senha. " +

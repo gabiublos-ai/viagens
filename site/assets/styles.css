@@ -828,3 +828,7 @@ body.so-leitura .actions-cell { display: none; }
 .analise { border-left: 2px solid var(--border); padding-left: 12px; }
 .analise-valor { font-size: 19px; font-weight: 700; letter-spacing: -.01em; margin: 3px 0 4px; }
 .analise-nota { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+
+/* Linha de detalhe logo abaixo da categoria que ela abre. */
+tbody tr.sublinha td { color: var(--text-2); font-size: 12px; padding-top: 2px; padding-bottom: 8px; }
+tbody tr.sublinha td:first-child { padding-left: 22px; }

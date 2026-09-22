@@ -487,6 +487,10 @@
       '<input type="text" class="money" name="hospedagem" value="' + C.brl(inicial.hospedagem) + '">' +
       '<span class="hint" data-info="hospedagem"></span></div>' +
 
+      V.campo("Tipo de hospedagem", V.selectHTML("tipoHospedagem", C.TIPOS_HOSPEDAGEM,
+              v.tipoHospedagem || C.TIPOS_HOSPEDAGEM[0]), "c3",
+              "A locação de apartamento entra no mesmo custo de hospedagem, mas fica separada nas análises.") +
+
       '<div class="field c3"><label>Alimentação (R$)</label>' +
       '<input type="text" class="money" name="alimentacao" value="' + C.brl(v.alimentacao) + '">' +
       '<span class="hint"><button type="button" class="btn btn-ghost btn-sm" data-acao="usar-regra" style="padding:0">usar a regra</button> ' +
@@ -815,6 +819,7 @@
       dataVolta: fd.get("dataVolta") || "",
       status: fd.get("status") || "Fechado",
       cafeIncluso: !!fd.get("cafeIncluso"),
+      tipoHospedagem: fd.get("tipoHospedagem") || "",
       motivo: (fd.get("motivo") || "").trim(),
       pendencias: (fd.get("pendencias") || "").trim(),
       obs: (fd.get("obs") || "").trim()

@@ -91,6 +91,28 @@
     return d ? pad(d.getMonth() + 1) + "/" + d.getFullYear() : "";
   }
 
+  /**
+   * Mês em que a viagem conta. Quando ela cruza a virada, vale o mês que ficou
+   * com mais pernoites — uma viagem de 30/11 a 04/12 é de dezembro, não de
+   * novembro. Empate fica com o mês da ida.
+   */
+  function mesRefViagem(v) {
+    var ida = toDate(v.dataIda), volta = toDate(v.dataVolta);
+    if (!ida) return "";
+    if (!volta || volta <= ida) return mesRefDe(v.dataIda);
+
+    var noitesPorMes = {}, ordem = [], dia = new Date(ida.getTime());
+    while (dia < volta) {
+      var m = pad(dia.getMonth() + 1) + "/" + dia.getFullYear();
+      if (noitesPorMes[m] === undefined) { noitesPorMes[m] = 0; ordem.push(m); }
+      noitesPorMes[m]++;
+      dia.setDate(dia.getDate() + 1);
+    }
+    return ordem.reduce(function (melhor, m) {
+      return noitesPorMes[m] > noitesPorMes[melhor] ? m : melhor;
+    }, ordem[0]) || mesRefDe(v.dataIda);
+  }
+
   /** "08/2026" → "Ago/26" */
   function mesRotulo(mesRef) {
     if (!mesRef) return "—";
@@ -148,6 +170,14 @@
     dePara: [],
     conferenciasUber: {}
   };
+
+  /* Como a estadia foi contratada. Continua tudo dentro de "Hospedagem" no
+   * custo — o que muda é poder separar o hotel de viagem do aluguel de
+   * apartamento, que é recorrente e se comporta como custo fixo. */
+  var TIPOS_HOSPEDAGEM = ["Hotel", "Locação de apartamento"];
+  var LOCACAO = TIPOS_HOSPEDAGEM[1];
+
+  function ehLocacao(v) { return v && v.tipoHospedagem === LOCACAO; }
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -392,6 +422,7 @@
       return {
         mes: m,
         realizado: realizado,
+        locacao: r.locacaoMes[m] || 0,
         budget: budget,
         saldo: saldo,
         consumo: budget ? realizado / budget : 0,
@@ -410,6 +441,11 @@
       saldo: totalBudget - r.totalAno,
       consumo: totalBudget ? r.totalAno / totalBudget : 0,
       mediaMensal: meses.length ? r.totalAno / meses.length : 0,
+      // Quanto o mesmo período custaria sem os aluguéis de apartamento, que são
+      // recorrentes e podem ou não pertencer ao pacote de viagens.
+      totalLocacao: r.totalLocacao,
+      semLocacao: round2(r.totalAno - r.totalLocacao),
+      saldoSemLocacao: round2(totalBudget - (r.totalAno - r.totalLocacao)),
       nEstourados: estourados.length,
       pior: linhas.slice().sort(function (a, b) { return a.saldo - b.saldo; })[0] || null,
       melhor: linhas.slice().sort(function (a, b) { return b.saldo - a.saldo; })[0] || null
@@ -532,10 +568,11 @@
     var conferido = !!(v.conferencia && v.conferencia.assinatura === assinatura && avisos.length);
 
     return {
-      mesRef: mesRefDe(v.dataIda),
+      mesRef: mesRefViagem(v),
       area: areaDe(v.colaborador),
       gestor: gestorDe(v.colaborador),
       noites: noites,
+      locacao: ehLocacao(v),
       // A viagem cancelada não aconteceu: não conta pernoite nem entra no calendário.
       noitesEfetivas: cancelada ? 0 : noites,
       cancelada: cancelada,
@@ -573,7 +610,7 @@
   var CAMPOS_VIAGEM = ["tipo", "colaborador", "destino", "aeroportoOrigem", "dataIda", "dataVolta",
                        "aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao",
                        "status", "refId", "motivo", "pendencias", "obs", "conferencia",
-                       "hospedagem", "tipoAlteracao", "cafeIncluso"];
+                       "hospedagem", "tipoHospedagem", "tipoAlteracao", "cafeIncluso"];
 
   function viagemVazia() {
     return {
@@ -581,7 +618,7 @@
       dataIda: "", dataVolta: "", aereo: 0, hospedagem: 0, diarias: 0, valorDiaria: 0, alimentacao: 0,
       transporte: 0, custoAlteracao: 0, status: "Fechado", refId: null,
       motivo: "", pendencias: "", obs: "", conferencia: null, tipoAlteracao: "",
-      cafeIncluso: false
+      tipoHospedagem: "", cafeIncluso: false
     };
   }
 
@@ -991,9 +1028,12 @@
     for (var m = 1; m <= 12; m++) meses.push(pad(m) + "/" + ano);
 
     var porCategoria = {}, porArea = {}, pessoasMes = {}, totalMes = {}, viagensMes = {}, custoViagensMes = {};
+    var locacaoMes = {};
     CATEGORIAS.forEach(function (c) { porCategoria[c] = {}; meses.forEach(function (m) { porCategoria[c][m] = 0; }); });
     areas().forEach(function (a) { porArea[a] = {}; meses.forEach(function (m) { porArea[a][m] = 0; }); });
-    meses.forEach(function (m) { totalMes[m] = 0; pessoasMes[m] = {}; viagensMes[m] = 0; custoViagensMes[m] = 0; });
+    meses.forEach(function (m) {
+      totalMes[m] = 0; pessoasMes[m] = {}; viagensMes[m] = 0; custoViagensMes[m] = 0; locacaoMes[m] = 0;
+    });
 
     // `pessoas` = quem teve qualquer despesa (viagem ou Uber) — vale para o KPI.
     // `pessoasMes` e `pessoasViagem` contam só quem viajou: é o que a tabela
@@ -1017,6 +1057,7 @@
       pessoasMes[m][v.colaborador] = 1;
       custoViagensMes[m] += v.total;
       if (v.tipo !== "Alteração") { nViagens++; viagensMes[m]++; }
+      if (v.locacao) locacaoMes[m] += v.hospedagem;
       noites += v.noitesEfetivas;
     });
 
@@ -1031,8 +1072,12 @@
     var totalAno = 0;
     meses.forEach(function (m) { totalMes[m] = round2(totalMes[m]); totalAno += totalMes[m]; });
 
-    var totalUber = 0;
-    meses.forEach(function (m) { totalUber += porCategoria["Uber Corporativo"][m]; });
+    var totalUber = 0, totalLocacao = 0;
+    meses.forEach(function (m) {
+      totalUber += porCategoria["Uber Corporativo"][m];
+      locacaoMes[m] = round2(locacaoMes[m]);
+      totalLocacao += locacaoMes[m];
+    });
 
     return {
       ano: String(ano),
@@ -1049,6 +1094,8 @@
       pessoasMes: pessoasMes,
       viagensMes: viagensMes,
       custoViagensMes: custoViagensMes,
+      locacaoMes: locacaoMes,
+      totalLocacao: round2(totalLocacao),
       nViagens: nViagens,
       noites: noites
     };
@@ -1342,6 +1389,7 @@
     brl: brl, moeda: moeda, brlSigla: brlSigla, brlCurto: brlCurto, parseNum: parseNum, round2: round2,
     fmtData: fmtData, fmtDataCurta: fmtDataCurta, mesRefDe: mesRefDe, mesRotulo: mesRotulo,
     mesNome: mesNome, anoDe: anoDe, iniciais: iniciais, normal: normal, ordenaPt: ordenaPt,
+    mesRefViagem: mesRefViagem,
     diasEntre: diasEntre, addDias: addDias, toISO: toISO, toDate: toDate, pad: pad,
 
     // colaboradores
@@ -1365,6 +1413,7 @@
     // análises
     CATEGORIAS: CATEGORIAS, resumoAnual: resumoAnual, porColaborador: porColaborador,
     budgetMensal: budgetMensal, orcamento: orcamento,
+    TIPOS_HOSPEDAGEM: TIPOS_HOSPEDAGEM, LOCACAO: LOCACAO, ehLocacao: ehLocacao,
     resumoUber: resumoUber, calendario: calendario, mesesComDados: mesesComDados, anosComDados: anosComDados,
 
     // exportação

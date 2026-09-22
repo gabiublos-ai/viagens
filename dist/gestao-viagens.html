@@ -837,6 +837,10 @@ body.so-leitura .actions-cell { display: none; }
 .analise-valor { font-size: 19px; font-weight: 700; letter-spacing: -.01em; margin: 3px 0 4px; }
 .analise-nota { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
 
+/* Linha de detalhe logo abaixo da categoria que ela abre. */
+tbody tr.sublinha td { color: var(--text-2); font-size: 12px; padding-top: 2px; padding-bottom: 8px; }
+tbody tr.sublinha td:first-child { padding-left: 22px; }
+
 </style>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='19' font-size='19'>✈️</text></svg>">
 </head>
@@ -3956,6 +3960,28 @@ window.SEED = {
     return d ? pad(d.getMonth() + 1) + "/" + d.getFullYear() : "";
   }
 
+  /**
+   * Mês em que a viagem conta. Quando ela cruza a virada, vale o mês que ficou
+   * com mais pernoites — uma viagem de 30/11 a 04/12 é de dezembro, não de
+   * novembro. Empate fica com o mês da ida.
+   */
+  function mesRefViagem(v) {
+    var ida = toDate(v.dataIda), volta = toDate(v.dataVolta);
+    if (!ida) return "";
+    if (!volta || volta <= ida) return mesRefDe(v.dataIda);
+
+    var noitesPorMes = {}, ordem = [], dia = new Date(ida.getTime());
+    while (dia < volta) {
+      var m = pad(dia.getMonth() + 1) + "/" + dia.getFullYear();
+      if (noitesPorMes[m] === undefined) { noitesPorMes[m] = 0; ordem.push(m); }
+      noitesPorMes[m]++;
+      dia.setDate(dia.getDate() + 1);
+    }
+    return ordem.reduce(function (melhor, m) {
+      return noitesPorMes[m] > noitesPorMes[melhor] ? m : melhor;
+    }, ordem[0]) || mesRefDe(v.dataIda);
+  }
+
   /** "08/2026" → "Ago/26" */
   function mesRotulo(mesRef) {
     if (!mesRef) return "—";
@@ -4013,6 +4039,14 @@ window.SEED = {
     dePara: [],
     conferenciasUber: {}
   };
+
+  /* Como a estadia foi contratada. Continua tudo dentro de "Hospedagem" no
+   * custo — o que muda é poder separar o hotel de viagem do aluguel de
+   * apartamento, que é recorrente e se comporta como custo fixo. */
+  var TIPOS_HOSPEDAGEM = ["Hotel", "Locação de apartamento"];
+  var LOCACAO = TIPOS_HOSPEDAGEM[1];
+
+  function ehLocacao(v) { return v && v.tipoHospedagem === LOCACAO; }
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -4257,6 +4291,7 @@ window.SEED = {
       return {
         mes: m,
         realizado: realizado,
+        locacao: r.locacaoMes[m] || 0,
         budget: budget,
         saldo: saldo,
         consumo: budget ? realizado / budget : 0,
@@ -4275,6 +4310,11 @@ window.SEED = {
       saldo: totalBudget - r.totalAno,
       consumo: totalBudget ? r.totalAno / totalBudget : 0,
       mediaMensal: meses.length ? r.totalAno / meses.length : 0,
+      // Quanto o mesmo período custaria sem os aluguéis de apartamento, que são
+      // recorrentes e podem ou não pertencer ao pacote de viagens.
+      totalLocacao: r.totalLocacao,
+      semLocacao: round2(r.totalAno - r.totalLocacao),
+      saldoSemLocacao: round2(totalBudget - (r.totalAno - r.totalLocacao)),
       nEstourados: estourados.length,
       pior: linhas.slice().sort(function (a, b) { return a.saldo - b.saldo; })[0] || null,
       melhor: linhas.slice().sort(function (a, b) { return b.saldo - a.saldo; })[0] || null
@@ -4397,10 +4437,11 @@ window.SEED = {
     var conferido = !!(v.conferencia && v.conferencia.assinatura === assinatura && avisos.length);
 
     return {
-      mesRef: mesRefDe(v.dataIda),
+      mesRef: mesRefViagem(v),
       area: areaDe(v.colaborador),
       gestor: gestorDe(v.colaborador),
       noites: noites,
+      locacao: ehLocacao(v),
       // A viagem cancelada não aconteceu: não conta pernoite nem entra no calendário.
       noitesEfetivas: cancelada ? 0 : noites,
       cancelada: cancelada,
@@ -4438,7 +4479,7 @@ window.SEED = {
   var CAMPOS_VIAGEM = ["tipo", "colaborador", "destino", "aeroportoOrigem", "dataIda", "dataVolta",
                        "aereo", "diarias", "valorDiaria", "alimentacao", "transporte", "custoAlteracao",
                        "status", "refId", "motivo", "pendencias", "obs", "conferencia",
-                       "hospedagem", "tipoAlteracao", "cafeIncluso"];
+                       "hospedagem", "tipoHospedagem", "tipoAlteracao", "cafeIncluso"];
 
   function viagemVazia() {
     return {
@@ -4446,7 +4487,7 @@ window.SEED = {
       dataIda: "", dataVolta: "", aereo: 0, hospedagem: 0, diarias: 0, valorDiaria: 0, alimentacao: 0,
       transporte: 0, custoAlteracao: 0, status: "Fechado", refId: null,
       motivo: "", pendencias: "", obs: "", conferencia: null, tipoAlteracao: "",
-      cafeIncluso: false
+      tipoHospedagem: "", cafeIncluso: false
     };
   }
 
@@ -4856,9 +4897,12 @@ window.SEED = {
     for (var m = 1; m <= 12; m++) meses.push(pad(m) + "/" + ano);
 
     var porCategoria = {}, porArea = {}, pessoasMes = {}, totalMes = {}, viagensMes = {}, custoViagensMes = {};
+    var locacaoMes = {};
     CATEGORIAS.forEach(function (c) { porCategoria[c] = {}; meses.forEach(function (m) { porCategoria[c][m] = 0; }); });
     areas().forEach(function (a) { porArea[a] = {}; meses.forEach(function (m) { porArea[a][m] = 0; }); });
-    meses.forEach(function (m) { totalMes[m] = 0; pessoasMes[m] = {}; viagensMes[m] = 0; custoViagensMes[m] = 0; });
+    meses.forEach(function (m) {
+      totalMes[m] = 0; pessoasMes[m] = {}; viagensMes[m] = 0; custoViagensMes[m] = 0; locacaoMes[m] = 0;
+    });
 
     // `pessoas` = quem teve qualquer despesa (viagem ou Uber) — vale para o KPI.
     // `pessoasMes` e `pessoasViagem` contam só quem viajou: é o que a tabela
@@ -4882,6 +4926,7 @@ window.SEED = {
       pessoasMes[m][v.colaborador] = 1;
       custoViagensMes[m] += v.total;
       if (v.tipo !== "Alteração") { nViagens++; viagensMes[m]++; }
+      if (v.locacao) locacaoMes[m] += v.hospedagem;
       noites += v.noitesEfetivas;
     });
 
@@ -4896,8 +4941,12 @@ window.SEED = {
     var totalAno = 0;
     meses.forEach(function (m) { totalMes[m] = round2(totalMes[m]); totalAno += totalMes[m]; });
 
-    var totalUber = 0;
-    meses.forEach(function (m) { totalUber += porCategoria["Uber Corporativo"][m]; });
+    var totalUber = 0, totalLocacao = 0;
+    meses.forEach(function (m) {
+      totalUber += porCategoria["Uber Corporativo"][m];
+      locacaoMes[m] = round2(locacaoMes[m]);
+      totalLocacao += locacaoMes[m];
+    });
 
     return {
       ano: String(ano),
@@ -4914,6 +4963,8 @@ window.SEED = {
       pessoasMes: pessoasMes,
       viagensMes: viagensMes,
       custoViagensMes: custoViagensMes,
+      locacaoMes: locacaoMes,
+      totalLocacao: round2(totalLocacao),
       nViagens: nViagens,
       noites: noites
     };
@@ -5207,6 +5258,7 @@ window.SEED = {
     brl: brl, moeda: moeda, brlSigla: brlSigla, brlCurto: brlCurto, parseNum: parseNum, round2: round2,
     fmtData: fmtData, fmtDataCurta: fmtDataCurta, mesRefDe: mesRefDe, mesRotulo: mesRotulo,
     mesNome: mesNome, anoDe: anoDe, iniciais: iniciais, normal: normal, ordenaPt: ordenaPt,
+    mesRefViagem: mesRefViagem,
     diasEntre: diasEntre, addDias: addDias, toISO: toISO, toDate: toDate, pad: pad,
 
     // colaboradores
@@ -5230,6 +5282,7 @@ window.SEED = {
     // análises
     CATEGORIAS: CATEGORIAS, resumoAnual: resumoAnual, porColaborador: porColaborador,
     budgetMensal: budgetMensal, orcamento: orcamento,
+    TIPOS_HOSPEDAGEM: TIPOS_HOSPEDAGEM, LOCACAO: LOCACAO, ehLocacao: ehLocacao,
     resumoUber: resumoUber, calendario: calendario, mesesComDados: mesesComDados, anosComDados: anosComDados,
 
     // exportação
@@ -5573,6 +5626,23 @@ window.SEED = {
       });
     }
 
+    // 3b. O peso do aluguel de apartamento — recorrente, não é diária de viagem
+    if (o.totalLocacao > 0) {
+      itens.push({
+        rotulo: "Locação de apartamento",
+        valor: C.moeda(o.totalLocacao),
+        nota: C.brl(o.totalLocacao / r.totalAno * 100, 0) + "% do custo do ano é aluguel de apartamento, " +
+              "que se repete todo mês e não é diária de viagem. Sem ele o realizado cairia para " +
+              C.moeda(o.semLocacao) +
+              (o.budget
+                ? " — " + (o.saldoSemLocacao < 0
+                    ? C.moeda(-o.saldoSemLocacao) + " acima do orçamento, em vez de " + C.moeda(-o.saldo) + "."
+                    : C.moeda(o.saldoSemLocacao) + " dentro do orçamento.")
+                : "."),
+        tom: "atencao"
+      });
+    }
+
     // 4. Quanto custa um dia fora
     if (r.noites) {
       itens.push({
@@ -5710,6 +5780,16 @@ window.SEED = {
           '<td class="n"><strong>' + C.moeda(totalCat) + "</strong></td>" +
           '<td class="n">' + (r.totalAno ? C.brl(totalCat / r.totalAno * 100, 0) : "0") + "%</td></tr>";
       }).join("") +
+      (r.totalLocacao
+        ? '<tr class="sublinha"><td title="Parte da hospedagem contratada como aluguel de apartamento, e não como diária de hotel">' +
+          "↳ dos quais locação de apartamento</td>" +
+          mesesAtivos.map(function (m) {
+            var v = r.locacaoMes[m];
+            return '<td class="n' + (v ? "" : " zero") + '">' + (v ? C.moeda(v) : "—") + "</td>";
+          }).join("") +
+          '<td class="n">' + C.moeda(r.totalLocacao) + "</td>" +
+          '<td class="n">' + (r.totalAno ? C.brl(r.totalLocacao / r.totalAno * 100, 0) : "0") + "%</td></tr>"
+        : "") +
       "</tbody><tfoot><tr><td><strong>TOTAL</strong></td>" +
       mesesAtivos.map(function (m) { return '<td class="n"><strong>' + C.moeda(r.totalMes[m]) + "</strong></td>"; }).join("") +
       '<td class="n"><strong>' + C.moeda(r.totalAno) + '</strong></td><td class="n"><strong>100%</strong></td></tr>' +
@@ -5917,7 +5997,9 @@ window.SEED = {
         "</span> · " + v.noites + (v.noites === 1 ? " noite" : " noites") + "</span></td>" +
         '<td class="n">' + dinheiro(v.aereo) + "</td>" +
         '<td class="n">' + dinheiro(v.hospedagem) +
-        (v.porNoite ? '<br><span class="t-sub">' + C.moeda(v.porNoite) + "/noite</span>" : "") + "</td>" +
+        (v.locacao
+          ? '<br><span class="t-sub" title="Locação de apartamento — hospedagem recorrente, não diária de hotel">apartamento</span>'
+          : v.porNoite ? '<br><span class="t-sub">' + C.moeda(v.porNoite) + "/noite</span>" : "") + "</td>" +
         '<td class="n">' + dinheiro(v.alimentacao) +
         (v.cafeIncluso ? '<br><span class="t-sub" title="Hospedagem com café da manhã: só o jantar é devido">café incluso</span>' : "") +
         (v.difAlim ? '<br><span class="t-sub" style="color:var(--' + (v.difAlim < 0 ? "critical" : "warning") + ')">' +
@@ -6662,6 +6744,9 @@ window.SEED = {
       "<p><strong>Remarcação:</strong> use o botão de alteração (↻) na linha da viagem. " +
       "A viagem original passa para <em>Alterada</em> e a extensão entra como um lançamento novo, ligado a ela — " +
       "o valor aprovado no início continua visível e dá para medir quanto as remarcações custaram no ano.</p>" +
+      "<p><strong>Em que mês a viagem conta:</strong> no mês que ficou com mais pernoites. " +
+      "Uma viagem de 30/11 a 04/12 tem 1 noite em novembro e 3 em dezembro, então entra em dezembro — " +
+      "e é assim que ela aparece no painel, no custo por área e no orçamento do mês.</p>" +
       "<p><strong>Uber:</strong> aba Uber, cole o relatório e importe. Nome novo aparece como " +
       "<em>⚠ incluir no De-Para</em>, com um botão para vincular na hora.</p>" +
       "<p><strong>Acessos:</strong> cada pessoa entra com o seu e-mail corporativo e a sua senha. " +
@@ -7182,6 +7267,10 @@ window.SEED = {
       '<input type="text" class="money" name="hospedagem" value="' + C.brl(inicial.hospedagem) + '">' +
       '<span class="hint" data-info="hospedagem"></span></div>' +
 
+      V.campo("Tipo de hospedagem", V.selectHTML("tipoHospedagem", C.TIPOS_HOSPEDAGEM,
+              v.tipoHospedagem || C.TIPOS_HOSPEDAGEM[0]), "c3",
+              "A locação de apartamento entra no mesmo custo de hospedagem, mas fica separada nas análises.") +
+
       '<div class="field c3"><label>Alimentação (R$)</label>' +
       '<input type="text" class="money" name="alimentacao" value="' + C.brl(v.alimentacao) + '">' +
       '<span class="hint"><button type="button" class="btn btn-ghost btn-sm" data-acao="usar-regra" style="padding:0">usar a regra</button> ' +
@@ -7510,6 +7599,7 @@ window.SEED = {
       dataVolta: fd.get("dataVolta") || "",
       status: fd.get("status") || "Fechado",
       cafeIncluso: !!fd.get("cafeIncluso"),
+      tipoHospedagem: fd.get("tipoHospedagem") || "",
       motivo: (fd.get("motivo") || "").trim(),
       pendencias: (fd.get("pendencias") || "").trim(),
       obs: (fd.get("obs") || "").trim()
