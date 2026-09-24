@@ -613,8 +613,9 @@
       return mesesAtivos.some(function (m) { return (r.porArea[a][m] || 0) > 0; });
     });
 
-    html += '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">';
-
+    // Os dois últimos cartões ficam um embaixo do outro, em largura cheia: a
+    // tabela por área tem uma coluna por mês e o ranking precisa de espaço
+    // para o nome e os dois valores.
     var ordemArea = estado.areaOrdem || { campo: "total", desc: true };
     // `|| 0`: uma área criada só pela sobra (encargo do Uber sem dono) não tem
     // todos os meses preenchidos, e sem isso a soma viraria NaN.
@@ -660,7 +661,6 @@
                  extra: p.viagens ? C.moeda(media) + "/viagem" : "", valor: p.total };
       })) + "</div></div>";
 
-    html += "</div>";
     return html;
   }
 
