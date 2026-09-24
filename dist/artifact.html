@@ -7106,24 +7106,45 @@ window.SEED = {
   // ---------- sincronização entre pessoas ----------
 
   var vigiando = false;
+  var buscandoRevisao = false;
+
+  /**
+   * Confere se alguém mexeu na base e, se mexeu, recarrega. Não busca com a
+   * página em segundo plano (ninguém está lendo) nem com um formulário aberto
+   * (trocar a base debaixo de um cadastro em edição apagaria o que foi
+   * digitado) — nesses dois casos o próximo gatilho resolve.
+   */
+  function conferirRemoto() {
+    if (C.modo !== "servidor" || buscandoRevisao) return;
+    if (document.hidden || document.querySelector("dialog[open]")) return;
+    buscandoRevisao = true;
+    C.revisaoRemota().then(function (r) {
+      buscandoRevisao = false;
+      if (!r || r.revisao === C.meta.revisao) return;
+      var quem = r.atualizadoPor;
+      return C.recarregar().then(function () {
+        toast(quem ? "Base atualizada por " + quem : "Base atualizada");
+      });
+    }, function () { buscandoRevisao = false; /* sem rede agora; o próximo ciclo tenta */ });
+  }
+
+  /**
+   * O `setTimeout` é o detalhe que fazia a diferença: no instante em que o
+   * evento de foco chega, o navegador ainda pode ter a página como oculta, e a
+   * conferência era descartada em silêncio — a aba só se atualizava no ciclo
+   * seguinte, até vinte segundos depois.
+   */
+  function agendarConferencia() { setTimeout(conferirRemoto, 0); }
 
   function vigiarMudancas() {
     if (vigiando) return;
     vigiando = true;
 
-    function conferir() {
-      if (document.hidden || document.querySelector("dialog[open]")) return;
-      C.revisaoRemota().then(function (r) {
-        if (!r || r.revisao === C.meta.revisao) return;
-        var quem = r.atualizadoPor;
-        C.recarregar().then(function () {
-          toast(quem ? "Base atualizada por " + quem : "Base atualizada");
-        });
-      }, function () { /* sem rede agora; tenta de novo no próximo ciclo */ });
-    }
-
-    setInterval(conferir, 20000);
-    window.addEventListener("focus", conferir);
+    setInterval(conferirRemoto, 20000);
+    window.addEventListener("focus", agendarConferencia);
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) agendarConferencia();
+    });
   }
 
   function atualizaAnos() {
@@ -7170,7 +7191,13 @@ window.SEED = {
     });
   }
 
-  function irPara(aba) { estado.aba = aba; render(); }
+  function irPara(aba) {
+    estado.aba = aba;
+    render();
+    // Ir para outra aba é justamente quando a pessoa vai ler o número: vale
+    // uma conferência, que custa uma requisição minúscula.
+    agendarConferencia();
+  }
 
   // ---------- eventos ----------
 
@@ -8845,7 +8872,10 @@ window.SEED = {
       '<div class="modal-body">' + opcoes.corpo + "</div>" +
       '<div class="modal-foot">' + opcoes.rodape + "</div>";
     document.body.appendChild(d);
-    d.addEventListener("close", function () { d.remove(); });
+    d.addEventListener("close", function () {
+      d.remove();
+      agendarConferencia();   // a conferência fica suspensa com um modal aberto
+    });
     d.showModal();
     return d;
   }
