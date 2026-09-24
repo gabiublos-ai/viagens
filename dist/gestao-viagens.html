@@ -661,14 +661,27 @@ td.indevido { color: var(--critical); font-weight: 650; }
 
 /* Colunas congeladas à esquerda: ID, colaborador e trecho ficam à vista
    enquanto o resto da tabela rola na horizontal. */
-th.fix1, td.fix1 { position: sticky; left: 0; width: 44px; min-width: 44px; }
-th.fix2, td.fix2 { position: sticky; left: 44px; min-width: 220px; max-width: 220px; }
-th.fix3, td.fix3 { position: sticky; left: 264px; min-width: 170px; max-width: 220px; border-right: 1px solid var(--border); }
+/* A coluna de seleção entra antes das fixas; a largura dela vira a origem das
+   outras, para o acesso de consulta poder escondê-la sem desalinhar nada. */
+:root { --w-sel: 34px; }
+body.so-leitura { --w-sel: 0px; }
+th.col-sel, td.col-sel {
+  position: sticky; left: 0; width: var(--w-sel); min-width: var(--w-sel);
+  padding-left: 8px; padding-right: 0;
+}
+th.col-sel input, td.col-sel input { width: auto; margin: 0; cursor: pointer; }
+body.so-leitura .col-sel { display: none; }
 
-td.fix1, td.fix2, td.fix3 { background: var(--surface); z-index: 2; }
-thead th.fix1, thead th.fix2, thead th.fix3 { background: var(--surface-2); z-index: 3; }
-tbody tr:hover td.fix1, tbody tr:hover td.fix2, tbody tr:hover td.fix3 { background: var(--surface-2); }
-tr.row-alt td.fix1, tr.row-alt td.fix2, tr.row-alt td.fix3 {
+th.fix1, td.fix1 { position: sticky; left: var(--w-sel); width: 44px; min-width: 44px; }
+th.fix2, td.fix2 { position: sticky; left: calc(var(--w-sel) + 44px); min-width: 220px; max-width: 220px; }
+th.fix3, td.fix3 { position: sticky; left: calc(var(--w-sel) + 264px); min-width: 170px; max-width: 220px; border-right: 1px solid var(--border); }
+
+td.col-sel, td.fix1, td.fix2, td.fix3 { background: var(--surface); z-index: 2; }
+thead th.col-sel, thead th.fix1, thead th.fix2, thead th.fix3 { background: var(--surface-2); z-index: 3; }
+tbody tr:hover td.col-sel, tbody tr:hover td.fix1,
+tbody tr:hover td.fix2, tbody tr:hover td.fix3 { background: var(--surface-2); }
+tfoot td.col-sel { background: var(--surface-2); z-index: 2; }
+tr.row-alt td.col-sel, tr.row-alt td.fix1, tr.row-alt td.fix2, tr.row-alt td.fix3 {
   background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
 }
 /* Na tabela de corridas só o colaborador fica congelado à esquerda. */
@@ -696,7 +709,8 @@ tfoot td.fix1, tfoot td.fix2, tfoot td.fix3 { background: var(--surface-2); z-in
 .mes-divisor { position: sticky; left: 10px; display: inline-block; }
 
 @media (max-width: 720px) {
-  th.fix1, td.fix1, th.fix2, td.fix2, th.fix3, td.fix3 { position: static; min-width: 0; }
+  th.col-sel, td.col-sel, th.fix1, td.fix1,
+  th.fix2, td.fix2, th.fix3, td.fix3 { position: static; min-width: 0; }
 }
 
 /* Ações sempre alcançáveis, mesmo com a tabela rolando na horizontal */
@@ -860,6 +874,14 @@ tbody tr.sublinha td:first-child { padding-left: 22px; }
   display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 14px; margin-bottom: 12px;
 }
+
+/* Barra que aparece quando há viagens marcadas na lista. */
+.barra-lote {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 12px;
+  background: var(--accent-soft); border-radius: var(--r-sm);
+}
+.barra-lote select { width: auto; min-width: 150px; }
 
 </style>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='19' font-size='19'>✈️</text></svg>">
@@ -6088,7 +6110,7 @@ window.SEED = {
       '<label class="chip" style="cursor:pointer;gap:6px"><input type="checkbox" name="avisos" style="width:auto"' +
       (f.avisos ? " checked" : "") + "> Só pendentes de conferência</label>" +
       (temFiltro(f) ? '<button class="btn btn-ghost btn-sm" data-acao="limpar-filtros">Limpar filtros</button>' : "") +
-      "</div></div>";
+      "</div>" + barraLote(estado) + "</div>";
 
     if (!lista.length) {
       html += vazio("Nenhuma viagem encontrada", "Ajuste os filtros ou lance uma viagem nova.") + "</div>";
@@ -6096,6 +6118,8 @@ window.SEED = {
     }
 
     html += '<div class="card-body flush"><div class="table-wrap rolagem"><table class="compacta"><thead><tr>' +
+      '<th class="col-sel"><input type="checkbox" name="sel-todas" title="Selecionar tudo que está na lista" ' +
+      'aria-label="Selecionar tudo que está na lista"' + (todasMarcadas(lista, estado) ? " checked" : "") + "></th>" +
       '<th class="fix1">ID</th><th class="fix2">Colaborador</th><th class="fix3">Trecho e período</th>' +
       '<th class="n">Aéreo</th><th class="n">Hospedagem</th><th class="n">Alimentação</th><th class="n">Outros</th>' +
       '<th class="n">Total</th><th>Status</th><th>Conferência</th><th class="col-acoes"></th></tr></thead><tbody>';
@@ -6108,7 +6132,7 @@ window.SEED = {
         mesAtual = v.mesGrupo;
         var doMes = lista.filter(function (x) { return x.mesGrupo === mesAtual; });
         var totalMes = doMes.reduce(function (s, x) { return s + x.total; }, 0);
-        html += '<tr><td colspan="11" style="background:var(--surface-2);padding:6px 10px">' +
+        html += '<tr><td colspan="12" style="background:var(--surface-2);padding:6px 10px">' +
           '<span class="mes-divisor"><span class="eyebrow">' + esc(C.mesNome(mesAtual)) + "</span> " +
           '<span class="t-sub">· ' + doMes.length + " lançamentos · " + C.brlSigla(totalMes) + "</span></span></td></tr>";
       }
@@ -6116,6 +6140,8 @@ window.SEED = {
       var outros = (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0);
       html += '<tr data-id="' + v.id + '"' +
         (v.tipo === "Alteração" ? ' class="row-alt' + (v.presaA ? " row-presa" : "") + '"' : "") + ">" +
+        '<td class="col-sel"><input type="checkbox" name="sel-viagem" data-id="' + v.id + '" ' +
+        'aria-label="Selecionar a viagem ' + v.id + '"' + (estado.selecao[v.id] ? " checked" : "") + "></td>" +
         '<td class="num t-sub nowrap fix1">' + (v.tipo === "Alteração" ? "↳ " : "") + v.id + "</td>" +
         '<td class="fix2">' + pessoa(v.colaborador, v.area) + "</td>" +
         '<td class="fix3">' + rota(v) +
@@ -6153,7 +6179,8 @@ window.SEED = {
         "</div></td></tr>";
     });
 
-    html += '</tbody><tfoot><tr><td class="fix1"></td><td class="fix2">' + lista.length + " lançamentos</td>" +
+    html += '</tbody><tfoot><tr><td class="col-sel"></td><td class="fix1"></td>' +
+      '<td class="fix2">' + lista.length + " lançamentos</td>" +
       '<td class="fix3">' + noites + " pernoites</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.aereo) || 0); }, 0)) + "</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + v.hospedagem; }, 0)) + "</td>" +
@@ -6166,6 +6193,29 @@ window.SEED = {
 
   function temFiltro(f) {
     return !!(f.busca || f.mes || f.area || f.status || f.tipo || f.avisos);
+  }
+
+  /** Todas as linhas à vista estão marcadas? Define o estado do "selecionar tudo". */
+  function todasMarcadas(lista, estado) {
+    return lista.length > 0 && lista.every(function (v) { return estado.selecao[v.id]; });
+  }
+
+  /**
+   * Aparece quando há linhas marcadas: troca o status de todas de uma vez.
+   * A seleção acompanha o filtro — filtrar por "Cotado" e marcar tudo é o
+   * caminho natural para fechar um mês inteiro.
+   */
+  function barraLote(estado) {
+    var n = Object.keys(estado.selecao).length;
+    if (!n || !C.podeEditar()) return "";
+    return '<div class="barra-lote">' +
+      "<strong>" + n + (n === 1 ? " viagem selecionada" : " viagens selecionadas") + "</strong>" +
+      '<span class="t-sub">alterar status para</span>' +
+      selectHTML("status-lote", C.db.params.statuses, estado.statusLote || "Fechado") +
+      '<button class="btn btn-sm btn-primary" data-acao="aplicar-status">Aplicar</button>' +
+      '<span class="grow"></span>' +
+      '<button class="btn btn-ghost btn-sm" data-acao="limpar-selecao">Limpar seleção</button>' +
+      "</div>";
   }
 
   function botaoIcone(acao, id, titulo, caminho) {
@@ -6899,7 +6949,7 @@ window.SEED = {
 
   window.Views = {
     esc: esc, campo: campo, selectHTML: selectHTML, pessoa: pessoa, vazio: vazio,
-    descricaoPapel: descricaoPapel, detalheMes: detalheMes,
+    descricaoPapel: descricaoPapel, detalheMes: detalheMes, barraLote: barraLote,
     kpi: kpi, chipStatus: chipStatus,
     painel: painel, viagens: viagensView, calendario: calendarioView,
     uber: uberView, equipe: equipeView, ajustes: ajustesView
@@ -6924,6 +6974,8 @@ window.SEED = {
     uberFiltros: { busca: "", mes: "", situacao: "" },
     equipeFiltros: { busca: "", area: "" },
     custoOrdem: { campo: "total", desc: true },
+    selecao: {},            // ids marcados na lista de viagens
+    statusLote: "Fechado",
     registro: { carregando: true, itens: [], total: 0 },
     registroFiltros: { pessoa: "", acao: "" }
   };
@@ -6942,7 +6994,7 @@ window.SEED = {
   /* Ações que mudam a base. Papel de consulta não as enxerga (CSS) e, se
      chegar a uma por outro caminho, o clique para aqui — antes do servidor,
      que recusaria de todo jeito. */
-  var ACOES_DE_ESCRITA = ["nova-viagem", "nova-viagem-para", "editar", "duplicar", "alteracao", "registrar-alteracao", "cancelar", "excluir", "excluir-corrida", "excluir-depara", "validar", "desvalidar", "mapear", "importar-uber", "importar-viagens", "limpar-uber", "salvar-regras", "backup-restaurar", "restaurar-base", "novo-acesso", "editar-acesso", "novo-colaborador", "editar-colaborador", "usar-regra"];
+  var ACOES_DE_ESCRITA = ["nova-viagem", "nova-viagem-para", "editar", "duplicar", "alteracao", "registrar-alteracao", "cancelar", "excluir", "excluir-corrida", "excluir-depara", "validar", "desvalidar", "mapear", "importar-uber", "importar-viagens", "limpar-uber", "salvar-regras", "backup-restaurar", "restaurar-base", "novo-acesso", "editar-acesso", "novo-colaborador", "editar-colaborador", "usar-regra", "aplicar-status"];
 
   // ---------- inicialização ----------
 
@@ -7311,6 +7363,8 @@ window.SEED = {
         break;
       case "atualizar-registro": carregarRegistro(true); break;
       case "ver-mes": abrirMes(botao.dataset.mes); break;
+      case "limpar-selecao": estado.selecao = {}; render(); break;
+      case "aplicar-status": aplicarStatusEmLote(); break;
       case "tema": alternarTema(); break;
       case "usar-regra": aplicarRegraAlimentacao(botao.closest("form")); break;
       case "fechar": botao.closest("dialog").close(); break;
@@ -7328,6 +7382,20 @@ window.SEED = {
 
   function aoMudarCampo(ev) {
     var alvo = ev.target;
+
+    // Campo dentro de um modal nunca mexe nos filtros da lista. O formulário da
+    // viagem tem um campo `status`, de mesmo nome que o filtro da tabela, e sem
+    // esta guarda mudar o status de uma viagem filtrava a lista por baixo do
+    // modal — ao salvar, só as viagens daquele status continuavam à vista.
+    if (alvo.closest && alvo.closest("dialog")) {
+      if (alvo.closest("#form-viagem")) recalcular(alvo.closest("form"), alvo);
+      return;
+    }
+
+    if (alvo.name === "sel-viagem") { marcarViagem(alvo.dataset.id, alvo.checked); return; }
+    if (alvo.name === "sel-todas") { marcarTodas(alvo.checked); return; }
+    if (alvo.name === "status-lote") { estado.statusLote = alvo.value; return; }
+
     if (alvo.id === "ano") { estado.ano = alvo.value; render(); return; }
     if (alvo.name === "registro-pessoa") { estado.registroFiltros.pessoa = alvo.value; render(); return; }
     if (alvo.name === "registro-acao") { estado.registroFiltros.acao = alvo.value; render(); return; }
@@ -7344,13 +7412,15 @@ window.SEED = {
       render(); return;
     }
     if (alvo.name === "avisos") { estado.filtros.avisos = alvo.checked; render(); return; }
-
-    if (alvo.closest && alvo.closest("#form-viagem")) recalcular(alvo.closest("form"), alvo);
   }
 
   var timerBusca;
   function aoDigitar(ev) {
     var alvo = ev.target;
+    if (alvo.closest && alvo.closest("dialog")) {
+      if (alvo.closest("#form-viagem")) recalcular(alvo.closest("form"), alvo);
+      return;
+    }
     var buscas = { busca: "filtros", "busca-uber": "uberFiltros", "busca-equipe": "equipeFiltros" };
     if (buscas[alvo.name]) {
       var texto = alvo.value;
@@ -7362,9 +7432,7 @@ window.SEED = {
         var campo = document.querySelector('[name="' + alvo.name + '"]');
         if (campo) { campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length); }
       }, 220);
-      return;
     }
-    if (alvo.closest && alvo.closest("#form-viagem")) recalcular(alvo.closest("form"), alvo);
   }
 
   // ---------- formulário de viagem ----------
@@ -8674,6 +8742,71 @@ window.SEED = {
   }
 
   // ---------- modal, toast, tooltip, tema ----------
+
+  // ---------- seleção em lote ----------
+
+  /**
+   * Marcar e desmarcar não redesenha a tabela: só a barra de cima muda. Um
+   * `render()` a cada clique perderia a rolagem e piscaria a lista inteira.
+   */
+  function marcarViagem(id, marcado) {
+    if (marcado) estado.selecao[id] = true;
+    else delete estado.selecao[id];
+    atualizaBarraLote();
+  }
+
+  function marcarTodas(marcado) {
+    document.querySelectorAll('[name="sel-viagem"]').forEach(function (caixa) {
+      caixa.checked = marcado;
+      if (marcado) estado.selecao[caixa.dataset.id] = true;
+      else delete estado.selecao[caixa.dataset.id];
+    });
+    atualizaBarraLote();
+  }
+
+  /** Redesenha só a barra, mantendo rolagem e caixas como estão. */
+  function atualizaBarraLote() {
+    var antiga = document.querySelector(".barra-lote");
+    var html = V.barraLote(estado);
+    if (!html) { if (antiga) antiga.remove(); return; }
+    if (antiga) {
+      antiga.outerHTML = html;
+    } else {
+      var filtros = document.querySelector(".toolbar");
+      if (filtros) filtros.insertAdjacentHTML("afterend", html);
+    }
+  }
+
+  function aplicarStatusEmLote() {
+    var ids = Object.keys(estado.selecao).map(Number).filter(function (id) { return C.viagemPorId(id); });
+    var novo = estado.statusLote;
+    if (!ids.length || !novo) return;
+
+    var aviso = novo === "Cancelado"
+      ? "\n\nAtenção: isto só marca o status. Os custos lançados continuam como estão — " +
+        "para zerar aéreo e hospedagem ou cobrar multa, use o botão de cancelar de cada viagem."
+      : "";
+    if (!confirm("Alterar " + ids.length + " viagem(ns) para \"" + novo + "\"?" + aviso)) return;
+
+    // Limpa a seleção antes de começar: cada gravação redesenha a lista, e as
+    // caixas marcadas sumiriam no meio do caminho de qualquer jeito.
+    estado.selecao = {};
+    toast("Alterando " + ids.length + " viagem(ns)…");
+
+    var erros = 0;
+    ids.reduce(function (anterior, id) {
+      return anterior.then(function () {
+        var v = C.viagemPorId(id);
+        if (!v || v.status === novo) return null;
+        return C.salvarViagem(Object.assign({}, v, { status: novo })).then(null, function () { erros++; });
+      });
+    }, Promise.resolve()).then(function () {
+      render();
+      toast(erros
+        ? (ids.length - erros) + " alterada(s); " + erros + " falharam"
+        : ids.length + " viagem(ns) agora com status " + novo);
+    });
+  }
 
   // ---------- detalhe do mês ----------
 

@@ -758,7 +758,7 @@
       '<label class="chip" style="cursor:pointer;gap:6px"><input type="checkbox" name="avisos" style="width:auto"' +
       (f.avisos ? " checked" : "") + "> Só pendentes de conferência</label>" +
       (temFiltro(f) ? '<button class="btn btn-ghost btn-sm" data-acao="limpar-filtros">Limpar filtros</button>' : "") +
-      "</div></div>";
+      "</div>" + barraLote(estado) + "</div>";
 
     if (!lista.length) {
       html += vazio("Nenhuma viagem encontrada", "Ajuste os filtros ou lance uma viagem nova.") + "</div>";
@@ -766,6 +766,8 @@
     }
 
     html += '<div class="card-body flush"><div class="table-wrap rolagem"><table class="compacta"><thead><tr>' +
+      '<th class="col-sel"><input type="checkbox" name="sel-todas" title="Selecionar tudo que está na lista" ' +
+      'aria-label="Selecionar tudo que está na lista"' + (todasMarcadas(lista, estado) ? " checked" : "") + "></th>" +
       '<th class="fix1">ID</th><th class="fix2">Colaborador</th><th class="fix3">Trecho e período</th>' +
       '<th class="n">Aéreo</th><th class="n">Hospedagem</th><th class="n">Alimentação</th><th class="n">Outros</th>' +
       '<th class="n">Total</th><th>Status</th><th>Conferência</th><th class="col-acoes"></th></tr></thead><tbody>';
@@ -778,7 +780,7 @@
         mesAtual = v.mesGrupo;
         var doMes = lista.filter(function (x) { return x.mesGrupo === mesAtual; });
         var totalMes = doMes.reduce(function (s, x) { return s + x.total; }, 0);
-        html += '<tr><td colspan="11" style="background:var(--surface-2);padding:6px 10px">' +
+        html += '<tr><td colspan="12" style="background:var(--surface-2);padding:6px 10px">' +
           '<span class="mes-divisor"><span class="eyebrow">' + esc(C.mesNome(mesAtual)) + "</span> " +
           '<span class="t-sub">· ' + doMes.length + " lançamentos · " + C.brlSigla(totalMes) + "</span></span></td></tr>";
       }
@@ -786,6 +788,8 @@
       var outros = (Number(v.transporte) || 0) + (Number(v.custoAlteracao) || 0);
       html += '<tr data-id="' + v.id + '"' +
         (v.tipo === "Alteração" ? ' class="row-alt' + (v.presaA ? " row-presa" : "") + '"' : "") + ">" +
+        '<td class="col-sel"><input type="checkbox" name="sel-viagem" data-id="' + v.id + '" ' +
+        'aria-label="Selecionar a viagem ' + v.id + '"' + (estado.selecao[v.id] ? " checked" : "") + "></td>" +
         '<td class="num t-sub nowrap fix1">' + (v.tipo === "Alteração" ? "↳ " : "") + v.id + "</td>" +
         '<td class="fix2">' + pessoa(v.colaborador, v.area) + "</td>" +
         '<td class="fix3">' + rota(v) +
@@ -823,7 +827,8 @@
         "</div></td></tr>";
     });
 
-    html += '</tbody><tfoot><tr><td class="fix1"></td><td class="fix2">' + lista.length + " lançamentos</td>" +
+    html += '</tbody><tfoot><tr><td class="col-sel"></td><td class="fix1"></td>' +
+      '<td class="fix2">' + lista.length + " lançamentos</td>" +
       '<td class="fix3">' + noites + " pernoites</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + (Number(v.aereo) || 0); }, 0)) + "</td>" +
       '<td class="n">' + C.moeda(lista.reduce(function (s, v) { return s + v.hospedagem; }, 0)) + "</td>" +
@@ -836,6 +841,29 @@
 
   function temFiltro(f) {
     return !!(f.busca || f.mes || f.area || f.status || f.tipo || f.avisos);
+  }
+
+  /** Todas as linhas à vista estão marcadas? Define o estado do "selecionar tudo". */
+  function todasMarcadas(lista, estado) {
+    return lista.length > 0 && lista.every(function (v) { return estado.selecao[v.id]; });
+  }
+
+  /**
+   * Aparece quando há linhas marcadas: troca o status de todas de uma vez.
+   * A seleção acompanha o filtro — filtrar por "Cotado" e marcar tudo é o
+   * caminho natural para fechar um mês inteiro.
+   */
+  function barraLote(estado) {
+    var n = Object.keys(estado.selecao).length;
+    if (!n || !C.podeEditar()) return "";
+    return '<div class="barra-lote">' +
+      "<strong>" + n + (n === 1 ? " viagem selecionada" : " viagens selecionadas") + "</strong>" +
+      '<span class="t-sub">alterar status para</span>' +
+      selectHTML("status-lote", C.db.params.statuses, estado.statusLote || "Fechado") +
+      '<button class="btn btn-sm btn-primary" data-acao="aplicar-status">Aplicar</button>' +
+      '<span class="grow"></span>' +
+      '<button class="btn btn-ghost btn-sm" data-acao="limpar-selecao">Limpar seleção</button>' +
+      "</div>";
   }
 
   function botaoIcone(acao, id, titulo, caminho) {
@@ -1569,7 +1597,7 @@
 
   window.Views = {
     esc: esc, campo: campo, selectHTML: selectHTML, pessoa: pessoa, vazio: vazio,
-    descricaoPapel: descricaoPapel, detalheMes: detalheMes,
+    descricaoPapel: descricaoPapel, detalheMes: detalheMes, barraLote: barraLote,
     kpi: kpi, chipStatus: chipStatus,
     painel: painel, viagens: viagensView, calendario: calendarioView,
     uber: uberView, equipe: equipeView, ajustes: ajustesView

@@ -14,6 +14,8 @@
     uberFiltros: { busca: "", mes: "", situacao: "" },
     equipeFiltros: { busca: "", area: "" },
     custoOrdem: { campo: "total", desc: true },
+    selecao: {},            // ids marcados na lista de viagens
+    statusLote: "Fechado",
     registro: { carregando: true, itens: [], total: 0 },
     registroFiltros: { pessoa: "", acao: "" }
   };
@@ -32,7 +34,7 @@
   /* Ações que mudam a base. Papel de consulta não as enxerga (CSS) e, se
      chegar a uma por outro caminho, o clique para aqui — antes do servidor,
      que recusaria de todo jeito. */
-  var ACOES_DE_ESCRITA = ["nova-viagem", "nova-viagem-para", "editar", "duplicar", "alteracao", "registrar-alteracao", "cancelar", "excluir", "excluir-corrida", "excluir-depara", "validar", "desvalidar", "mapear", "importar-uber", "importar-viagens", "limpar-uber", "salvar-regras", "backup-restaurar", "restaurar-base", "novo-acesso", "editar-acesso", "novo-colaborador", "editar-colaborador", "usar-regra"];
+  var ACOES_DE_ESCRITA = ["nova-viagem", "nova-viagem-para", "editar", "duplicar", "alteracao", "registrar-alteracao", "cancelar", "excluir", "excluir-corrida", "excluir-depara", "validar", "desvalidar", "mapear", "importar-uber", "importar-viagens", "limpar-uber", "salvar-regras", "backup-restaurar", "restaurar-base", "novo-acesso", "editar-acesso", "novo-colaborador", "editar-colaborador", "usar-regra", "aplicar-status"];
 
   // ---------- inicialização ----------
 
@@ -401,6 +403,8 @@
         break;
       case "atualizar-registro": carregarRegistro(true); break;
       case "ver-mes": abrirMes(botao.dataset.mes); break;
+      case "limpar-selecao": estado.selecao = {}; render(); break;
+      case "aplicar-status": aplicarStatusEmLote(); break;
       case "tema": alternarTema(); break;
       case "usar-regra": aplicarRegraAlimentacao(botao.closest("form")); break;
       case "fechar": botao.closest("dialog").close(); break;
@@ -418,6 +422,20 @@
 
   function aoMudarCampo(ev) {
     var alvo = ev.target;
+
+    // Campo dentro de um modal nunca mexe nos filtros da lista. O formulário da
+    // viagem tem um campo `status`, de mesmo nome que o filtro da tabela, e sem
+    // esta guarda mudar o status de uma viagem filtrava a lista por baixo do
+    // modal — ao salvar, só as viagens daquele status continuavam à vista.
+    if (alvo.closest && alvo.closest("dialog")) {
+      if (alvo.closest("#form-viagem")) recalcular(alvo.closest("form"), alvo);
+      return;
+    }
+
+    if (alvo.name === "sel-viagem") { marcarViagem(alvo.dataset.id, alvo.checked); return; }
+    if (alvo.name === "sel-todas") { marcarTodas(alvo.checked); return; }
+    if (alvo.name === "status-lote") { estado.statusLote = alvo.value; return; }
+
     if (alvo.id === "ano") { estado.ano = alvo.value; render(); return; }
     if (alvo.name === "registro-pessoa") { estado.registroFiltros.pessoa = alvo.value; render(); return; }
     if (alvo.name === "registro-acao") { estado.registroFiltros.acao = alvo.value; render(); return; }
@@ -434,13 +452,15 @@
       render(); return;
     }
     if (alvo.name === "avisos") { estado.filtros.avisos = alvo.checked; render(); return; }
-
-    if (alvo.closest && alvo.closest("#form-viagem")) recalcular(alvo.closest("form"), alvo);
   }
 
   var timerBusca;
   function aoDigitar(ev) {
     var alvo = ev.target;
+    if (alvo.closest && alvo.closest("dialog")) {
+      if (alvo.closest("#form-viagem")) recalcular(alvo.closest("form"), alvo);
+      return;
+    }
     var buscas = { busca: "filtros", "busca-uber": "uberFiltros", "busca-equipe": "equipeFiltros" };
     if (buscas[alvo.name]) {
       var texto = alvo.value;
@@ -452,9 +472,7 @@
         var campo = document.querySelector('[name="' + alvo.name + '"]');
         if (campo) { campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length); }
       }, 220);
-      return;
     }
-    if (alvo.closest && alvo.closest("#form-viagem")) recalcular(alvo.closest("form"), alvo);
   }
 
   // ---------- formulário de viagem ----------
@@ -1764,6 +1782,71 @@
   }
 
   // ---------- modal, toast, tooltip, tema ----------
+
+  // ---------- seleção em lote ----------
+
+  /**
+   * Marcar e desmarcar não redesenha a tabela: só a barra de cima muda. Um
+   * `render()` a cada clique perderia a rolagem e piscaria a lista inteira.
+   */
+  function marcarViagem(id, marcado) {
+    if (marcado) estado.selecao[id] = true;
+    else delete estado.selecao[id];
+    atualizaBarraLote();
+  }
+
+  function marcarTodas(marcado) {
+    document.querySelectorAll('[name="sel-viagem"]').forEach(function (caixa) {
+      caixa.checked = marcado;
+      if (marcado) estado.selecao[caixa.dataset.id] = true;
+      else delete estado.selecao[caixa.dataset.id];
+    });
+    atualizaBarraLote();
+  }
+
+  /** Redesenha só a barra, mantendo rolagem e caixas como estão. */
+  function atualizaBarraLote() {
+    var antiga = document.querySelector(".barra-lote");
+    var html = V.barraLote(estado);
+    if (!html) { if (antiga) antiga.remove(); return; }
+    if (antiga) {
+      antiga.outerHTML = html;
+    } else {
+      var filtros = document.querySelector(".toolbar");
+      if (filtros) filtros.insertAdjacentHTML("afterend", html);
+    }
+  }
+
+  function aplicarStatusEmLote() {
+    var ids = Object.keys(estado.selecao).map(Number).filter(function (id) { return C.viagemPorId(id); });
+    var novo = estado.statusLote;
+    if (!ids.length || !novo) return;
+
+    var aviso = novo === "Cancelado"
+      ? "\n\nAtenção: isto só marca o status. Os custos lançados continuam como estão — " +
+        "para zerar aéreo e hospedagem ou cobrar multa, use o botão de cancelar de cada viagem."
+      : "";
+    if (!confirm("Alterar " + ids.length + " viagem(ns) para \"" + novo + "\"?" + aviso)) return;
+
+    // Limpa a seleção antes de começar: cada gravação redesenha a lista, e as
+    // caixas marcadas sumiriam no meio do caminho de qualquer jeito.
+    estado.selecao = {};
+    toast("Alterando " + ids.length + " viagem(ns)…");
+
+    var erros = 0;
+    ids.reduce(function (anterior, id) {
+      return anterior.then(function () {
+        var v = C.viagemPorId(id);
+        if (!v || v.status === novo) return null;
+        return C.salvarViagem(Object.assign({}, v, { status: novo })).then(null, function () { erros++; });
+      });
+    }, Promise.resolve()).then(function () {
+      render();
+      toast(erros
+        ? (ids.length - erros) + " alterada(s); " + erros + " falharam"
+        : ids.length + " viagem(ns) agora com status " + novo);
+    });
+  }
 
   // ---------- detalhe do mês ----------
 

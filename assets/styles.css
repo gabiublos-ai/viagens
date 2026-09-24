@@ -653,14 +653,27 @@ td.indevido { color: var(--critical); font-weight: 650; }
 
 /* Colunas congeladas à esquerda: ID, colaborador e trecho ficam à vista
    enquanto o resto da tabela rola na horizontal. */
-th.fix1, td.fix1 { position: sticky; left: 0; width: 44px; min-width: 44px; }
-th.fix2, td.fix2 { position: sticky; left: 44px; min-width: 220px; max-width: 220px; }
-th.fix3, td.fix3 { position: sticky; left: 264px; min-width: 170px; max-width: 220px; border-right: 1px solid var(--border); }
+/* A coluna de seleção entra antes das fixas; a largura dela vira a origem das
+   outras, para o acesso de consulta poder escondê-la sem desalinhar nada. */
+:root { --w-sel: 34px; }
+body.so-leitura { --w-sel: 0px; }
+th.col-sel, td.col-sel {
+  position: sticky; left: 0; width: var(--w-sel); min-width: var(--w-sel);
+  padding-left: 8px; padding-right: 0;
+}
+th.col-sel input, td.col-sel input { width: auto; margin: 0; cursor: pointer; }
+body.so-leitura .col-sel { display: none; }
 
-td.fix1, td.fix2, td.fix3 { background: var(--surface); z-index: 2; }
-thead th.fix1, thead th.fix2, thead th.fix3 { background: var(--surface-2); z-index: 3; }
-tbody tr:hover td.fix1, tbody tr:hover td.fix2, tbody tr:hover td.fix3 { background: var(--surface-2); }
-tr.row-alt td.fix1, tr.row-alt td.fix2, tr.row-alt td.fix3 {
+th.fix1, td.fix1 { position: sticky; left: var(--w-sel); width: 44px; min-width: 44px; }
+th.fix2, td.fix2 { position: sticky; left: calc(var(--w-sel) + 44px); min-width: 220px; max-width: 220px; }
+th.fix3, td.fix3 { position: sticky; left: calc(var(--w-sel) + 264px); min-width: 170px; max-width: 220px; border-right: 1px solid var(--border); }
+
+td.col-sel, td.fix1, td.fix2, td.fix3 { background: var(--surface); z-index: 2; }
+thead th.col-sel, thead th.fix1, thead th.fix2, thead th.fix3 { background: var(--surface-2); z-index: 3; }
+tbody tr:hover td.col-sel, tbody tr:hover td.fix1,
+tbody tr:hover td.fix2, tbody tr:hover td.fix3 { background: var(--surface-2); }
+tfoot td.col-sel { background: var(--surface-2); z-index: 2; }
+tr.row-alt td.col-sel, tr.row-alt td.fix1, tr.row-alt td.fix2, tr.row-alt td.fix3 {
   background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
 }
 /* Na tabela de corridas só o colaborador fica congelado à esquerda. */
@@ -688,7 +701,8 @@ tfoot td.fix1, tfoot td.fix2, tfoot td.fix3 { background: var(--surface-2); z-in
 .mes-divisor { position: sticky; left: 10px; display: inline-block; }
 
 @media (max-width: 720px) {
-  th.fix1, td.fix1, th.fix2, td.fix2, th.fix3, td.fix3 { position: static; min-width: 0; }
+  th.col-sel, td.col-sel, th.fix1, td.fix1,
+  th.fix2, td.fix2, th.fix3, td.fix3 { position: static; min-width: 0; }
 }
 
 /* Ações sempre alcançáveis, mesmo com a tabela rolando na horizontal */
@@ -852,3 +866,11 @@ tbody tr.sublinha td:first-child { padding-left: 22px; }
   display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 14px; margin-bottom: 12px;
 }
+
+/* Barra que aparece quando há viagens marcadas na lista. */
+.barra-lote {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 12px; padding: 10px 12px;
+  background: var(--accent-soft); border-radius: var(--r-sm);
+}
+.barra-lote select { width: auto; min-width: 150px; }
